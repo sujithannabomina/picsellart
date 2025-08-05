@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth, db, storage } from "../firebase";
-import { signOut, onAuthStateChanged } from "firebase/auth";
+import { auth, storage, db } from "../firebase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { collection, addDoc, onSnapshot, query, where, orderBy } from "firebase/firestore";
 
 export default function SellerDashboard() {
   const navigate = useNavigate();
-
   const [currentUser, setCurrentUser] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [title, setTitle] = useState("");
@@ -15,29 +14,33 @@ export default function SellerDashboard() {
   const [price, setPrice] = useState("");
   const [file, setFile] = useState(null);
 
-  // 🔹 Check if seller is logged in
+  // 🔹 Check authentication status
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (!user) {
-        navigate("/seller-login");
+        navigate("/seller-login"); // Redirect if not logged in
       } else {
         setCurrentUser(user);
-        // Fetch this seller's uploaded photos
+
+        // Fetch this seller's photos in real-time
         const q = query(
           collection(db, "photos"),
           where("sellerId", "==", user.uid),
           orderBy("createdAt", "desc")
         );
+
         const unsubscribePhotos = onSnapshot(q, (snapshot) => {
           setPhotos(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
         });
+
         return () => unsubscribePhotos();
       }
     });
+
     return () => unsubscribeAuth();
   }, [navigate]);
 
-  // 🔹 Upload Photo to Firebase Storage + Firestore
+  // 🔹 Upload Photo to Firebase
   const handleUpload = async () => {
     if (!file || !title || !tags || !price) {
       alert("Please fill all fields and select a file");
@@ -45,34 +48,34 @@ export default function SellerDashboard() {
     }
 
     try {
-      // Upload image to Firebase Storage
+      // Upload file to Firebase Storage
       const storageRef = ref(storage, `photos/${currentUser.uid}_${Date.now()}_${file.name}`);
       await uploadBytes(storageRef, file);
       const downloadURL = await getDownloadURL(storageRef);
 
-      // Save photo details to Firestore
+      // Save metadata to Firestore
       await addDoc(collection(db, "photos"), {
         sellerId: currentUser.uid,
         title,
-        tags: tags.split(","),
+        tags: tags.split(",").map((t) => t.trim()),
         price,
         imgUrl: downloadURL,
         createdAt: new Date(),
       });
 
-      // Clear form
       setTitle("");
       setTags("");
       setPrice("");
       setFile(null);
+
       alert("Photo uploaded successfully!");
     } catch (error) {
-      console.error("Upload error", error);
+      console.error("Upload failed:", error);
       alert("Upload failed. Please try again.");
     }
   };
 
-  // 🔹 Seller Logout
+  // 🔹 Logout
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/");
@@ -90,7 +93,7 @@ export default function SellerDashboard() {
         </button>
       </div>
 
-      {/* Upload Section */}
+      {/* Upload Form */}
       <div className="bg-white p-4 rounded shadow mb-6">
         <h2 className="text-xl font-semibold mb-4">Upload a Photo</h2>
         <input
@@ -121,7 +124,7 @@ export default function SellerDashboard() {
         />
         <button
           onClick={handleUpload}
-          className="bg-green-500 text-white px-4 py-2 rounded"
+          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition"
         >
           Upload Photo
         </button>
