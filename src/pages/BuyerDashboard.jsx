@@ -4,9 +4,9 @@ export default function BuyerDashboard() {
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("");
   const [photos] = useState([
-    { id: 1, title: "Wildlife Tiger", price: 250, img: "/sample1.jpg", likes: 10 },
-    { id: 2, title: "Modern Architecture", price: 300, img: "/sample2.jpg", likes: 25 },
-    { id: 3, title: "Street Photography", price: 150, img: "/sample3.jpg", likes: 5 },
+    { id: 1, title: "Street Photography", price: 250, img: "/sample4.jpg", likes: 10 },
+    { id: 2, title: "Street Photography", price: 300, img: "/sample5.jpg", likes: 25 },
+    { id: 3, title: "Street Photography", price: 150, img: "/sample6.jpg", likes: 5 },
   ]);
 
   // Filter photos
