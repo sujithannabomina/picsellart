@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://picsellart.vercel.app", "https://www.picsellart.in"],
+    "method": ["GET"],
+    "responseHeader": ["Content-Type"],
+    "maxAgeSeconds": 3600
+  }
+]
