@@ -1,408 +1,319 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ref, listAll, getDownloadURL, getMetadata } from "firebase/storage";
-import { storage } from "../lib/firebase"; // <-- change to "../firebase" if that's your path
+// src/pages/ExplorePage.jsx
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  collection,
+  query,
+  orderBy,
+  limit as fbLimit,
+  startAfter,
+  endBefore,
+  limitToLast,
+  onSnapshot,
+  getDocs,
+  where,
+} from "firebase/firestore";
+import { db } from "../lib/firebase"; // if your export lives in src/firebase.js then use: "../firebase"
 
-// ----- Small helpers ---------------------------------------------------------
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 25;
 
-function niceTitleFromFile(name) {
-  // "street_photography-12.jpg" -> "Street Photography 12"
-  const base = name.replace(/\.[^/.]+$/, "");
-  return base
-    .replace(/[_\-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-function currencyINR(value) {
-  // show ₹999.00 ; if not a number, return empty string
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "";
-  try {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 2,
-    }).format(n);
-  } catch {
-    return `₹${n.toFixed(2)}`;
-  }
-}
-
-// ----- Card ------------------------------------------------------------------
-function PhotoCard({ item }) {
-  return (
-    <div style={styles.card}>
-      <div style={styles.thumbWrap}>
-        <img src={item.url} alt={item.title} style={styles.thumb} loading="lazy" />
-      </div>
-      <div style={styles.cardBody}>
-        <div style={styles.title} title={item.title}>{item.title}</div>
-
-        <div style={styles.badgeRow}>
-          {item.price != null && (
-            <span style={styles.badgePrice}>{currencyINR(item.price)}</span>
-          )}
-          {item.category && <span style={styles.badge}>{item.category}</span>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ----- Main Page -------------------------------------------------------------
 export default function ExplorePage() {
-  const [raw, setRaw] = useState([]);        // all items from storage
+  const [items, setItems] = useState([]);          // documents for current page
   const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState("");
+  const [pageNumber, setPageNumber] = useState(1); // 1-based page index
+  const [hasNext, setHasNext] = useState(false);
+  const [hasPrev, setHasPrev] = useState(false);
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("all");
+  const [error, setError] = useState("");
 
-  // controls
-  const [q, setQ] = useState("");            // search
-  const [cat, setCat] = useState("All");     // category
-  const [sort, setSort] = useState("newest");// sort key
-  const [page, setPage] = useState(1);
+  // We keep a stack of cursors to navigate pages (startAfter docs)
+  const cursorsRef = useRef([]); // cursorsRef.current[i] holds the last doc for page i+1
 
-  // 1) Load from Firebase Storage
-  useEffect(() => {
-    let isMounted = true;
+  // Build the base Firestore query (title/category filters are applied server-side when possible)
+  const qryBase = useMemo(() => {
+    try {
+      const col = collection(db, "photos");
+      const constraints = [];
 
-    async function load() {
-      setLoading(true);
-      setErr("");
-      try {
-        const listRef = ref(storage, "public/images/");
-        const { items } = await listAll(listRef);
-
-        // Fetch URL + metadata in parallel for each file
-        const full = await Promise.all(
-          items.map(async (it) => {
-            const [url, meta] = await Promise.all([
-              getDownloadURL(it),
-              getMetadata(it).catch(() => null), // metadata may fail for some objects
-            ]);
-
-            // Prefer customMetadata if provided by sellers / function
-            const cm = meta?.customMetadata || {};
-            const title =
-              cm.title?.trim() ||
-              niceTitleFromFile(it.name); // fallback to filename
-
-            const category = (cm.category || "").trim() || "";
-            const price = cm.price != null ? Number(cm.price) : null;
-            const tags =
-              (cm.tags || "")
-                .split(",")
-                .map((t) => t.trim())
-                .filter(Boolean) || [];
-
-            const updated = meta?.updated ? new Date(meta.updated) : new Date();
-
-            return {
-              name: it.name,
-              url,
-              title,
-              category,
-              price,
-              tags,
-              updated,
-            };
-          })
-        );
-
-        if (isMounted) setRaw(full);
-      } catch (e) {
-        console.error(e);
-        if (isMounted) setErr("Couldn’t load images. Check Storage rules and path.");
-      } finally {
-        if (isMounted) setLoading(false);
+      // Basic filters:
+      // titlePrefix: we do a client-side filter for flexible contains, BUT when search is non-empty,
+      // we also try a simple startsWith behavior using >= and < bounds. If you prefer exact contains,
+      // leave it client-side (current hybrid approach keeps things snappy).
+      if (search.trim()) {
+        // For server-side title prefix search, you’d need an extra field with lowercasedTitle.
+        // Here we’ll just do client-side filtering after fetching the page.
       }
+
+      if (category !== "all") {
+        constraints.push(where("category", "==", category));
+      }
+
+      // Default sort newest first
+      constraints.push(orderBy("createdAt", "desc"));
+
+      return query(col, ...constraints);
+    } catch (e) {
+      console.error(e);
+      return null;
     }
+  }, [db, search, category]);
 
-    load();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  // Helper to load a page by “direction”
+  const fetchPage = async (direction) => {
+    if (!qryBase) return;
 
-  // 2) Build category list from data
-  const categories = useMemo(() => {
-    const set = new Set();
-    raw.forEach((i) => {
-      if (i.category) set.add(i.category);
-    });
-    return ["All", ...Array.from(set).sort((a, b) => a.localeCompare(b))];
-  }, [raw]);
+    setLoading(true);
+    setError("");
 
-  // 3) Filter + sort
-  const filtered = useMemo(() => {
-    const qLower = q.trim().toLowerCase();
+    try {
+      let q;
 
-    let list = raw.filter((i) => {
-      const hitsQ =
-        !qLower ||
-        i.title.toLowerCase().includes(qLower) ||
-        i.tags.some((t) => t.toLowerCase().includes(qLower)) ||
-        i.name.toLowerCase().includes(qLower);
+      if (direction === "init") {
+        // first page
+        q = query(qryBase, fbLimit(PAGE_SIZE));
+      } else if (direction === "next") {
+        const lastCursor = cursorsRef.current[cursorsRef.current.length - 1];
+        if (!lastCursor) return;
+        q = query(qryBase, startAfter(lastCursor), fbLimit(PAGE_SIZE));
+      } else if (direction === "prev") {
+        const prevCursor = cursorsRef.current[cursorsRef.current.length - 2];
+        // To go backwards we need endBefore + limitToLast
+        if (!prevCursor && pageNumber > 1) {
+          // reload first page if something odd
+          q = query(qryBase, fbLimit(PAGE_SIZE));
+        } else {
+          q = query(qryBase, endBefore(prevCursor), limitToLast(PAGE_SIZE));
+        }
+      }
 
-      const hitsCat = cat === "All" || (!i.category && cat === "Uncategorized") || i.category === cat;
+      const snap = await getDocs(q);
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data(), _snap: d }));
 
-      return hitsQ && hitsCat;
-    });
+      // Client-side search “contains” (case-insensitive) on title if user typed anything
+      const filtered =
+        search.trim()
+          ? docs.filter((d) =>
+              String(d.title || "")
+                .toLowerCase()
+                .includes(search.trim().toLowerCase())
+            )
+          : docs;
 
-    switch (sort) {
-      case "newest":
-        list.sort((a, b) => b.updated - a.updated);
-        break;
-      case "oldest":
-        list.sort((a, b) => a.updated - b.updated);
-        break;
-      case "az":
-        list.sort((a, b) => a.title.localeCompare(b.title));
-        break;
-      case "priceLow":
-        list.sort(
-          (a, b) =>
-            (a.price ?? Number.POSITIVE_INFINITY) -
-            (b.price ?? Number.POSITIVE_INFINITY)
-        );
-        break;
-      case "priceHigh":
-        list.sort(
-          (a, b) =>
-            (b.price ?? Number.NEGATIVE_INFINITY) -
-            (a.price ?? Number.NEGATIVE_INFINITY)
-        );
-        break;
-      default:
-        break;
+      setItems(filtered);
+
+      // Manage cursors and page flags
+      if (direction === "init") {
+        cursorsRef.current = [];
+        if (snap.docs.length > 0) {
+          cursorsRef.current.push(snap.docs[snap.docs.length - 1]);
+        }
+        setPageNumber(1);
+      } else if (direction === "next") {
+        if (snap.docs.length > 0) {
+          cursorsRef.current.push(snap.docs[snap.docs.length - 1]);
+          setPageNumber((p) => p + 1);
+        }
+      } else if (direction === "prev") {
+        // When going prev, drop the last cursor (we moved one page back)
+        if (cursorsRef.current.length > 1) {
+          cursorsRef.current.pop();
+        }
+        setPageNumber((p) => Math.max(1, p - 1));
+      }
+
+      // Determine hasNext by peeking one more doc after this page’s last cursor
+      if (snap.docs.length === PAGE_SIZE) {
+        const last = snap.docs[snap.docs.length - 1];
+        const probe = await getDocs(query(qryBase, startAfter(last), fbLimit(1)));
+        setHasNext(!probe.empty);
+      } else {
+        setHasNext(false);
+      }
+
+      setHasPrev(pageNumber > 1 || direction === "next"); // if we’ve ever gone next, prev exists
+    } catch (e) {
+      console.error(e);
+      setError("Could not load photos. Please try again.");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    return list;
-  }, [raw, q, cat, sort]);
-
-  // 4) Pagination
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Initial load + whenever filters change → reset to first page
   useEffect(() => {
-    // if filters change, reset to page 1
-    setPage(1);
-  }, [q, cat, sort]);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    fetchPage("init");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qryBase]); // rebuilding the query means new first page
 
-  // ----- UI ------------------------------------------------------------------
+  // Live updates for the **current page**:
+  // Rebuilds a listener scoped to the current page window. For simplicity we re-fetch
+  // the current page whenever there is any change (minimal extra reads, maximum correctness).
+  useEffect(() => {
+    if (!qryBase || items.length === 0) return;
+
+    // Find the window for the current page: from first doc’s createdAt to last doc’s createdAt
+    const first = items[0]?.createdAt;
+    const last = items[items.length - 1]?.createdAt;
+    if (!first || !last) return;
+
+    // Listen to any changes within or after the first bound to keep things “live enough”
+    const qLive = query(qryBase, where("createdAt", "<=", first));
+
+    const unsub = onSnapshot(
+      qLive,
+      () => {
+        // Any change → refresh current page window
+        fetchPage("init"); // simplest: re-run first page with current filters
+      },
+      (err) => {
+        console.error(err);
+      }
+    );
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qryBase, pageNumber, items.length]);
+
   return (
-    <div style={styles.wrap}>
-      <h1 style={styles.h1}>Explore Photos</h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="sticky top-0 z-30 bg-white/80 backdrop-blur">
+        <div className="mx-auto max-w-7xl px-4 py-4 flex flex-wrap gap-3 items-center justify-between">
+          <h1 className="text-2xl font-semibold">Explore Photos</h1>
 
-      <div style={styles.toolbar}>
-        <input
-          type="search"
-          placeholder="Search by title or tag…"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          style={styles.search}
-        />
+          <div className="flex flex-wrap gap-2 items-center">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search by title"
+              className="h-10 w-56 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            />
 
-        <select
-          value={cat}
-          onChange={(e) => setCat(e.target.value)}
-          style={styles.select}
-        >
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-          {!categories.includes("Uncategorized") && (
-            <option value="Uncategorized">Uncategorized</option>
-          )}
-        </select>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="h-10 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-800"
+            >
+              <option value="all">All Categories</option>
+              <option value="StreetPhotography">StreetPhotography</option>
+              <option value="Nature">Nature</option>
+              <option value="Portrait">Portrait</option>
+              <option value="City">City</option>
+              <option value="Abstract">Abstract</option>
+            </select>
 
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value)}
-          style={styles.select}
-        >
-          <option value="newest">Newest</option>
-          <option value="oldest">Oldest</option>
-          <option value="az">A → Z</option>
-          <option value="priceLow">Price: Low to High</option>
-          <option value="priceHigh">Price: High to Low</option>
-        </select>
-      </div>
-
-      {loading && <div style={styles.info}>Loading…</div>}
-      {err && !loading && <div style={styles.error}>{err}</div>}
-
-      {!loading && !err && filtered.length === 0 && (
-        <div style={styles.info}>No images found.</div>
-      )}
-
-      <div style={styles.grid}>
-        {paged.map((item) => (
-          <PhotoCard key={item.name} item={item} />
-        ))}
-      </div>
-
-      {!loading && filtered.length > 0 && (
-        <div style={styles.pagination}>
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            style={{
-              ...styles.pageBtn,
-              ...(page <= 1 ? styles.pageBtnDisabled : {}),
-            }}
-          >
-            ◀ Prev
-          </button>
-          <span style={styles.pageText}>
-            Page {page} / {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            style={{
-              ...styles.pageBtn,
-              ...(page >= totalPages ? styles.pageBtnDisabled : {}),
-            }}
-          >
-            Next ▶
-          </button>
+            <button
+              onClick={() => fetchPage("init")}
+              className="h-10 rounded-lg bg-gray-900 px-4 text-sm font-medium text-white hover:bg-gray-800"
+              title="Refresh"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
-      )}
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
+      </div>
+
+      {/* Content */}
+      <div className="mx-auto max-w-7xl px-4 py-6">
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {loading && items.length === 0 ? (
+          <div className="grid place-items-center py-24 text-gray-500">
+            Loading photos…
+          </div>
+        ) : items.length === 0 ? (
+          <div className="grid place-items-center py-24 text-gray-500">
+            No photos found.
+          </div>
+        ) : (
+          <>
+            {/* Masonry-ish responsive grid */}
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {items.map((p) => (
+                <PhotoCard key={p.id} photo={p} />
+              ))}
+            </div>
+
+            {/* Pager */}
+            <div className="mt-8 flex items-center justify-between">
+              <button
+                disabled={!hasPrev || pageNumber === 1}
+                onClick={() => fetchPage("prev")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  !hasPrev || pageNumber === 1
+                    ? "cursor-not-allowed bg-gray-200 text-gray-400"
+                    : "bg-gray-900 text-white hover:bg-gray-800"
+                }`}
+              >
+                ← Prev
+              </button>
+
+              <span className="text-sm text-gray-600">
+                Page <strong>{pageNumber}</strong>
+              </span>
+
+              <button
+                disabled={!hasNext}
+                onClick={() => fetchPage("next")}
+                className={`rounded-lg px-4 py-2 text-sm font-medium ${
+                  !hasNext
+                    ? "cursor-not-allowed bg-gray-200 text-gray-400"
+                    : "bg-gray-900 text-white hover:bg-gray-800"
+                }`}
+              >
+                Next →
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-// ----- Simple CSS (inline so you don’t need a CSS file) ----------------------
-const styles = {
-  wrap: {
-    maxWidth: 1180,
-    margin: "0 auto",
-    padding: "24px 16px",
-  },
-  h1: {
-    fontSize: 36,
-    fontWeight: 800,
-    textAlign: "center",
-    margin: "8px 0 24px",
-  },
-  toolbar: {
-    display: "grid",
-    gridTemplateColumns: "1fr 200px 200px",
-    gap: 12,
-    marginBottom: 16,
-  },
-  search: {
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #D5D8DC",
-    fontSize: 16,
-    outline: "none",
-  },
-  select: {
-    padding: "10px 12px",
-    borderRadius: 8,
-    border: "1px solid #D5D8DC",
-    fontSize: 16,
-    outline: "none",
-    background: "#fff",
-  },
-  grid: {
-    display: "grid",
-    gridTemplateColumns: "repeat( auto-fill, minmax(240px, 1fr) )",
-    gap: 16,
-  },
-  card: {
-    border: "1px solid #E5E7EB",
-    borderRadius: 14,
-    overflow: "hidden",
-    background: "#fff",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.04)",
-  },
-  thumbWrap: {
-    width: "100%",
-    aspectRatio: "4 / 3",
-    background: "#F2F4F7",
-    overflow: "hidden",
-  },
-  thumb: {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  },
-  cardBody: {
-    padding: 12,
-  },
-  title: {
-    fontWeight: 700,
-    fontSize: 16,
-    color: "#111827",
-    marginBottom: 8,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  badgeRow: {
-    display: "flex",
-    gap: 8,
-    flexWrap: "wrap",
-  },
-  badge: {
-    background: "#EEF2FF",
-    color: "#3949AB",
-    padding: "4px 8px",
-    borderRadius: 999,
-    fontSize: 12,
-  },
-  badgePrice: {
-    background: "#E8FFF1",
-    color: "#0F9D58",
-    padding: "4px 8px",
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: 700,
-  },
-  pagination: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 12,
-    marginTop: 18,
-  },
-  pageBtn: {
-    padding: "8px 12px",
-    borderRadius: 8,
-    border: "1px solid #D5D8DC",
-    background: "#fff",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  pageBtnDisabled: {
-    opacity: 0.5,
-    cursor: "not-allowed",
-  },
-  pageText: {
-    fontSize: 14,
-    color: "#4B5563",
-  },
-  info: {
-    textAlign: "center",
-    color: "#6B7280",
-    margin: "24px 0",
-  },
-  error: {
-    textAlign: "center",
-    color: "#B00020",
-    margin: "24px 0",
-    fontWeight: 600,
-  },
-};
+function PhotoCard({ photo }) {
+  const {
+    url,             // public download URL (string)
+    title = "Untitled",
+    price = 0,
+    category = "StreetPhotography",
+    width,
+    height,
+  } = photo;
 
-// ----- Mobile layout tweak ---------------------------------------------------
-const mq = window.matchMedia?.("(max-width: 720px)");
-if (mq && mq.matches) {
-  styles.toolbar.gridTemplateColumns = "1fr";
+  return (
+    <div className="group overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
+        {/* eslint-disable-next-line jsx-a11y/img-redundant-alt */}
+        <img
+          src={url}
+          alt={`${title} image`}
+          className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.03]"
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.src = "/images/sample1.jpg"; // soft fallback
+          }}
+        />
+        <span className="absolute left-2 top-2 rounded bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">
+          {category}
+        </span>
+      </div>
+
+      <div className="flex items-center justify-between px-3 py-3">
+        <div>
+          <div className="line-clamp-1 text-sm font-medium text-gray-900">
+            {title}
+          </div>
+          <div className="text-xs text-gray-500">
+            {width && height ? `${width}×${height}px` : "High-res JPEG"}
+          </div>
+        </div>
+        <div className="text-sm font-semibold text-gray-900">₹{price}</div>
+      </div>
+    </div>
+  );
 }

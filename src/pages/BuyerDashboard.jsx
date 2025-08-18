@@ -1,35 +1,18 @@
-import React, { useEffect, useState } from "react";
-import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
+import { useAuth } from "../auth/useAuth";
 
-const BuyerDashboard = () => {
-  const [images, setImages] = useState([]);
-
-  useEffect(() => {
-    const fetchImages = async () => {
-      const storage = getStorage();
-      const listRef = ref(storage, "buyer");
-      try {
-        const res = await listAll(listRef);
-        const urls = await Promise.all(res.items.map((itemRef) => getDownloadURL(itemRef)));
-        setImages(urls);
-      } catch (error) {
-        console.error("Error fetching buyer images:", error);
-      }
-    };
-
-    fetchImages();
-  }, []);
+export default function BuyerDashboard() {
+  const { user, role, logout } = useAuth();
+  if (!user || role !== "buyer") return null;
 
   return (
-    <div className="p-4 bg-gray-100 min-h-screen">
-      <h2 className="text-3xl font-bold mb-4 text-center">Buyer Dashboard</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-        {images.map((url, index) => (
-          <img key={index} src={url} alt={`Buyer Photo ${index + 1}`} className="rounded shadow-lg" />
-        ))}
+    <div className="max-w-3xl mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Buyer Dashboard</h1>
+        <button onClick={logout} className="text-sm px-3 py-2 rounded bg-gray-900 text-white">Logout</button>
       </div>
+
+      <p className="text-gray-700">Welcome, {user.displayName || user.email}!</p>
+      <p className="text-gray-600 mt-2">Head to <a className="text-blue-600 underline" href="/explore">Explore</a> to browse photos.</p>
     </div>
   );
-};
-
-export default BuyerDashboard;
+}
