@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Small global polish */
+html, body, #root { height: 100%; }
+img { display: block; max-width: 100%; }
+
+/* Card polish used site-wide */
+.card { @apply bg-white border rounded-xl shadow-sm; }
+.btn { @apply inline-flex items-center justify-center px-5 py-3 rounded-xl text-sm font-medium transition; }
+.btn-primary { @apply bg-gray-900 text-white hover:brightness-110 active:translate-y-px; }
+.btn-outline { @apply border hover:bg-gray-50; }
+
+/* Container */
+.container-p { @apply max-w-6xl mx-auto px-4; }
