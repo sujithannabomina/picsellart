@@ -1,48 +1,99 @@
+import { useState } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import Page from '../components/Page'
-import { useAuth } from '../context/AuthContext'
-import { useLocation, useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
-
+import { auth } from '../firebase'
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithEmailAndPassword,
+} from 'firebase/auth'
 
 export default function SellerLogin() {
-const { user, profile, emailSignIn, emailSignUp, googleSignIn } = useAuth()
-const [email, setEmail] = useState('')
-const [password, setPassword] = useState('')
-const [mode, setMode] = useState('login')
-const navigate = useNavigate()
-const location = useLocation()
+  const nav = useNavigate()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
 
+  async function doEmailLogin(e) {
+    e.preventDefault()
+    setErr('')
+    setBusy(true)
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), password)
+      // After login, send sellers to onboarding (which will route to dashboard if already active)
+      nav('/seller/onboarding', { replace: true })
+    } catch (e) {
+      setErr(e?.message || 'Login failed')
+    } finally {
+      setBusy(false)
+    }
+  }
 
-useEffect(() => {
-if (user && profile?.role === 'seller') {
-navigate('/seller/dashboard', { replace: true })
-}
-}, [user, profile])
+  async function doGoogle() {
+    setErr('')
+    setBusy(true)
+    try {
+      const provider = new GoogleAuthProvider()
+      await signInWithPopup(auth, provider)
+      nav('/seller/onboarding', { replace: true })
+    } catch (e) {
+      // Popup blocked or provider not enabled will land here
+      setErr(e?.message || 'Google sign-in failed')
+    } finally {
+      setBusy(false)
+    }
+  }
 
+  return (
+    <Page title="Seller Login / Sign Up">
+      <form
+        onSubmit={doEmailLogin}
+        className="max-w-md mx-auto bg-white border rounded-2xl p-6 grid gap-3"
+      >
+        <input
+          className="input"
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+        />
+        <input
+          className="input"
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+        />
 
-async function submit(e) {
-e.preventDefault()
-if (mode === 'login') await emailSignIn(email, password)
-else await emailSignUp(email, password, 'seller')
-navigate(location.state?.from?.pathname || '/seller/onboarding', { replace: true })
-}
+        <button
+          className="btn bg-gray-900 text-white hover:bg-black disabled:opacity-60"
+          type="submit"
+          disabled={busy}
+        >
+          {busy ? 'Logging in…' : 'Login'}
+        </button>
 
+        <button
+          type="button"
+          onClick={doGoogle}
+          className="btn btn-outline disabled:opacity-60"
+          disabled={busy}
+        >
+          Continue with Google
+        </button>
 
-return (
-<Page title="Seller Login / Sign Up">
-<form onSubmit={submit} className="max-w-md mx-auto bg-white border rounded-xl p-4 space-y-3">
-<input className="w-full border rounded-lg px-3 py-2" placeholder="Email" value={email} onChange={e=>setEmail(e.target.value)} />
-<input className="w-full border rounded-lg px-3 py-2" type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} />
-<button className="w-full px-4 py-2 rounded-lg bg-gray-900 text-white">{mode==='login'?'Login':'Create Seller Account'}</button>
-<button type="button" onClick={()=>googleSignIn('seller')} className="w-full px-4 py-2 rounded-lg border">Continue with Google</button>
-<div className="text-center text-sm">
-{mode==='login' ? (
-<span>New seller? <button type="button" className="underline" onClick={()=>setMode('signup')}>Create an account</button></span>
-) : (
-<span>Already have an account? <button type="button" className="underline" onClick={()=>setMode('login')}>Login</button></span>
-)}
-</div>
-</form>
-</Page>
-)
+        {err && <div className="text-red-600 text-sm">{err}</div>}
+
+        <div className="text-center text-sm text-gray-600">
+          New seller?{' '}
+          <Link to="/seller/signup" className="underline">
+            Create an account
+          </Link>
+        </div>
+      </form>
+    </Page>
+  )
 }
