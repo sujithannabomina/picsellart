@@ -1,9 +1,9 @@
-// src/firebase.js
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, serverTimestamp as serverTs } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
+// Uses env if present, otherwise your project defaults (from your screenshot)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'picsellart-619a7.firebaseapp.com',
@@ -15,7 +15,6 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
