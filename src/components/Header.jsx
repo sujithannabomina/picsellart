@@ -1,80 +1,72 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-export default function Header() {
-  const { user, role, loading, logout } = useAuth()
-  const nav = useNavigate()
+const NavLink = ({ to, children }) => {
   const { pathname } = useLocation()
-
-  // Helper: show “active” pill
-  const NavLink = ({ to, label }) => (
+  const active = pathname === to
+  return (
     <Link
       to={to}
-      className={`px-4 py-2 rounded-md ${pathname === to ? 'bg-black text-white' : 'hover:bg-black/5'}`}
+      className={`px-3 py-2 rounded-md ${active ? 'bg-black text-white' : 'hover:bg-gray-100'}`}
     >
-      {label}
+      {children}
     </Link>
   )
+}
+
+export default function Header() {
+  const { user, role, logout } = useAuth()
+  const nav = useNavigate()
+
+  const goDash = () => {
+    if (role === 'seller') nav('/seller/dashboard')
+    else nav('/buyer/dashboard')
+  }
 
   return (
-    <header className="sticky top-0 z-40 bg-white/90 backdrop-blur shadow-sm">
+    <header className="w-full border-b bg-white/70 backdrop-blur supports-[backdrop-filter]:bg-white/60">
       <div className="mx-auto max-w-6xl px-4 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logo192.png" alt="Picsellart" className="h-7 w-7 object-contain" />
-          <span className="text-xl font-semibold">Picsellart</span>
+          <img src="/logo-64.png" alt="Picsellart" className="h-7 w-7 rounded" />
+          <span className="font-semibold text-lg">Picsellart</span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-2">
-          <NavLink to="/" label="Home" />
-          <NavLink to="/explore" label="Explore" />
-          <NavLink to="/faq" label="FAQ" />
-          <NavLink to="/refund" label="Refund" />
-          <NavLink to="/contact" label="Contact" />
+        <nav className="flex items-center gap-1">
+          <NavLink to="/">Home</NavLink>
+          <NavLink to="/explore">Explore</NavLink>
+          <NavLink to="/faq">FAQ</NavLink>
+          <NavLink to="/refund">Refund</NavLink>
+          <NavLink to="/contact">Contact</NavLink>
         </nav>
 
-        {/* Right side actions */}
         <div className="flex items-center gap-2">
-          {loading ? (
-            <div className="h-9 w-28 animate-pulse rounded-md bg-black/10" />
-          ) : user ? (
+          {!user && (
             <>
-              {/* Buyer / Seller dashboard buttons based on role */}
-              {role === 'buyer' && (
-                <button
-                  onClick={() => nav('/buyer/dashboard')}
-                  className="px-4 py-2 rounded-md bg-black text-white"
-                >
-                  Buyer Dashboard
-                </button>
-              )}
-              {role === 'seller' && (
-                <button
-                  onClick={() => nav('/seller/dashboard')}
-                  className="px-4 py-2 rounded-md bg-black text-white"
-                >
-                  Seller Dashboard
-                </button>
-              )}
-              <button
-                onClick={logout}
-                className="px-4 py-2 rounded-md hover:bg-black/5"
-              >
-                Logout
-              </button>
+              <Link to="/buyer/login" className="px-4 py-2 rounded-md bg-black text-white">
+                Buyer Login
+              </Link>
+              <Link to="/seller/login" className="px-4 py-2 rounded-md bg-indigo-600 text-white">
+                Seller Login
+              </Link>
             </>
-          ) : (
+          )}
+
+          {user && (
             <>
               <button
-                onClick={() => nav('/buyer/login')}
+                onClick={goDash}
                 className="px-4 py-2 rounded-md bg-black text-white"
               >
-                Buyer Login
+                {role === 'seller' ? 'Seller Dashboard' : 'Buyer Dashboard'}
               </button>
               <button
-                onClick={() => nav('/seller/login')}
-                className="px-4 py-2 rounded-md hover:bg-black/5"
+                onClick={async () => {
+                  await logout()
+                  nav('/')
+                }}
+                className="px-4 py-2 rounded-md border"
               >
-                Seller Login
+                Logout
               </button>
             </>
           )}

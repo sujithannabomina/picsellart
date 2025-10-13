@@ -1,10 +1,7 @@
-import { initializeApp } from 'firebase/app'
-import {
-  getAuth,
-  setPersistence,
-  browserLocalPersistence,
-  GoogleAuthProvider,
-} from 'firebase/auth'
+// Minimal, safe Firebase v10 modular init.
+// Uses only Vite vars (must be present in Vercel with VITE_ prefix)
+import { initializeApp, getApps, getApp } from 'firebase/app'
+import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore, serverTimestamp } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
@@ -18,23 +15,12 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
 
-const app = initializeApp(firebaseConfig)
-const auth = getAuth(app)
-setPersistence(auth, browserLocalPersistence)
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
 
-const db = getFirestore(app)
-const storage = getStorage(app)
-const googleProvider = new GoogleAuthProvider()
+export const auth = getAuth(app)
+export const googleProvider = new GoogleAuthProvider()
+export const db = getFirestore(app)
+export const storage = getStorage(app)
 
-// export both names so existing imports keep working
-const serverTs = serverTimestamp
-
-export {
-  app,
-  auth,
-  db,
-  storage,
-  googleProvider,
-  serverTimestamp,
-  serverTs,           // <-- added alias
-}
+// handy alias used by pages (this is what Vercel logs said was "missing")
+export const serverTs = serverTimestamp

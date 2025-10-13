@@ -1,45 +1,55 @@
-import { Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
 import Page from './components/Page'
 
-// pages
+// Your existing visual pages – keep them as they are
 import LandingPage from './pages/LandingPage'
 import Explore from './pages/Explore'
 import Faq from './pages/Faq'
 import Refund from './pages/Refund'
 import Contact from './pages/Contact'
+
+// New/updated auth pages
 import BuyerLogin from './pages/BuyerLogin'
 import SellerLogin from './pages/SellerLogin'
 import BuyerDashboard from './pages/BuyerDashboard'
 import SellerDashboard from './pages/SellerDashboard'
-import SellerOnboarding from './pages/SellerOnboarding'
+
+// Optional seller funnel pages if you already have them
 import SellerStart from './pages/SellerStart'
 import SellerSubscribe from './pages/SellerSubscribe'
-import PhotoDetails from './pages/PhotoDetails'
+import SellerOnboarding from './pages/SellerOnboarding'
 
 export default function App() {
   return (
-    <Page>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/explore" element={<Explore />} />
-        <Route path="/photo/:id" element={<PhotoDetails />} />
+    <BrowserRouter>
+      <AuthProvider>
+        <Page>
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/explore" element={<Explore />} />
+            <Route path="/faq" element={<Faq />} />
+            <Route path="/refund" element={<Refund />} />
+            <Route path="/contact" element={<Contact />} />
 
-        {/* Buyer */}
-        <Route path="/buyer/login" element={<BuyerLogin />} />
-        <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
+            {/* Auth */}
+            <Route path="/buyer/login" element={<BuyerLogin />} />
+            <Route path="/seller/login" element={<SellerLogin />} />
 
-        {/* Seller */}
-        <Route path="/seller/login" element={<SellerLogin />} />
-        <Route path="/seller/start" element={<SellerStart />} />
-        <Route path="/seller/subscribe" element={<SellerSubscribe />} />
-        <Route path="/seller/onboarding" element={<SellerOnboarding />} />
-        <Route path="/seller/dashboard" element={<SellerDashboard />} />
+            {/* Dashboards */}
+            <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
+            <Route path="/seller/dashboard" element={<SellerDashboard />} />
 
-        {/* Static */}
-        <Route path="/faq" element={<Faq />} />
-        <Route path="/refund" element={<Refund />} />
-        <Route path="/contact" element={<Contact />} />
-      </Routes>
-    </Page>
+            {/* Seller funnel (if present in your repo) */}
+            <Route path="/seller/start" element={<SellerStart />} />
+            <Route path="/seller/subscribe" element={<SellerSubscribe />} />
+            <Route path="/seller/onboarding" element={<SellerOnboarding />} />
+
+            {/* Fallback to home */}
+            <Route path="*" element={<LandingPage />} />
+          </Routes>
+        </Page>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }
