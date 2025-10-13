@@ -1,25 +1,33 @@
-import { useEffect } from 'react'
-import Page from '../components/Page'
-import { useAuth } from '../context/AuthContext'
-import { useNavigate, useLocation } from 'react-router-dom'
+import Page from '../components/Page';
+import ProtectedRoute from '../components/ProtectedRoute';
+import { Link } from 'react-router-dom';
 
+// shows plan cards, your existing UI can stay; this is just to ensure it renders
 export default function SellerOnboarding() {
-  const { user, role, ensureRoleDoc, sellerActive, loading } = useAuth()
-  const nav = useNavigate()
-  const loc = useLocation()
-
-  useEffect(() => {
-    if (loading) return
-    if (!user) {
-      nav('/seller/login', { replace: true, state: { from: loc } })
-      return
-    }
-    // Make sure they have a seller role doc
-    ensureRoleDoc('seller').then(() => {
-      if (sellerActive) nav('/seller/dashboard', { replace: true })
-      else nav('/seller/start', { replace: true })
-    })
-  }, [user, loading, sellerActive])
-
-  return <Page title="Seller Onboarding" />
+  return (
+    <ProtectedRoute>
+      <Page>
+        <section className="container">
+          <h1>Choose a Seller Plan</h1>
+          <div className="plans">
+            <div className="card">
+              <h3>Starter</h3>
+              <p>₹100 – 50 uploads</p>
+              <Link className="btn" to="/seller/subscribe?plan=starter">Continue</Link>
+            </div>
+            <div className="card">
+              <h3>Plus</h3>
+              <p>₹299 – 100 uploads</p>
+              <Link className="btn" to="/seller/subscribe?plan=plus">Continue</Link>
+            </div>
+            <div className="card">
+              <h3>Pro</h3>
+              <p>₹799 – 300 uploads</p>
+              <Link className="btn" to="/seller/subscribe?plan=pro">Continue</Link>
+            </div>
+          </div>
+        </section>
+      </Page>
+    </ProtectedRoute>
+  );
 }

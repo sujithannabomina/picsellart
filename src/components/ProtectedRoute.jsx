@@ -1,20 +1,26 @@
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-export default function ProtectedRoute({ requireRole }) {
+export default function ProtectedRoute({ children, requireRole }) {
   const { user, role, loading } = useAuth();
 
-  // While we’re checking Firebase, render nothing (or a small spinner if you want)
-  if (loading) return null;
+  if (loading) {
+    return <div style={{ padding: '4rem', textAlign: 'center' }}>Loading…</div>;
+  }
 
   if (!user) {
-    const to = requireRole === 'seller' ? '/seller/login' : '/buyer/login';
-    return <Navigate to={to} replace />;
+    // not signed in
+    if (requireRole === 'seller') return <Navigate to="/seller/login" replace />;
+    if (requireRole === 'buyer')  return <Navigate to="/buyer/login" replace />;
+    return <Navigate to="/buyer/login" replace />;
   }
 
-  if (requireRole && role !== requireRole) {
-    return <Navigate to="/" replace />;
+  if (requireRole && role && role !== requireRole) {
+    // signed in but wrong role -> send them to their own dashboard
+    return role === 'seller'
+      ? <Navigate to="/seller/dashboard" replace />
+      : <Navigate to="/buyer/dashboard" replace />;
   }
 
-  return <Outlet />;
+  return children;
 }

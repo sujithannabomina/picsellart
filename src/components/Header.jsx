@@ -1,40 +1,57 @@
-import { Link, NavLink } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext.jsx'
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export default function Header() {
-  const { user, profile, logout } = useAuth()
-  const link = 'px-3 py-2 rounded-lg text-sm font-medium hover:bg-gray-100'
-  const active = 'bg-gray-900 text-white hover:bg-gray-900'
+  const { user, role, loading, signOut } = useAuth();
+  const nav = useNavigate();
+
+  const handleLogout = async () => {
+    await signOut();
+    nav('/');
+  };
+
+  const DashButton = () => {
+    if (loading) return null;
+    if (!user) {
+      return (
+        <>
+          <Link className="btn" to="/buyer/login">Buyer Login</Link>
+          <Link className="btn btn-secondary" to="/seller/login">Seller Login</Link>
+        </>
+      );
+    }
+    if (role === 'seller') {
+      return (
+        <>
+          <Link className="btn" to="/seller/dashboard">Seller Dashboard</Link>
+          <button className="btn btn-secondary" onClick={handleLogout}>Logout</button>
+        </>
+      );
+    }
+    // default to buyer
+    return (
+      <>
+        <Link className="btn" to="/buyer/dashboard">Buyer Dashboard</Link>
+        <button className="btn btn-secondary" onClick={handleLogout}>Logout</button>
+      </>
+    );
+  };
 
   return (
-    <header className="w-full border-b bg-white sticky top-0 z-50">
-      <div className="container-p h-16 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="Picsellart logo" className="h-8 w-8 rounded" />
-          <span className="text-xl font-bold tracking-tight">Picsellart</span>
-        </Link>
-        <nav className="flex items-center gap-1">
-          <NavLink to="/" end className={({isActive})=>`${link} ${isActive?active:''}`}>Home</NavLink>
-          <NavLink to="/explore" className={({isActive})=>`${link} ${isActive?active:'text-indigo-600'}`}>Explore</NavLink>
-          <NavLink to="/faq" className={({isActive})=>`${link} ${isActive?active:''}`}>FAQ</NavLink>
-          <NavLink to="/refund" className={({isActive})=>`${link} ${isActive?active:''}`}>Refund</NavLink>
-          <NavLink to="/contact" className={({isActive})=>`${link} ${isActive?active:''}`}>Contact</NavLink>
+    <header className="site-header">
+      <div className="wrap">
+        <Link to="/" className="brand">Picsellart</Link>
+        <nav className="main-nav">
+          <Link to="/">Home</Link>
+          <Link to="/explore">Explore</Link>
+          <Link to="/faq">FAQ</Link>
+          <Link to="/refund">Refund</Link>
+          <Link to="/contact">Contact</Link>
         </nav>
-        <div className="flex items-center gap-2">
-          {!user ? (
-            <>
-              <Link to="/buyer/login" className="btn btn-primary">Buyer Login</Link>
-              <Link to="/seller/login" className="btn bg-blue-600 text-white hover:bg-blue-700">Seller Login</Link>
-            </>
-          ) : (
-            <>
-              {profile?.role === 'buyer' && <Link to="/buyer/dashboard" className="btn btn-primary">Buyer Dashboard</Link>}
-              {profile?.role === 'seller' && <Link to="/seller/dashboard" className="btn bg-blue-600 text-white hover:bg-blue-700">Seller Dashboard</Link>}
-              <button onClick={logout} className="btn btn-outline">Logout</button>
-            </>
-          )}
+        <div className="actions">
+          <DashButton />
         </div>
       </div>
     </header>
-  )
+  );
 }

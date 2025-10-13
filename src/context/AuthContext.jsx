@@ -1,85 +1,69 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { onAuthStateChanged, signOut as fbSignOut, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 
-// Always provide a non-null default to avoid destructuring crashes
-const AuthContext = createContext({
-  user: null,
-  role: null,
-  profile: null,
-  loading: true,
-  isSeller: false,
-  isBuyer: false,
-});
+const AuthContext = createContext({ user: null, role: null, loading: true });
 
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
-  const [profile, setProfile] = useState(null);
+export function AuthProvider({ children }) {
+  const [user, setUser]   = useState(null);
+  const [role, setRole]   = useState(null);   // "buyer" | "seller" | null
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
       try {
-        if (!firebaseUser) {
+        if (!u) {
           setUser(null);
           setRole(null);
-          setProfile(null);
           setLoading(false);
           return;
         }
+        setUser(u);
 
-        setUser(firebaseUser);
-
-        // Ensure a user doc exists; read role if present
-        const ref = doc(db, 'users', firebaseUser.uid);
+        // read role from Firestore (users/{uid})
+        const ref = doc(db, 'users', u.uid);
         const snap = await getDoc(ref);
-
-        if (!snap.exists()) {
-          // default to buyer unless/ until user completes seller onboarding
-          const newDoc = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email || '',
-            displayName: firebaseUser.displayName || '',
-            role: 'buyer',
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          };
-          await setDoc(ref, newDoc, { merge: true });
-          setRole('buyer');
-          setProfile(newDoc);
+        if (snap.exists()) {
+          setRole(snap.data().role ?? null);
         } else {
-          const data = snap.data() || {};
-          setRole(data.role || 'buyer');
-          setProfile(data);
+          // first login – create a minimal doc with unknown role
+          await setDoc(ref, {
+            uid: u.uid,
+            email: u.email ?? '',
+            displayName: u.displayName ?? '',
+            role: null,
+            createdAt: serverTimestamp()
+          }, { merge: true });
+          setRole(null);
         }
-      } catch (e) {
-        // In case of any read/write error, don’t crash the tree
-        console.error('[AuthProvider] error:', e);
-        setRole(null);
-        setProfile(null);
       } finally {
         setLoading(false);
       }
     });
-
     return () => unsub();
   }, []);
 
-  const value = useMemo(
-    () => ({
-      user,
-      role,
-      profile,
-      loading,
-      isSeller: role === 'seller',
-      isBuyer: role === 'buyer',
-    }),
-    [user, role, profile, loading]
-  );
+  const signInGoogle = async () => {
+    const prov = new GoogleAuthProvider();
+    await signInWithPopup(auth, prov);
+  };
+
+  const signInEmail = (email, password) =>
+    signInWithEmailAndPassword(auth, email, password);
+
+  const signUpEmail = (email, password) =>
+    createUserWithEmailAndPassword(auth, email, password);
+
+  const signOut = () => fbSignOut(auth);
+
+  const value = useMemo(() => ({
+    user, role, loading, signOut, signInGoogle, signInEmail, signUpEmail,
+  }), [user, role, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+}
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  return useContext(AuthContext);
+}
