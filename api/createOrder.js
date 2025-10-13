@@ -1,33 +1,35 @@
 // /api/createOrder.js
-const Razorpay = require('razorpay')
+import crypto from 'crypto'
 
-module.exports = async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method Not Allowed' })
-    return
-  }
+export default async function handler(req, res) {
   try {
-    const { amount, currency = 'INR', receipt, notes } = req.body || {}
-    if (!amount) {
-      res.status(400).json({ error: 'amount is required (in paise)' })
-      return
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+    const { purpose, amount, currency = 'INR', meta = {} } = req.body || {}
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ error: 'Razorpay env missing' })
     }
+    if (!amount || amount < 1) return res.status(400).json({ error: 'Invalid amount' })
+    if (!['purchase', 'subscription'].includes(purpose)) return res.status(400).json({ error: 'Invalid purpose' })
 
-    const instance = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    })
-
-    const order = await instance.orders.create({
-      amount,
+    // Create order
+    const body = JSON.stringify({
+      amount: Math.round(Number(amount) * 100), // paise
       currency,
-      receipt: receipt ?? `rcpt_${Date.now()}`,
-      notes: notes ?? {},
+      receipt: `${purpose}-${Date.now()}`,
+      notes: meta || {},
     })
 
-    res.status(200).json(order)
-  } catch (err) {
-    console.error('createOrder error:', err)
-    res.status(500).json({ error: 'Failed to create order' })
+    const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64')
+    const rpRes = await fetch('https://api.razorpay.com/v1/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${auth}` },
+      body,
+    })
+    const data = await rpRes.json()
+    if (!rpRes.ok) return res.status(400).json({ error: data?.error?.description || 'Order create failed', raw: data })
+
+    res.status(200).json({ order: data, keyId: process.env.RAZORPAY_KEY_ID })
+  } catch (e) {
+    res.status(500).json({ error: e?.message || 'Server error' })
   }
 }
