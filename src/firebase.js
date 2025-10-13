@@ -1,4 +1,3 @@
-// Firebase v9 modular
 import { initializeApp } from 'firebase/app'
 import {
   getAuth,
@@ -6,10 +5,7 @@ import {
   browserLocalPersistence,
   GoogleAuthProvider,
 } from 'firebase/auth'
-import {
-  getFirestore,
-  serverTimestamp,
-} from 'firebase/firestore'
+import { getFirestore, serverTimestamp } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
@@ -30,7 +26,9 @@ const db = getFirestore(app)
 const storage = getStorage(app)
 const googleProvider = new GoogleAuthProvider()
 
-// Single, simple export surface
+// export both names so existing imports keep working
+const serverTs = serverTimestamp
+
 export {
   app,
   auth,
@@ -38,4 +36,5 @@ export {
   storage,
   googleProvider,
   serverTimestamp,
+  serverTs,           // <-- added alias
 }
