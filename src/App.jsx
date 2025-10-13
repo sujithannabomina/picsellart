@@ -1,98 +1,72 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { AuthProvider, useAuth } from './context/AuthContext.jsx'
-
-import LandingPage from './pages/LandingPage.jsx'
-import Explore from './pages/Explore.jsx'
-import PhotoDetails from './pages/PhotoDetails.jsx'
-
-import BuyerLogin from './pages/BuyerLogin.jsx'
-import BuyerDashboard from './pages/BuyerDashboard.jsx'
-
-import SellerStart from './pages/SellerStart.jsx'
-import SellerLogin from './pages/SellerLogin.jsx'
-import SellerOnboarding from './pages/SellerOnboarding.jsx'
-import SellerDashboard from './pages/SellerDashboard.jsx'
-
-import Faq from './pages/Faq.jsx'
-import Refund from './pages/Refund.jsx'
-import Contact from './pages/Contact.jsx'
-import License from './pages/License.jsx'
-
-function RequireAuth({ children, role }) {
-  const { user, profile, loading } = useAuth()
-  const location = useLocation()
-  if (loading) return null
-  if (!user) {
-    return (
-      <Navigate
-        to={role === 'seller' ? '/seller/login' : '/buyer/login'}
-        state={{ from: location }}
-        replace
-      />
-    )
-  }
-  if (role && profile?.role !== role) return <Navigate to="/" replace />
-  return children
-}
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import Home from './pages/Home'
+import Explore from './pages/Explore'
+import Refund from './pages/Refund'
+import Contact from './pages/Contact'
+import FAQ from './pages/FAQ'
+import SellerLogin from './pages/SellerLogin'
+import BuyerLogin from './pages/BuyerLogin'
+import SellerOnboarding from './pages/SellerOnboarding'
+import SellerStart from './pages/SellerStart'
+import SellerSubscribe from './pages/SellerSubscribe'
+import SellerDashboard from './pages/SellerDashboard'
+import BuyerDashboard from './pages/BuyerDashboard'
+import PhotoDetails from './pages/PhotoDetails'
+import { RequireAuth, RequireSellerActive } from './routes/guards'
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/explore" element={<Explore />} />
-        <Route path="/photo/:photoId" element={<PhotoDetails />} />
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/photo/:id" element={<PhotoDetails />} />
+          <Route path="/faq" element={<FAQ />} />
+          <Route path="/refund" element={<Refund />} />
+          <Route path="/contact" element={<Contact />} />
 
-        {/* Buyer flow */}
-        <Route path="/buyer/login" element={<BuyerLogin />} />
-        <Route
-          path="/buyer/dashboard"
-          element={
-            <RequireAuth role="buyer">
-              <BuyerDashboard />
-            </RequireAuth>
-          }
-        />
+          {/* Buyer */}
+          <Route path="/buyer/login" element={<BuyerLogin />} />
+          <Route
+            path="/buyer/dashboard"
+            element={
+              <RequireAuth to="/buyer/login">
+                <BuyerDashboard />
+              </RequireAuth>
+            }
+          />
 
-        {/* Seller flow */}
-        <Route path="/seller" element={<Navigate to="/seller/start" replace />} />
-        <Route path="/seller/start" element={<SellerStart />} />
-        <Route path="/seller/login" element={<SellerLogin />} />
-        <Route
-          path="/seller/onboarding"
-          element={
-            <RequireAuth role="seller">
-              <SellerOnboarding />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/seller/dashboard"
-          element={
-            <RequireAuth role="seller">
-              <SellerDashboard />
-            </RequireAuth>
-          }
-        />
-
-        {/* License */}
-        <Route
-          path="/license/:orderId"
-          element={
-            <RequireAuth role="buyer">
-              <License />
-            </RequireAuth>
-          }
-        />
-
-        {/* Static/support */}
-        <Route path="/faq" element={<Faq />} />
-        <Route path="/refund" element={<Refund />} />
-        <Route path="/contact" element={<Contact />} />
-
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </AuthProvider>
+          {/* Seller */}
+          <Route path="/seller/login" element={<SellerLogin />} />
+          <Route path="/seller/onboarding" element={<SellerOnboarding />} />
+          <Route
+            path="/seller/start"
+            element={
+              <RequireAuth to="/seller/login">
+                <SellerStart />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/seller/subscribe"
+            element={
+              <RequireAuth to="/seller/login">
+                <SellerSubscribe />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/seller/dashboard"
+            element={
+              <RequireSellerActive>
+                <SellerDashboard />
+              </RequireSellerActive>
+            }
+          />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }

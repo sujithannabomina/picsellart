@@ -1,30 +1,26 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { auth, db } from '../firebase'
-import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  GoogleAuthProvider,
-  signInWithPopup,
-} from 'firebase/auth'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { auth, db, serverTs } from '../firebase'
+import { onAuthStateChanged } from 'firebase/auth'
+import { doc, getDoc, setDoc } from 'firebase/firestore'
 
 const Ctx = createContext(null)
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null)
+  const [profile, setProfile] = useState(null) // users/{uid} doc
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u)
+      setUser(u || null)
       if (u) {
         const ref = doc(db, 'users', u.uid)
         const snap = await getDoc(ref)
-        if (snap.exists()) setProfile(snap.data())
-        else setProfile(null)
+        if (snap.exists()) {
+          setProfile(snap.data())
+        } else {
+          setProfile(null)
+        }
       } else {
         setProfile(null)
       }
@@ -33,47 +29,45 @@ export function AuthProvider({ children }) {
     return () => unsub()
   }, [])
 
-  const value = useMemo(() => ({
-    user,
-    profile,
-    loading,
+  const value = useMemo(() => {
+    const role = profile?.role || null
+    const sub = profile?.subscription || null
+    const now = Date.now()
+    const active =
+      sub && typeof sub.expiresAt === 'number' ? now < sub.expiresAt : false
 
-    async emailSignUp(email, password, role) {
-      const cred = await createUserWithEmailAndPassword(auth, email, password)
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        uid: cred.user.uid,
-        email,
-        role,
-        createdAt: serverTimestamp(),
-      })
-      return cred.user
-    },
-
-    async emailSignIn(email, password) {
-      const cred = await signInWithEmailAndPassword(auth, email, password)
-      return cred.user
-    },
-
-    async googleSignIn(role) {
-      const provider = new GoogleAuthProvider()
-      const { user: u } = await signInWithPopup(auth, provider)
-      const ref = doc(db, 'users', u.uid)
-      const snap = await getDoc(ref)
-      if (!snap.exists()) {
-        await setDoc(ref, {
-          uid: u.uid,
-          email: u.email,
-          role,
-          createdAt: serverTimestamp(),
-        })
-      }
-      return u
-    },
-
-    async logout() {
-      await signOut(auth)
-    },
-  }), [user, profile, loading])
+    return {
+      user,
+      profile,
+      role,
+      sellerActive: role === 'seller' && active,
+      loading,
+      // ensure a users/{uid} doc exists with a role
+      ensureRoleDoc: async (roleWanted) => {
+        if (!user) return
+        const ref = doc(db, 'users', user.uid)
+        const snap = await getDoc(ref)
+        if (!snap.exists()) {
+          await setDoc(ref, {
+            uid: user.uid,
+            email: user.email || '',
+            displayName: user.displayName || '',
+            role: roleWanted,
+            createdAt: serverTs(),
+          })
+          const fresh = await getDoc(ref)
+          setProfile(fresh.data())
+          return
+        }
+        const cur = snap.data()
+        if (!cur.role && roleWanted) {
+          await setDoc(ref, { ...cur, role: roleWanted }, { merge: true })
+          const fresh = await getDoc(ref)
+          setProfile(fresh.data())
+        }
+      },
+    }
+  }, [user, profile])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
