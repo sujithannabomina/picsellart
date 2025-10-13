@@ -1,63 +1,52 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-import { db } from '../firebase'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+// src/pages/BuyerLogin.jsx
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider, db, serverTs } from '../firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 
 export default function BuyerLogin() {
-  const { user, role, loginWithGoogle } = useAuth()
-  const [busy, setBusy] = useState(false)
-  const nav = useNavigate()
-
-  // If already a buyer, go to dashboard
-  useEffect(() => {
-    if (user && role === 'buyer') nav('/buyer/dashboard')
-    // If a seller tries to open buyer login, push them to seller dashboard
-    if (user && role === 'seller') nav('/seller/dashboard')
-  }, [user, role, nav])
+  const nav = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
 
   const handleGoogle = async () => {
     try {
-      setBusy(true)
-      await loginWithGoogle()
-      // Ensure role is set to 'buyer' on first login
-      if (!user?.uid) return
-      const uref = doc(db, 'users', user.uid)
-      const snap = await getDoc(uref)
-      if (!snap.exists() || !snap.data().role) {
-        await setDoc(
-          uref,
-          { role: 'buyer', createdAt: new Date().toISOString() },
-          { merge: true }
-        )
+      setBusy(true);
+      setErr('');
+      const { user } = await signInWithPopup(auth, googleProvider);
+      const ref = doc(db, 'profiles', user.uid);
+      const snap = await getDoc(ref);
+
+      if (!snap.exists()) {
+        await setDoc(ref, {
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || '',
+          role: 'buyer',
+          createdAt: serverTs(),
+          updatedAt: serverTs(),
+        });
+      } else if (snap.data().role !== 'buyer') {
+        // keep the first chosen role (don’t flip silently)
+        // Optional: show a note to use the Seller login for seller accounts
       }
-      nav('/buyer/dashboard')
+
+      nav('/buyer/dashboard', { replace: true });
+    } catch (e) {
+      setErr(e.message || 'Sign in failed');
     } finally {
-      setBusy(false)
+      setBusy(false);
     }
-  }
+  };
 
   return (
-    <div className="mx-auto max-w-md px-4 py-12">
+    <div className="max-w-md mx-auto py-16 px-4">
       <h1 className="text-2xl font-semibold mb-6">Buyer Login / Sign Up</h1>
-
-      <div className="rounded-2xl border p-6 shadow-sm">
-        <p className="text-sm text-gray-600 mb-4">
-          Continue with Google to sign in as a <b>Buyer</b>. You’ll be redirected to your dashboard.
-        </p>
-
-        <button
-          onClick={handleGoogle}
-          disabled={busy}
-          className="w-full h-11 rounded-md bg-black text-white disabled:opacity-60"
-        >
-          {busy ? 'Signing in…' : 'Continue with Google'}
-        </button>
-
-        <p className="text-xs text-gray-500 mt-4">
-          If you meant to sell photos, <a href="/seller/login" className="underline">login as a Seller</a>.
-        </p>
-      </div>
+      {err && <div className="mb-4 text-red-600 text-sm">{err}</div>}
+      <button onClick={handleGoogle} disabled={busy} className="btn btn-dark w-full">
+        {busy ? 'Signing in…' : 'Continue with Google'}
+      </button>
     </div>
-  )
+  );
 }

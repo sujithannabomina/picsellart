@@ -1,58 +1,53 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { auth, db, googleProvider } from '../firebase'
-import { onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
+// src/context/AuthContext.jsx
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { auth } from '../firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
-// Non-null default value to avoid crashes even if the provider is absent.
-const defaultValue = {
-  loading: true,
-  user: null,
-  role: null,
-  loginWithGoogle: async () => {},
-  logout: async () => {},
-}
-const AuthCtx = createContext(defaultValue)
+const AuthCtx = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [role, setRole] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [initializing, setInitializing] = useState(true);
+  const [fbUser, setFbUser] = useState(null);
+  const [role, setRole] = useState(null); // 'buyer' | 'seller' | null
 
   useEffect(() => {
-    const off = onAuthStateChanged(auth, async (u) => {
-      setUser(u || null)
-      if (u) {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      setFbUser(user || null);
+
+      if (user) {
         try {
-          const snap = await getDoc(doc(db, 'users', u.uid))
-          setRole(snap.exists() ? (snap.data().role || null) : null)
+          const snap = await getDoc(doc(db, 'profiles', user.uid));
+          setRole(snap.exists() ? snap.data().role ?? null : null);
         } catch {
-          setRole(null)
+          setRole(null);
         }
       } else {
-        setRole(null)
+        setRole(null);
       }
-      setLoading(false)
-    })
-    return () => off()
-  }, [])
+      setInitializing(false);
+    });
 
-  const loginWithGoogle = async () => {
-    await signInWithPopup(auth, googleProvider)
-  }
-
-  const logout = async () => {
-    await signOut(auth)
-  }
+    return () => unsub();
+  }, []);
 
   const value = useMemo(
-    () => ({ loading, user, role, loginWithGoogle, logout }),
-    [loading, user, role]
-  )
+    () => ({
+      initializing,
+      user: fbUser,
+      role,
+      logout: () => signOut(auth),
+    }),
+    [initializing, fbUser, role]
+  );
 
-  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
 export function useAuth() {
-  // Always return an object (never null)
-  return useContext(AuthCtx) || defaultValue
+  const ctx = useContext(AuthCtx);
+  // Defensive: never destructure a null provider
+  if (!ctx) return { initializing: false, user: null, role: null, logout: () => {} };
+  return ctx;
 }

@@ -1,9 +1,8 @@
-// Minimal, safe Firebase v10 modular init.
-// Uses only Vite vars (must be present in Vercel with VITE_ prefix)
-import { initializeApp, getApps, getApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
-import { getFirestore, serverTimestamp } from 'firebase/firestore'
-import { getStorage } from 'firebase/storage'
+// src/firebase.js
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore, serverTimestamp } from 'firebase/firestore';
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -13,14 +12,14 @@ const firebaseConfig = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
-}
+};
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig)
+const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
-export const auth = getAuth(app)
-export const googleProvider = new GoogleAuthProvider()
-export const db = getFirestore(app)
-export const storage = getStorage(app)
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 
-// handy alias used by pages (this is what Vercel logs said was "missing")
-export const serverTs = serverTimestamp
+// convenience
+export const serverTs = serverTimestamp;

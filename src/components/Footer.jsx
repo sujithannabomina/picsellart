@@ -1,14 +1,17 @@
+// src/components/Footer.jsx
+import { Link } from 'react-router-dom';
+
 export default function Footer() {
   return (
-    <footer className="w-full border-t">
-      <div className="mx-auto max-w-6xl px-4 py-8 flex items-center justify-between text-sm text-gray-600">
-        <div>© 2025 Picsellart</div>
-        <div className="flex gap-4">
-          <a href="/faq" className="hover:underline">FAQ</a>
-          <a href="/refund" className="hover:underline">Refund Policy</a>
-          <a href="/contact" className="hover:underline">Contact</a>
+    <footer className="w-full border-t bg-white">
+      <div className="max-w-6xl mx-auto py-10 px-4 flex items-center justify-between text-sm">
+        <span>© 2025 Picsellart</span>
+        <div className="flex gap-6">
+          <Link to="/faq">FAQ</Link>
+          <Link to="/refund">Refund Policy</Link>
+          <Link to="/contact">Contact</Link>
         </div>
       </div>
     </footer>
-  )
+  );
 }
