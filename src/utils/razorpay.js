@@ -1,25 +1,33 @@
-export async function openCheckout({ key, amount, currency, name, description, orderId, prefill, notes, handler }) {
-return new Promise((resolve, reject) => {
-if (!window.Razorpay) return reject(new Error('Razorpay SDK not loaded'))
-const options = {
-key,
-amount,
-currency: currency || 'INR',
-name: name || 'Picsellart',
-description: description || 'Purchase',
-order_id: orderId,
-prefill,
-notes,
-theme: { color: '#111827' },
-handler: function (response) {
-handler?.(response)
-resolve(response)
-},
-modal: {
-ondismiss: () => reject(new Error('Payment cancelled')),
-},
+// Load Razorpay script and open checkout using the *public* key.
+export async function loadRazorpayScript() {
+  return new Promise((resolve) => {
+    const existing = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')
+    if (existing) return resolve(true)
+    const script = document.createElement('script')
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+    script.onload = () => resolve(true)
+    script.onerror = () => resolve(false)
+    document.body.appendChild(script)
+  })
 }
-const rzp = new window.Razorpay(options)
-rzp.open()
-})
+
+export async function openCheckout({ order, customer, notes }) {
+  const ok = await loadRazorpayScript()
+  if (!ok) throw new Error('Failed to load Razorpay script')
+
+  const options = {
+    key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+    amount: order.amount,
+    currency: order.currency,
+    name: 'Picsellart',
+    description: notes?.description ?? 'Picsellart subscription',
+    order_id: order.id,
+    prefill: {
+      name: customer?.name ?? '',
+      email: customer?.email ?? '',
+    },
+    notes: notes ?? {},
+  }
+
+  return new window.Razorpay(options)
 }
