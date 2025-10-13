@@ -1,13 +1,10 @@
 // src/firebase.js
-// Central Firebase bootstrap. Exports app, auth, db, storage, and Google provider.
-
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import { getFirestore, serverTimestamp } from 'firebase/firestore' // ← add serverTimestamp
 import { getStorage } from 'firebase/storage'
 import { getAnalytics, isSupported } from 'firebase/analytics'
 
-// Prefer env vars; fall back to your known public config (safe for client apps)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'picsellart-619a7.firebaseapp.com',
@@ -18,18 +15,16 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || 'G-3KNDHJ6JZY'
 }
 
-// Initialize
 export const app = initializeApp(firebaseConfig)
 
-// Core services
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
-
-// Providers
 export const googleProvider = new GoogleAuthProvider()
 
-// Analytics (guarded so it doesn't break SSR/build)
+// ↓ export alias expected elsewhere in your app
+export const serverTs = serverTimestamp // ← add this line
+
 if (typeof window !== 'undefined') {
   isSupported()
     .then((ok) => ok && getAnalytics(app))
