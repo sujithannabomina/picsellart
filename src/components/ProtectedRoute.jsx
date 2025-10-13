@@ -1,12 +1,20 @@
-import { Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { Navigate, Outlet } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
+export default function ProtectedRoute({ requireRole }) {
+  const { user, role, loading } = useAuth();
 
-export default function ProtectedRoute({ children, role }) {
-const { user, profile, loading } = useAuth()
-const location = useLocation()
-if (loading) return null
-if (!user) return <Navigate to={role === 'seller' ? '/seller/login' : '/buyer/login'} state={{ from: location }} replace />
-if (role && profile?.role !== role) return <Navigate to="/" replace />
-return children
+  // While we’re checking Firebase, render nothing (or a small spinner if you want)
+  if (loading) return null;
+
+  if (!user) {
+    const to = requireRole === 'seller' ? '/seller/login' : '/buyer/login';
+    return <Navigate to={to} replace />;
+  }
+
+  if (requireRole && role !== requireRole) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <Outlet />;
 }

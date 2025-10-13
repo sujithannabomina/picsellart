@@ -1,75 +1,85 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { auth, db, serverTs } from '../firebase'
-import { onAuthStateChanged } from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { auth, db } from '../firebase';
 
-const Ctx = createContext(null)
+// Always provide a non-null default to avoid destructuring crashes
+const AuthContext = createContext({
+  user: null,
+  role: null,
+  profile: null,
+  loading: true,
+  isSeller: false,
+  isBuyer: false,
+});
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [profile, setProfile] = useState(null) // users/{uid} doc
-  const [loading, setLoading] = useState(true)
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u || null)
-      if (u) {
-        const ref = doc(db, 'users', u.uid)
-        const snap = await getDoc(ref)
-        if (snap.exists()) {
-          setProfile(snap.data())
-        } else {
-          setProfile(null)
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (!firebaseUser) {
+          setUser(null);
+          setRole(null);
+          setProfile(null);
+          setLoading(false);
+          return;
         }
-      } else {
-        setProfile(null)
-      }
-      setLoading(false)
-    })
-    return () => unsub()
-  }, [])
 
-  const value = useMemo(() => {
-    const role = profile?.role || null
-    const sub = profile?.subscription || null
-    const now = Date.now()
-    const active =
-      sub && typeof sub.expiresAt === 'number' ? now < sub.expiresAt : false
+        setUser(firebaseUser);
 
-    return {
-      user,
-      profile,
-      role,
-      sellerActive: role === 'seller' && active,
-      loading,
-      // ensure a users/{uid} doc exists with a role
-      ensureRoleDoc: async (roleWanted) => {
-        if (!user) return
-        const ref = doc(db, 'users', user.uid)
-        const snap = await getDoc(ref)
+        // Ensure a user doc exists; read role if present
+        const ref = doc(db, 'users', firebaseUser.uid);
+        const snap = await getDoc(ref);
+
         if (!snap.exists()) {
-          await setDoc(ref, {
-            uid: user.uid,
-            email: user.email || '',
-            displayName: user.displayName || '',
-            role: roleWanted,
-            createdAt: serverTs(),
-          })
-          const fresh = await getDoc(ref)
-          setProfile(fresh.data())
-          return
+          // default to buyer unless/ until user completes seller onboarding
+          const newDoc = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            displayName: firebaseUser.displayName || '',
+            role: 'buyer',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          await setDoc(ref, newDoc, { merge: true });
+          setRole('buyer');
+          setProfile(newDoc);
+        } else {
+          const data = snap.data() || {};
+          setRole(data.role || 'buyer');
+          setProfile(data);
         }
-        const cur = snap.data()
-        if (!cur.role && roleWanted) {
-          await setDoc(ref, { ...cur, role: roleWanted }, { merge: true })
-          const fresh = await getDoc(ref)
-          setProfile(fresh.data())
-        }
-      },
-    }
-  }, [user, profile])
+      } catch (e) {
+        // In case of any read/write error, don’t crash the tree
+        console.error('[AuthProvider] error:', e);
+        setRole(null);
+        setProfile(null);
+      } finally {
+        setLoading(false);
+      }
+    });
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
-}
+    return () => unsub();
+  }, []);
 
-export const useAuth = () => useContext(Ctx)
+  const value = useMemo(
+    () => ({
+      user,
+      role,
+      profile,
+      loading,
+      isSeller: role === 'seller',
+      isBuyer: role === 'buyer',
+    }),
+    [user, role, profile, loading]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export const useAuth = () => useContext(AuthContext);
