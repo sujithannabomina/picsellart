@@ -4,7 +4,6 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore, serverTimestamp as serverTs } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
-// Prefer env vars if you’ve set them in Vercel; otherwise fall back to the values you shared.
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'picsellart-619a7.firebaseapp.com',
@@ -16,9 +15,6 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-
-// IMPORTANT: do not call getAnalytics() here.
-// It can throw in some browsers/environments and blank the app.
 
 const auth = getAuth(app);
 const db = getFirestore(app);
