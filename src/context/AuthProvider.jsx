@@ -1,10 +1,17 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { auth, db, googleProvider } from "../lib/firebase";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 const Ctx = createContext(null);
 export const useAuth = () => useContext(Ctx);
+
+function tsToMillis(ts) {
+  if (!ts) return null;
+  if (typeof ts === "number") return ts;
+  if (ts.seconds != null) return ts.seconds * 1000;
+  return null;
+}
 
 export default function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -26,7 +33,7 @@ export default function AuthProvider({ children }) {
     const ref = doc(db, "users", cred.user.uid);
     const snap = await getDoc(ref);
     if (!snap.exists()) {
-      const data = { uid: cred.user.uid, email: cred.user.email, role, plan: null, createdAt: serverTimestamp() };
+      const data = { uid: cred.user.uid, email: cred.user.email, role, createdAt: serverTimestamp() };
       await setDoc(ref, data);
       setProfile(data);
     } else {
@@ -38,5 +45,16 @@ export default function AuthProvider({ children }) {
   };
 
   const logout = () => signOut(auth);
-  return <Ctx.Provider value={{ user, profile, setProfile, loginWithGoogle, logout, loading }}>{children}</Ctx.Provider>;
+
+  const sellerExpiresAtMs = useMemo(() => tsToMillis(profile?.plan?.expiresAt), [profile]);
+  const isSellerExpired = useMemo(() => {
+    if (!sellerExpiresAtMs) return true; // no plan = treat as expired
+    return Date.now() >= sellerExpiresAtMs;
+  }, [sellerExpiresAtMs]);
+
+  return (
+    <Ctx.Provider value={{ user, profile, setProfile, loginWithGoogle, logout, loading, isSellerExpired }}>
+      {children}
+    </Ctx.Provider>
+  );
 }

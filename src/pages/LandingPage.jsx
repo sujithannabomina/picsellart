@@ -1,14 +1,12 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
-import { getThreeRandomPublicImages } from "../utils/storage";
+
+const LOCAL_SAMPLES = [
+  "/images/sample1.jpg", "/images/sample2.jpg", "/images/sample3.jpg",
+  "/images/sample4.jpg", "/images/sample5.jpg", "/images/sample6.jpg",
+];
 
 export default function LandingPage() {
-  const [images, setImages] = useState([]);
-  useEffect(() => { (async()=> {
-    try { setImages(await getThreeRandomPublicImages()); }
-    catch { setImages(["/images/sample1.jpg","/images/sample2.jpg","/images/sample3.jpg"]); }
-  })(); }, []);
-
+  const images = LOCAL_SAMPLES.sort(() => 0.5 - Math.random()).slice(0, 3);
   return (
     <div className="max-w-6xl mx-auto px-4">
       <section className="text-center my-12">
@@ -17,13 +15,16 @@ export default function LandingPage() {
           Turn your photos into income. Sellers upload and earn; buyers get licensed, instant downloads.
         </p>
         <div className="flex gap-4 justify-center mt-6">
-          <Link to="/buyer/login" className="btn">Buyer Login</Link>
+          <Link to="/buyer/login" className="btn btn-outline">Buyer Login</Link>
           <Link to="/seller/login" className="btn btn-primary">Become a Seller</Link>
           <Link to="/explore" className="btn btn-secondary">Explore Pictures</Link>
         </div>
       </section>
+
       <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        {images.map(src => <img key={src} src={src} className="rounded-2xl w-full h-64 object-cover shadow" />)}
+        {images.map((src, i) => (
+          <img key={i} src={src} className="rounded-2xl w-full h-64 object-cover shadow" />
+        ))}
       </section>
     </div>
   );

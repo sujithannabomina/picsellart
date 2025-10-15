@@ -2,38 +2,41 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // User profile (role & plan)
     match /users/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Public photos for Explore & buyers
     match /photos/{id} {
       allow read: if true;
 
-      // Only sellers with an active plan can create; cap price by plan.
       allow create: if request.auth != null
         && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.keys().hasAll(["title","price","watermarkedUrl","originalPath","ownerUid","planId"])
+        && request.resource.data.watermarkedUrl.matches('^https?://')
+        && request.resource.data.price is number
+        // Seller with active plan (not expired)
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "seller"
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan.id in ["starter","pro","elite"]
-        && request.resource.data.price <= (
-            request.resource.data.planId == "starter" ? 199 :
-            request.resource.data.planId == "pro" ? 499 : 999
-        );
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan.expiresAt > request.time
+        // price cap per plan (from user doc)
+        && request.resource.data.price <= get(/databases/$(database)/documents/users/$(request.auth.uid)).data.plan.maxPricePerPhoto;
 
       allow update, delete: if request.auth != null
         && resource.data.ownerUid == request.auth.uid;
     }
 
-    // Messages from Contact page
-    match /contact_messages/{id} {
-      allow create: if true;
-      allow read: if false;  // private
+    match /purchases/{id} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.buyerUid;
+      allow create, update, delete: if false;
     }
 
-    // Payment records (write from server only)
+    match /contact_messages/{id} {
+      allow create: if true;
+      allow read: if false;
+    }
+
     match /payments/{id} {
       allow read, write: if false;
     }

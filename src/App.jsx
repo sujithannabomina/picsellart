@@ -12,7 +12,7 @@ import BuyerLogin from "./pages/BuyerLogin";
 import SellerLogin from "./pages/SellerLogin";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
-import SellerPlan from "./pages/SellerPlan";
+import SellerRenew from "./pages/SellerRenew"; // NEW
 
 export default function App(){
   return (
@@ -30,8 +30,8 @@ export default function App(){
           <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
 
           <Route path="/seller/login" element={<SellerLogin />} />
-          <Route path="/seller/plan" element={<SellerPlan />} />
           <Route path="/seller/dashboard" element={<SellerDashboard />} />
+          <Route path="/seller/renew" element={<SellerRenew />} />   {/* NEW */}
 
           <Route path="*" element={<LandingPage />} />
         </Routes>

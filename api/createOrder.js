@@ -1,35 +1,29 @@
-// /api/createOrder.js
-import crypto from 'crypto'
+// Vercel serverless function – creates a Razorpay order
+import Razorpay from "razorpay";
+
+const PLANS = {
+  starter: { name: "Starter", amount: 19900 },
+  pro:     { name: "Pro",     amount: 49900 },
+  elite:   { name: "Elite",   amount: 99900 },
+};
 
 export default async function handler(req, res) {
-  try {
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-    const { purpose, amount, currency = 'INR', meta = {} } = req.body || {}
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return res.status(500).json({ error: 'Razorpay env missing' })
-    }
-    if (!amount || amount < 1) return res.status(400).json({ error: 'Invalid amount' })
-    if (!['purchase', 'subscription'].includes(purpose)) return res.status(400).json({ error: 'Invalid purpose' })
+  if (req.method !== "POST") return res.status(405).end();
+  const { planId } = req.body || {};
+  const plan = PLANS[planId];
+  if (!plan) return res.status(400).json({ error: "invalid-plan" });
 
-    // Create order
-    const body = JSON.stringify({
-      amount: Math.round(Number(amount) * 100), // paise
-      currency,
-      receipt: `${purpose}-${Date.now()}`,
-      notes: meta || {},
-    })
+  const rzp = new Razorpay({
+    key_id: process.env.RAZORPAY_KEY_ID,
+    key_secret: process.env.RAZORPAY_KEY_SECRET,
+  });
 
-    const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64')
-    const rpRes = await fetch('https://api.razorpay.com/v1/orders', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Basic ${auth}` },
-      body,
-    })
-    const data = await rpRes.json()
-    if (!rpRes.ok) return res.status(400).json({ error: data?.error?.description || 'Order create failed', raw: data })
+  const order = await rzp.orders.create({
+    amount: plan.amount,
+    currency: "INR",
+    receipt: `plan_${planId}_${Date.now()}`,
+    notes: { planId },
+  });
 
-    res.status(200).json({ order: data, keyId: process.env.RAZORPAY_KEY_ID })
-  } catch (e) {
-    res.status(500).json({ error: e?.message || 'Server error' })
-  }
+  res.json({ orderId: order.id, amount: plan.amount, planId, planName: plan.name });
 }

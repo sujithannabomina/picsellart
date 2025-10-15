@@ -1,75 +1,146 @@
 import ProtectedRoute from "../components/ProtectedRoute";
 import { useAuth } from "../context/AuthProvider";
 import { useEffect, useState } from "react";
-import { db, storage } from "../lib/firebase";
-import { doc, setDoc, collection, query, where, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import PriceInput from "../components/PriceInput";
+import { storage } from "../lib/firebase";
 
-function Content(){
-  const { user, profile } = useAuth();
+function makeWatermark(file, text = "picsellart") {
+  return new Promise(async (resolve) => {
+    const img = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    ctx.font = `${Math.floor(canvas.width / 20)}px Arial`;
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    ctx.textAlign = "center";
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-Math.PI / 6);
+    for (let y = -canvas.height; y < canvas.height; y += 150) {
+      for (let x = -canvas.width; x < canvas.width; x += 350) {
+        ctx.fillText(text, x, y);
+      }
+    }
+    canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9);
+  });
+}
+
+export default function SellerDashboard() {
+  return (
+    <ProtectedRoute requireRole="seller">
+      <SellerDashboardInner />
+    </ProtectedRoute>
+  );
+}
+
+function SellerDashboardInner() {
+  const { user, profile, isSellerExpired } = useAuth();
+  const [file, setFile] = useState(null);
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("general");
-  const [file, setFile] = useState(null);
-  const [photos, setPhotos] = useState([]);
+  const [tags, setTags] = useState("");
   const [busy, setBusy] = useState(false);
-
-  useEffect(()=>{ if (!profile?.plan) window.location.replace("/seller/plan"); }, [profile]);
-
-  useEffect(()=> {
-    if (!user) return;
-    const q = query(collection(db, "photos"), where("ownerUid", "==", user.uid));
-    return onSnapshot(q, (snap) => {
-      const rows = []; snap.forEach(d => rows.push({ id: d.id, ...d.data() })); setPhotos(rows);
-    });
-  }, [user]);
+  const [msg, setMsg] = useState("");
 
   const upload = async () => {
-    if (!file || !title || !price) return alert("Fill all fields");
-    const fileRef = ref(storage, `seller/${user.uid}/${Date.now()}-${file.name}`);
-    setBusy(true);
-    await uploadBytes(fileRef, file);
-    const url = await getDownloadURL(fileRef);
-    const id = crypto.randomUUID();
-    await setDoc(doc(db, "photos", id), {
-      id, title, price, category, url,
-      ownerUid: user.uid, ownerEmail: user.email, planId: profile?.plan?.id,
-      createdAt: serverTimestamp()
-    });
-    setTitle(""); setPrice(""); setCategory("general"); setFile(null);
-    setBusy(false);
+    if (isSellerExpired) return alert("Your plan has expired. Renew to upload.");
+
+    if (!file || !title || !price) {
+      alert("Please fill all fields and select a file.");
+      return;
+    }
+
+    try {
+      setBusy(true);
+      setMsg("Uploading image...");
+
+      const photoId = crypto.randomUUID();
+      const originalPath = `originals/${user.uid}/${photoId}_${file.name}`;
+      const storageRef = ref(storage, originalPath);
+      await uploadBytes(storageRef, file);
+
+      const wmBlob = await makeWatermark(file);
+      const wmPath = `public/watermarked/${photoId}.jpg`;
+      const wmRef = ref(storage, wmPath);
+      await uploadBytes(wmRef, wmBlob);
+      const watermarkedUrl = await getDownloadURL(wmRef);
+
+      setMsg("Saving metadata securely...");
+      const resp = await fetch("/api/secureCreatePhoto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uid: user.uid,
+          title,
+          price,
+          tags: tags.split(/[,\s]+/).filter(Boolean),
+          watermarkedUrl,
+          originalPath,
+        }),
+      });
+
+      const data = await resp.json();
+      if (data.status === "success") {
+        alert("Upload successful ✅");
+        setFile(null);
+        setTitle("");
+        setPrice("");
+        setTags("");
+      } else {
+        alert(`Upload failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Something went wrong. Please try again.");
+    } finally {
+      setBusy(false);
+      setMsg("");
+    }
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
-      <h2 className="text-3xl font-bold my-8">Seller Dashboard</h2>
-
-      <div className="border rounded-xl p-4 mb-8">
-        <div className="grid md:grid-cols-4 gap-4">
-          <input className="border rounded px-3 py-2" placeholder="Title" value={title} onChange={e=>setTitle(e.target.value)} />
-          <PriceInput planId={profile?.plan?.id} value={price} onChange={setPrice} />
-          <input className="border rounded px-3 py-2" placeholder="Category" value={category} onChange={e=>setCategory(e.target.value)} />
-          <input type="file" onChange={e=>setFile(e.target.files?.[0]||null)} />
+    <div className="max-w-3xl mx-auto p-6">
+      <h2 className="text-2xl font-bold mb-4">Seller Dashboard</h2>
+      {isSellerExpired && (
+        <div className="p-3 bg-red-100 text-red-700 rounded mb-4">
+          Your plan has expired. <a href="/seller/renew" className="underline">Renew now</a> to continue uploads.
         </div>
-        <button className="btn btn-dark mt-4" onClick={upload} disabled={busy}>{busy?"Uploading...":"Upload"}</button>
-        <p className="text-sm text-gray-500 mt-2">Price is capped by your active plan.</p>
-      </div>
-
-      <h3 className="text-xl font-semibold mb-2">Your Photos</h3>
-      {photos.length===0 && <p>Loading...</p>}
-      <div className="grid md:grid-cols-4 gap-4">
-        {photos.map(p=>(
-          <div key={p.id} className="border rounded-xl p-2">
-            <img src={p.url} alt={p.title} className="w-full h-40 object-cover rounded"/>
-            <div className="mt-2 font-medium">{p.title}</div>
-            <div className="text-sm text-gray-600">₹{p.price} • {p.category}</div>
-          </div>
-        ))}
+      )}
+      <div className="space-y-3 mb-6">
+        <input
+          className="border p-2 w-full"
+          placeholder="Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
+        <input
+          className="border p-2 w-full"
+          placeholder="Price (₹)"
+          type="number"
+          value={price}
+          onChange={(e) => setPrice(e.target.value)}
+        />
+        <input
+          className="border p-2 w-full"
+          placeholder="Tags (comma separated)"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+        />
+        <input
+          type="file"
+          onChange={(e) => setFile(e.target.files[0])}
+          accept="image/*"
+        />
+        <button
+          className="btn btn-primary w-full"
+          disabled={busy}
+          onClick={upload}
+        >
+          {busy ? "Uploading..." : "Upload Image"}
+        </button>
+        {msg && <p className="text-gray-600 text-sm">{msg}</p>}
       </div>
     </div>
   );
-}
-export default function SellerDashboard(){
-  return <ProtectedRoute requireRole="seller"><Content/></ProtectedRoute>;
 }
