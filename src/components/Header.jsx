@@ -1,63 +1,34 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
-
-const NavLink = ({ to, children }) => {
-  const { pathname } = useLocation()
-  const active = pathname === to
-  return (
-    <Link
-      to={to}
-      className={`px-3 py-2 rounded ${active ? 'bg-black text-white' : 'text-black hover:bg-black/5'}`}
-    >
-      {children}
-    </Link>
-  )
-}
+import { Link, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthProvider";
 
 export default function Header() {
-  const { user, role, logout } = useAuth()
-  const navigate = useNavigate()
-
-  const goDash = () => {
-    navigate(role === 'seller' ? '/seller/dashboard' : '/buyer/dashboard')
-  }
+  const { pathname } = useLocation();
+  const { user, profile, logout } = useAuth();
+  const nav = (to, label) => (<Link to={to} className={pathname===to?"font-semibold":""}>{label}</Link>);
 
   return (
-    <header className="border-b bg-white">
-      <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          {/* Public assets: reference with absolute path, no import */}
-          <img src="/logo.png" alt="Picsellart" className="h-7 w-7" />
-          <span className="font-semibold text-lg">Picsellart</span>
-        </Link>
-
-        <nav className="hidden md:flex items-center gap-2">
-          <NavLink to="/">Home</NavLink>
-          <NavLink to="/explore">Explore</NavLink>
-          <NavLink to="/faq">FAQ</NavLink>
-          <NavLink to="/refund">Refund</NavLink>
-          <NavLink to="/contact">Contact</NavLink>
+    <header className="w-full border-b">
+      <div className="max-w-6xl mx-auto flex items-center justify-between px-4 py-3">
+        <Link to="/" className="font-bold text-xl">Picsellart</Link>
+        <nav className="flex gap-6">
+          {nav("/", "Home")}
+          {nav("/explore", "Explore")}
+          {nav("/faq", "FAQ")}
+          {nav("/refund", "Refund")}
+          {nav("/contact", "Contact")}
         </nav>
-
-        <div className="flex items-center gap-2">
-          {!user ? (
-            <>
-              <Link to="/buyer/login" className="px-3 py-2 rounded bg-black text-white">Buyer Login</Link>
-              <Link to="/seller/login" className="px-3 py-2 rounded bg-indigo-600 text-white">Seller Login</Link>
-            </>
-          ) : (
-            <>
-              <button onClick={goDash} className="px-3 py-2 rounded bg-black text-white">Dashboard</button>
-              <button
-                onClick={async () => { await logout(); navigate('/'); }}
-                className="px-3 py-2 rounded border"
-              >
-                Logout
-              </button>
-            </>
-          )}
-        </div>
+        {!user ? (
+          <div className="flex gap-3">
+            <Link className="btn" to="/buyer/login">Buyer Login</Link>
+            <Link className="btn btn-primary" to="/seller/login">Seller Login</Link>
+          </div>
+        ) : (
+          <div className="flex gap-3">
+            <Link className="btn" to={profile?.role==="seller"?"/seller/dashboard":"/buyer/dashboard"}>Dashboard</Link>
+            <button className="btn" onClick={logout}>Logout</button>
+          </div>
+        )}
       </div>
     </header>
-  )
+  );
 }

@@ -1,7 +1,6 @@
-export const PLANS = [
-  { id: 'starter',  price: 100,  currency: 'INR', uploads: 50,  min: 100, max: 180, months: 12 },
-  { id: 'plus',     price: 299,  currency: 'INR', uploads: 100, min: 100, max: 250, months: 12 },
-  { id: 'pro',      price: 799,  currency: 'INR', uploads: 300, min: 100, max: 500, months: 12 },
-]
-
-export const getPlanConfig = (id) => PLANS.find(p => p.id === id)
+// Central place for seller plans (front-end caps must match server).
+export const PRICE_PLANS = [
+  { id: "starter", name: "Starter", priceINR: 199, maxPricePerPhoto: 199, uploadLimit: 25 },
+  { id: "pro",     name: "Pro",     priceINR: 499, maxPricePerPhoto: 499, uploadLimit: 200 },
+  { id: "elite",   name: "Elite",   priceINR: 999, maxPricePerPhoto: 999, uploadLimit: 1000 },
+];

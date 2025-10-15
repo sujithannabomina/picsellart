@@ -1,0 +1,12 @@
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [
+      { "source": "/api/create-order", "function": "createOrder" },
+      { "source": "/api/verify-payment", "function": "verifyPayment" },
+      { "source": "**", "destination": "/index.html" }
+    ],
+    "headers": [ { "source": "**/*.@(jpg|jpeg|png|webp)", "headers": [ { "key":"Cache-Control", "value":"public,max-age=3600" } ] } ]
+  }
+}
