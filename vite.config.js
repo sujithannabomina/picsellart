@@ -1,18 +1,16 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-// Vite configuration optimized for Vercel
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/', // ensures assets load correctly at picsellart.com root
   build: {
-    outDir: 'dist',
-    assetsDir: 'assets',
+    outDir: "dist",
     sourcemap: false,
-    chunkSizeWarningLimit: 1000, // suppress large chunk warnings
-  },
-  server: {
-    port: 5173, // for local dev
-    open: true,
-  },
+    rollupOptions: {
+      output: {
+        manualChunks: undefined
+      }
+    }
+  }
 });
