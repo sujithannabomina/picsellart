@@ -1,48 +1,33 @@
-// src/components/LandingPage.jsx
 import { Link } from "react-router-dom";
 
-const samples = [
+const picks = [
   "/images/sample1.jpg",
   "/images/sample2.jpg",
   "/images/sample3.jpg",
-  "/images/sample4.jpg",
-  "/images/sample5.jpg",
-  "/images/sample6.jpg",
 ];
 
-function pick(n) {
-  const copy = [...samples];
-  const out = [];
-  while (out.length < n && copy.length) {
-    const i = Math.floor(Math.random() * copy.length);
-    out.push(copy.splice(i, 1)[0]);
-  }
-  return out;
-}
-
 export default function LandingPage() {
-  const picks = pick(3);
   return (
-    <main className="landing">
-      <h1 className="title">Picsellart</h1>
-      <p className="tagline">
-        Turn your photos into income. Sellers upload and earn; buyers get
-        licensed, instant downloads.
-      </p>
-      <div className="cta-row">
-        <Link to="/buyer/login" className="btn ghost">Buyer Login</Link>
-        <Link to="/seller/login" className="btn primary">Become a Seller</Link>
-        <Link to="/explore" className="btn ghost">Explore Pictures</Link>
-      </div>
+    <>
+      <section className="hero container">
+        <h1>Turn Your Photos into Income</h1>
+        <p>
+          Join our marketplace where photographers, designers, and creators monetize their work.
+          Buyers get instant access to unique, premium images for their projects.
+        </p>
+        <div className="hero-actions">
+          <Link to="/seller/login" className="btn btn-primary">Become a Seller</Link>
+          <Link to="/explore" className="btn">Explore Photos</Link>
+        </div>
+      </section>
 
-      <section className="showcase">
+      <section className="container showcase" aria-label="Showcase">
         {picks.map((src) => (
-          <figure key={src} className="card">
+          <div className="card" key={src}>
             <img src={src} alt="Showcase" loading="lazy" />
-            <figcaption>Showcase</figcaption>
-          </figure>
+          </div>
         ))}
       </section>
-    </main>
+    </>
   );
 }

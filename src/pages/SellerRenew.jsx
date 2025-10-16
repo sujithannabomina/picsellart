@@ -1,48 +1,29 @@
-// src/pages/SellerRenew.jsx
-import { PLAN_LIST } from "../utils/plans";
+import { useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { PLANS } from "../utils/plans";
 
-async function createPackOrder(planId) {
-  const res = await fetch("/api/createPackOrder", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ planId }),
-  });
-  if (!res.ok) throw new Error("Failed to create order");
-  return res.json();
-}
-
-export default function SellerRenew() {
-  const onRenew = async (plan) => {
-    const order = await createPackOrder(plan.id);
-    // open Razorpay or forward:
-    // See note in SellerPlan.jsx. For now:
-    alert(`Order created. Complete payment in the next step.`);
-  };
+export default function SellerRenew(){
+  const [sp] = useSearchParams();
+  const pick = sp.get("plan");
+  const plan = useMemo(() => PLANS.find(p => String(p.id) === String(pick)) ?? PLANS[0], [pick]);
 
   return (
-    <main className="page">
-      <div className="container">
-        <h1 className="page-title" style={{ textAlign: "center" }}>
-          Renew Your Seller Pack
-        </h1>
-
-        <div className="grid">
-          {PLAN_LIST.map((p) => (
-            <article key={p.id} className="photo-card" style={{ padding: 20 }}>
-              <h3 style={{ marginTop: 0 }}>{p.label}</h3>
-              <div style={{ fontSize: 28, fontWeight: 800, margin: "8px 0" }}>
-                ₹{p.priceINR}
-              </div>
-              <ul style={{ color: "#475569", lineHeight: 1.6, paddingLeft: 18 }}>
-                <li>Upload limit: {p.uploadLimit} images</li>
-                <li>Max price per image: ₹{p.maxPricePerImage}</li>
-              </ul>
-              <button className="btn primary w-full" onClick={() => onRenew(p)}>
-                Renew
-              </button>
-            </article>
-          ))}
-        </div>
+    <main className="container page">
+      <h1>Renew Your Seller Pack</h1>
+      <div className="plans">
+        {PLANS.map((p) => (
+          <article key={p.id} className="plan" style={{outline: p.id===plan.id?`2px solid var(--brand)`:"none"}}>
+            <h3>{p.name}</h3>
+            <div style={{fontSize:24, fontWeight:800, marginBottom:8}}>₹{p.price}</div>
+            <ul className="bullets">
+              <li>Upload limit: {p.maxUploads} images</li>
+              <li>Max price per image: ₹{p.maxPrice}</li>
+            </ul>
+            <div style={{marginTop:12}}>
+              <a className="btn btn-primary" href={`/api/createPackOrder?plan=${p.id}`}>Buy</a>
+            </div>
+          </article>
+        ))}
       </div>
     </main>
   );

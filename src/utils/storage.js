@@ -1,23 +1,44 @@
-// Helpers to read from Firebase Storage 'public/images' and seller folder.
-import { storage } from "../lib/firebase";
-import { listAll, list, ref, getDownloadURL } from "firebase/storage";
+// Storage helpers for Explore (Firebase client SDK)
+import { getStorage, ref, list, getDownloadURL } from "firebase/storage";
+import { app } from "../firebase";
 
-export async function getThreeRandomPublicImages() {
-  const baseRef = ref(storage, "public/images");
-  const res = await listAll(baseRef);
-  const urls = await Promise.all(res.items.map(i => getDownloadURL(i)));
-  return urls.sort(() => 0.5 - Math.random()).slice(0, 3);
-}
+/**
+ * Lists a page of images from Firebase Storage under "public/".
+ * It tries "public/watermarked/<name>" first, falling back to "public/<name>"
+ * and flags overlay=true so the component can add a client watermark.
+ */
+export async function listExplorePage({ pageSize = 24, pageToken = undefined } = {}) {
+  const storage = getStorage(app);
+  const baseRef = ref(storage, "public");
 
-export async function listPublicImagesPage(page = 1, pageSize = 12) {
-  const baseRef = ref(storage, "public/images");
-  let token = undefined, all = [];
-  do {
-    const batch = await list(baseRef, { maxResults: 1000, pageToken: token });
-    all = all.concat(batch.items);
-    token = batch.nextPageToken;
-  } while (token);
-  const start = (page - 1) * pageSize;
-  const slice = all.slice(start, start + pageSize);
-  return Promise.all(slice.map(i => getDownloadURL(i)));
+  const { items, nextPageToken } = await list(baseRef, { maxResults: pageSize, pageToken });
+
+  const results = await Promise.all(items.map(async (itemRef) => {
+    const name = itemRef.name; // e.g. sample42.jpg
+    // Try server watermarked copy first
+    let url, overlay = false;
+    try {
+      const wmRef = ref(storage, `public/watermarked/${name}`);
+      url = await getDownloadURL(wmRef);
+    } catch {
+      // fallback to original + client overlay
+      url = await getDownloadURL(itemRef);
+      overlay = true;
+    }
+
+    // Simple deterministic price banding by filename number (keeps sample pricing varied)
+    const match = name.match(/(\d+)/);
+    const n = match ? parseInt(match[1], 10) : 0;
+    const price = n % 5 === 0 ? 249 : n % 3 === 0 ? 149 : 99;
+
+    return {
+      id: name,
+      title: "Street Photography",
+      price,
+      url,
+      overlay, // if true, component will draw watermark overlay
+    };
+  }));
+
+  return { items: results, nextPageToken };
 }
