@@ -1,59 +1,98 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
-import { auth, db, serverTs } from '../firebase'
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+// src/context/AuthContext.jsx
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { auth, db } from "../firebase";
+import {
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut as fbSignOut,
+} from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
-const Ctx = createContext(null)
+/**
+ * We initialize the context with a NON-NULL default object so that
+ * useAuth() consumers can always destructure safely even before the
+ * provider mounts (e.g., during SSR/first paint).
+ */
+const DEFAULT_VALUE = {
+  user: null,
+  profile: null,
+  loading: true,
+  signInWithGoogle: async () => {},
+  signOut: async () => {},
+};
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [role, setRole] = useState(null)
-  const [loading, setLoading] = useState(true)
+const AuthContext = createContext(DEFAULT_VALUE);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      setUser(u)
-      if (!u) { setRole(null); setLoading(false); return }
-      try {
-        const snap = await getDoc(doc(db, 'users', u.uid))
-        setRole(snap.exists() ? snap.data().role || null : null)
-      } catch { setRole(null) }
-      setLoading(false)
-    })
-    return () => unsub()
-  }, [])
-
-  const ensureUserDoc = async (u, r) => {
-    const ref = doc(db, 'users', u.uid)
-    const snap = await getDoc(ref)
-    if (!snap.exists()) {
-      await setDoc(ref, {
-        role: r,
-        email: u.email || '',
-        displayName: u.displayName || '',
-        createdAt: serverTs(),
-        updatedAt: serverTs(),
-      })
-    }
-  }
-
-  const signInWithRole = async (r) => {
-    const provider = new GoogleAuthProvider()
-    provider.setCustomParameters({ prompt: 'select_account' })
-    const res = await signInWithPopup(auth, provider)
-    await ensureUserDoc(res.user, r)
-    const snap = await getDoc(doc(db, 'users', res.user.uid))
-    setRole(snap.exists() ? snap.data().role || null : null)
-    return res.user
-  }
-
-  const value = useMemo(() => ({
-    user, role, loading,
-    loginBuyer: () => signInWithRole('buyer'),
-    loginSeller: () => signInWithRole('seller'),
-    logout: () => signOut(auth),
-  }), [user, role, loading])
-
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
+/**
+ * Hook your components will use.
+ * This will NEVER return null; it always returns a safe object.
+ */
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  return ctx || DEFAULT_VALUE;
 }
-export const useAuth = () => useContext(Ctx)
+
+/**
+ * Provider that subscribes to Firebase Auth and (optionally) loads a user profile
+ * document from Firestore at `users/{uid}` if present.
+ */
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Auth state subscription
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (fbUser) => {
+      try {
+        setUser(fbUser || null);
+
+        if (fbUser) {
+          // Optional profile load — if you don’t have this collection yet,
+          // this will just be a no-op.
+          const snap = await getDoc(doc(db, "users", fbUser.uid));
+          setProfile(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+        } else {
+          setProfile(null);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error("AuthProvider profile load error:", err);
+        setProfile(null);
+      } finally {
+        setLoading(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Auth actions
+  const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+  };
+
+  const signOut = async () => {
+    await fbSignOut(auth);
+    // Optional: send users home after logout
+    if (typeof window !== "undefined") {
+      window.location.href = "/";
+    }
+  };
+
+  const value = useMemo(
+    () => ({
+      user,
+      profile,
+      loading,
+      signInWithGoogle,
+      signOut,
+    }),
+    [user, profile, loading]
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export default AuthContext;
