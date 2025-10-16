@@ -1,31 +1,34 @@
+// src/pages/LandingPage.jsx
 import { Link } from "react-router-dom";
 
-const LOCAL_SAMPLES = [
-  "/images/sample1.jpg", "/images/sample2.jpg", "/images/sample3.jpg",
-  "/images/sample4.jpg", "/images/sample5.jpg", "/images/sample6.jpg",
+const homeImages = [
+  "/images/hero1.jpg",
+  "/images/hero2.jpg",
+  "/images/hero3.jpg",
 ];
 
-export default function LandingPage() {
-  const images = LOCAL_SAMPLES.sort(() => 0.5 - Math.random()).slice(0, 3);
+export default function LandingPage(){
   return (
-    <div className="max-w-6xl mx-auto px-4">
-      <section className="text-center my-12">
-        <h1 className="text-5xl font-extrabold mb-4">Picsellart</h1>
-        <p className="text-gray-600 max-w-3xl mx-auto">
+    <main>
+      <section className="container" style={{textAlign:"center", paddingTop: 24}}>
+        <h1 className="h1" style={{marginBottom: 10}}>Picsellart</h1>
+        <p className="subtle" style={{maxWidth: 760, margin:"0 auto 16px"}}>
           Turn your photos into income. Sellers upload and earn; buyers get licensed, instant downloads.
         </p>
-        <div className="flex gap-4 justify-center mt-6">
-          <Link to="/buyer/login" className="btn btn-outline">Buyer Login</Link>
-          <Link to="/seller/login" className="btn btn-primary">Become a Seller</Link>
-          <Link to="/explore" className="btn btn-secondary">Explore Pictures</Link>
+        <div style={{display:"flex", gap:14, justifyContent:"center", marginBottom: 24, flexWrap:"wrap"}}>
+          <Link className="btn outline" to="/buyer/login">Buyer Login</Link>
+          <Link className="btn" to="/seller/login">Become a Seller</Link>
+          <Link className="btn outline" to="/explore">Explore Pictures</Link>
+        </div>
+
+        <div className="grid cols-3">
+          {homeImages.map((src,i)=>(
+            <div className="tile" key={i}>
+              <img src={src} alt="Showcase" loading="lazy"/>
+            </div>
+          ))}
         </div>
       </section>
-
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-        {images.map((src, i) => (
-          <img key={i} src={src} className="rounded-2xl w-full h-64 object-cover shadow" />
-        ))}
-      </section>
-    </div>
+    </main>
   );
 }

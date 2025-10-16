@@ -1,60 +1,64 @@
 import crypto from "crypto";
-import admin from "firebase-admin";
-import Razorpay from "razorpay";
-import { checkRateLimit } from "./_rateLimit.js";
+import { initializeApp, cert, getApps } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
-if (!admin.apps.length) {
-  const key = process.env.FIREBASE_SERVICE_ACCOUNT;
-  admin.initializeApp({ credential: admin.credential.cert(JSON.parse(key)) });
+if (!getApps().length) {
+  initializeApp();
 }
-const db = admin.firestore();
+const db = getFirestore();
 
-const rzp = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
-export default async function handler(req, res){
-  if (req.method !== "POST") return res.status(405).end();
-
-  const rl = await checkRateLimit(req);
-  if (!rl.ok) return res.status(429).json({ error: "rate-limit" });
-
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature, photoId, uid, email } = req.body || {};
-
-  // HMAC check
-  const expected = crypto.createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-    .update(`${razorpay_order_id}|${razorpay_payment_id}`).digest("hex");
-  if (expected !== razorpay_signature) return res.status(400).json({ status: "invalid-signature" });
-
-  // Pull payment from Razorpay and validate
-  const payment = await rzp.payments.fetch(razorpay_payment_id);
-  if (!payment || payment.status !== "captured" || payment.order_id !== razorpay_order_id) {
-    return res.status(400).json({ status: "payment-not-captured" });
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
+  try {
+    const {
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature,
+      photoId,
+    } = req.body || {};
 
-  // Cross-check price from Firestore (server truth)
-  const photoSnap = await db.collection("photos").doc(photoId).get();
-  if (!photoSnap.exists) return res.status(404).json({ status: "photo-not-found" });
-  const photo = photoSnap.data();
+    if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature || !photoId) {
+      res.status(400).json({ error: "Missing fields" });
+      return;
+    }
 
-  const expectedAmount = Math.round(Number(photo.price) * 100);
-  if (payment.amount !== expectedAmount) {
-    return res.status(400).json({ status: "amount-mismatch" });
-  }
+    const hmac = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
 
-  // Idempotent record
-  const purchaseId = `${uid}_${photoId}_${razorpay_payment_id}`;
-  const pRef = db.collection("purchases").doc(purchaseId);
-  const exists = await pRef.get();
-  if (!exists.exists) {
-    await pRef.set({
-      id: purchaseId,
-      buyerUid: uid, buyerEmail: email,
-      photoId, price: photo.price, title: photo.title, watermarkedUrl: photo.watermarkedUrl,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      paymentId: razorpay_payment_id, orderId: razorpay_order_id, amount: payment.amount
+    if (hmac !== razorpay_signature) {
+      res.status(400).json({ error: "Signature mismatch" });
+      return;
+    }
+
+    const photoRef = db.collection("photos").doc(photoId);
+    const photoSnap = await photoRef.get();
+    if (!photoSnap.exists) {
+      res.status(404).json({ error: "Photo not found" });
+      return;
+    }
+    const photo = photoSnap.data();
+
+    // Write order
+    const orderRef = db.collection("orders").doc(razorpay_payment_id);
+    await orderRef.set({
+      id: razorpay_payment_id,
+      orderId: razorpay_order_id,
+      status: "paid",
+      buyerUid: req.headers["x-user-uid"] || "", // optional, can be empty
+      photoId,
+      title: photo.title || "Photo",
+      price: photo.price || 0,
+      originalUrl: photo.originalUrl, // buyer gets HD
+      createdAt: new Date(),
     });
+
+    res.status(200).json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Verify failed" });
   }
-  res.json({ status: "paid" });
 }

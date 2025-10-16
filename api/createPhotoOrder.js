@@ -1,37 +1,60 @@
 import Razorpay from "razorpay";
-import admin from "firebase-admin";
-import { checkRateLimit } from "./_rateLimit.js";
+import crypto from "crypto";
+import { initializeApp, cert, getApps } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
-if (!admin.apps.length) {
-  const key = process.env.FIREBASE_SERVICE_ACCOUNT;
-  admin.initializeApp({ credential: admin.credential.cert(JSON.parse(key)) });
+if (!getApps().length) {
+  initializeApp();
 }
-const db = admin.firestore();
+const db = getFirestore();
 
-export default async function handler(req, res){
-  if (req.method !== "POST") return res.status(405).end();
+const rzp = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
+});
 
-  const rl = await checkRateLimit(req);
-  if (!rl.ok) return res.status(429).json({ error: "rate-limit" });
+// Helper: pull photo
+async function getPhoto(photoId) {
+  const doc = await db.collection("photos").doc(photoId).get();
+  if (!doc.exists) return null;
+  return { id: doc.id, ...doc.data() };
+}
 
-  const { photoId } = req.body || {};
-  if (!photoId) return res.status(400).json({ error: "photoId-required" });
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+  try {
+    const { photoId } = req.body || {};
+    if (!photoId) {
+      res.status(400).json({ error: "photoId required" });
+      return;
+    }
 
-  const snap = await db.collection("photos").doc(photoId).get();
-  if (!snap.exists) return res.status(404).json({ error: "photo-not-found" });
-  const photo = snap.data();
+    const photo = await getPhoto(photoId);
+    if (!photo || !photo.isPublished) {
+      res.status(404).json({ error: "Photo not found" });
+      return;
+    }
 
-  const rzp = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-  });
+    // Amount in paise
+    const amount = Math.max(1, Number(photo.price || 0)) * 100;
 
-  const amount = Math.round(Number(photo.price) * 100); // paise
-  const order = await rzp.orders.create({
-    amount, currency: "INR",
-    receipt: `photo_${photoId}_${Date.now()}`,
-    notes: { photoId }
-  });
+    // For now, all payments are collected to your account (payouts to sellers are manual/weekly)
+    const order = await rzp.orders.create({
+      amount,
+      currency: "INR",
+      receipt: `photo_${photoId}_${Date.now()}`,
+      notes: {
+        photoId,
+        ownerUid: photo.ownerUid || "",
+        isSample: String(!!photo.isSample),
+      },
+    });
 
-  res.json({ orderId: order.id, amount, photoId, photoTitle: photo.title });
+    res.status(200).json({ orderId: order.id, amount });
+  } catch (e) {
+    res.status(500).json({ error: e.message || "Order create failed" });
+  }
 }

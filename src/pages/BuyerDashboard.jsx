@@ -1,50 +1,71 @@
-import ProtectedRoute from "../components/ProtectedRoute";
-import { useAuth } from "../context/AuthProvider";
 import { useEffect, useState } from "react";
-import { db } from "../lib/firebase";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
+import { Link } from "react-router-dom";
 
-function Content(){
+export default function BuyerDashboard() {
   const { user } = useAuth();
   const [orders, setOrders] = useState([]);
 
   useEffect(() => {
     if (!user) return;
-    const qy = query(collection(db, "purchases"), where("buyerUid","==", user.uid), orderBy("createdAt","desc"));
-    return onSnapshot(qy, snap => {
-      const rows=[]; snap.forEach(d=>rows.push({ id:d.id, ...d.data() })); setOrders(rows);
-    });
+    const run = async () => {
+      const ref = collection(db, "orders");
+      const snap = await getDocs(
+        query(ref, where("buyerUid", "==", user.uid), orderBy("createdAt", "desc"))
+      );
+      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    };
+    run();
   }, [user]);
 
-  const download = async (purchase) => {
-    const token = await getAuth().currentUser.getIdToken();
-    const res = await fetch("/api/getOriginalUrl", {
-      method: "POST", headers: { "Content-Type":"application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ photoId: purchase.photoId })
-    });
-    const data = await res.json();
-    if (data?.url) { window.open(data.url, "_blank"); }
-    else alert("Could not generate download link.");
-  };
+  if (!user) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-10">
+        <h1 className="text-3xl font-extrabold text-gray-900">Buyer Dashboard</h1>
+        <p className="mt-2 text-gray-600">
+          Please <Link to="/buyer/login" className="text-indigo-600">log in</Link> to view your purchases.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-6xl mx-auto px-4">
-      <h2 className="text-3xl font-bold my-8">Buyer Dashboard</h2>
-      {orders.length===0 && <p>No purchases yet.</p>}
-      <div className="grid4">
-        {orders.map(o => (
-          <div key={o.id} className="card">
-            <img src={o.watermarkedUrl} className="w-full h-40 object-cover rounded" />
-            <div className="mt-2 font-semibold">{o.title}</div>
-            <div className="text-sm text-gray-600">₹{o.price} • {o.createdAt?.seconds ? new Date(o.createdAt.seconds*1000).toLocaleString() : ""}</div>
-            <button className="btn btn-primary mt-3" onClick={()=>download(o)}>Download HD</button>
-          </div>
-        ))}
-      </div>
+    <div className="mx-auto max-w-6xl px-4 py-10">
+      <h1 className="text-3xl font-extrabold text-gray-900">Buyer Dashboard</h1>
+      {orders.length === 0 ? (
+        <p className="mt-4 text-gray-600">No purchases yet.</p>
+      ) : (
+        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {orders.map((o) => (
+            <div key={o.id} className="rounded-2xl border border-gray-100 p-4 shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {o.title || "Photo"}
+                  </div>
+                  <div className="text-xs text-gray-500">₹{o.price} • {new Date(o.createdAt?.toDate?.() || o.createdAt).toLocaleString()}</div>
+                </div>
+                {o.status === "paid" ? (
+                  <a
+                    href={o.originalUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    Download HD
+                  </a>
+                ) : (
+                  <span className="rounded-xl bg-yellow-50 px-3 py-2 text-xs font-medium text-yellow-800">
+                    Pending
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
-}
-export default function BuyerDashboard(){
-  return <ProtectedRoute requireRole="buyer"><Content/></ProtectedRoute>;
 }

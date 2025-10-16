@@ -1,16 +1,176 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* src/index.css */
 
-/* Global tweaks */
-html, body, #root {
-  height: 100%;
+/* CSS Reset (minimal) */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  color: #0f172a; /* slate-900 */
+  background: #ffffff;
 }
 
-a {
-  @apply text-brand-600 hover:text-brand-700;
+/* Brand */
+:root{
+  --brand:#6C63FF;
+  --brand-700:#5850ec;
+  --ink:#0f172a;
+  --muted:#475569; /* slate-600 */
+  --border:#e2e8f0; /* slate-200 */
+  --card:#ffffff;
+  --bg:#f8fafc; /* slate-50 */
+  --success:#10b981;
+  --danger:#ef4444;
 }
 
-button {
-  @apply rounded-xl;
+/* Layout helpers */
+.container {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Header */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+.site-header .bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: 64px;
+}
+.site-header .brand {
+  display: flex; align-items:center; gap: 10px;
+  font-weight: 800; font-size: 20px; color: var(--brand);
+  text-decoration: none;
+}
+.site-header nav {
+  margin-left: auto;
+  display: flex; gap: 18px; align-items: center;
+}
+.site-header a.nav {
+  color: var(--muted);
+  text-decoration: none;
+  font-weight: 600;
+}
+.site-header a.nav.active,
+.site-header a.nav:hover { color: var(--brand); }
+
+/* Buttons */
+.btn {
+  --btn-bg: var(--brand);
+  --btn-fg: #fff;
+  --btn-bg-hover: var(--brand-700);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid transparent;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.btn:hover { background: var(--btn-bg-hover); }
+
+.btn.outline{
+  --btn-bg:#fff;
+  --btn-fg:var(--brand);
+  --btn-bg-hover:#f1f5f9;
+  color: var(--btn-fg);
+  background: var(--btn-bg);
+  border:1px solid var(--border);
+}
+.btn.ghost{
+  background: transparent;
+  color: var(--brand);
+  border-color: transparent;
+}
+.btn.gray{
+  --btn-bg:#0f172a;
+  --btn-bg-hover:#111827;
+}
+.btn.google{
+  --btn-bg:#fff; --btn-fg:#111827; --btn-bg-hover:#f8fafc;
+  border:1px solid var(--border);
+}
+.btn.block{ width: 100%; justify-content: center; }
+
+/* Cards */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  height: 42px;
+  border:1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 14px;
+  outline: none;
+  font-size: 14px;
+}
+.input:focus{ border-color: var(--brand); box-shadow: 0 0 0 3px rgba(108,99,255,.15); }
+
+/* Grid */
+.grid {
+  display: grid; gap: 18px;
+}
+.grid.cols-3{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width: 900px){ .grid.cols-3{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 640px){ .grid.cols-3{ grid-template-columns: 1fr; } }
+
+/* Image tiles */
+.tile {
+  border-radius: 16px;
+  overflow: hidden;
+  background: #f1f5f9;
+  border:1px solid var(--border);
+}
+.tile img{
+  display:block; width:100%; height: 230px; object-fit: cover;
+}
+.tile .meta{
+  padding: 12px 14px;
+  display:flex; align-items:center; justify-content: space-between; gap: 10px;
+}
+
+/* FAQ accordion */
+.faq-item {
+  border:1px solid var(--border);
+  border-radius: 12px;
+  background:#fff;
+}
+.faq-q {
+  padding: 16px;
+  display:flex; align-items:center; justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+.faq-q:hover{ background:#f8fafc; }
+.faq-a { padding: 0 16px 16px 16px; color: var(--muted); }
+
+/* Page headings */
+.h1{
+  font-size: 44px; line-height: 1.1; font-weight: 800; letter-spacing: -.02em;
+}
+.subtle{ color: var(--muted); }
+
+/* Footer */
+.site-footer{
+  border-top:1px solid var(--border);
+  margin-top: 40px;
+  padding: 24px 0;
+  color: var(--muted);
 }
