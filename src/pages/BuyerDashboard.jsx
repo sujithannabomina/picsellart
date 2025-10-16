@@ -1,71 +1,65 @@
+// src/pages/BuyerDashboard.jsx
 import { useEffect, useState } from "react";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
-import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { Link } from "react-router-dom";
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { db } from "../firebase";
 
 export default function BuyerDashboard() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const [orders, setOrders] = useState([]);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!user) return;
+    if (loading || !user) return;
     const run = async () => {
-      const ref = collection(db, "orders");
-      const snap = await getDocs(
-        query(ref, where("buyerUid", "==", user.uid), orderBy("createdAt", "desc"))
-      );
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setBusy(true);
+      try {
+        const qRef = query(
+          collection(db, "orders"),
+          where("buyerId", "==", user.uid),
+          where("status", "==", "paid"),
+          orderBy("createdAt", "desc")
+        );
+        const snap = await getDocs(qRef);
+        setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (e) {
+        console.error(e);
+        setOrders([]);
+      } finally {
+        setBusy(false);
+      }
     };
     run();
-  }, [user]);
-
-  if (!user) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-10">
-        <h1 className="text-3xl font-extrabold text-gray-900">Buyer Dashboard</h1>
-        <p className="mt-2 text-gray-600">
-          Please <Link to="/buyer/login" className="text-indigo-600">log in</Link> to view your purchases.
-        </p>
-      </div>
-    );
-  }
+  }, [loading, user]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="text-3xl font-extrabold text-gray-900">Buyer Dashboard</h1>
-      {orders.length === 0 ? (
-        <p className="mt-4 text-gray-600">No purchases yet.</p>
-      ) : (
-        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2">
-          {orders.map((o) => (
-            <div key={o.id} className="rounded-2xl border border-gray-100 p-4 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    {o.title || "Photo"}
-                  </div>
-                  <div className="text-xs text-gray-500">₹{o.price} • {new Date(o.createdAt?.toDate?.() || o.createdAt).toLocaleString()}</div>
+    <main className="page">
+      <div className="container">
+        <h1 className="page-title">Buyer Dashboard</h1>
+        {loading || busy ? (
+          <p>Loading…</p>
+        ) : orders.length === 0 ? (
+          <p>No purchases yet.</p>
+        ) : (
+          <div className="grid">
+            {orders.map((o) => (
+              <article key={o.id} className="photo-card" style={{ padding: 16 }}>
+                <div className="meta">
+                  <div className="title">{o.title || "Licensed Image"}</div>
+                  <div className="price">₹{o.amount}</div>
                 </div>
-                {o.status === "paid" ? (
-                  <a
-                    href={o.originalUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-                  >
-                    Download HD
-                  </a>
-                ) : (
-                  <span className="rounded-xl bg-yellow-50 px-3 py-2 text-xs font-medium text-yellow-800">
-                    Pending
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+                <a
+                  className="btn ghost w-full"
+                  href={o.downloadUrl}
+                  rel="noopener noreferrer"
+                >
+                  Download
+                </a>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    </main>
   );
 }

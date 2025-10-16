@@ -1,72 +1,50 @@
 // src/pages/SellerPlan.jsx
-import { useNavigate } from "react-router-dom";
-import { createOrder } from "../lib/payments"; // your Razorpay flow wrapper
-import { PLANS } from "../utils/plans";       // already updated to 100/300/800 & limits
+import { PLAN_LIST } from "../utils/plans";
 
-export default function SellerPlan(){
-  const navigate = useNavigate();
+async function createPackOrder(planId) {
+  const res = await fetch("/api/createPackOrder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ planId }),
+  });
+  if (!res.ok) throw new Error("Failed to create order");
+  return res.json();
+}
 
-  const subscribe = async (planId) => {
-    try{
-      const selected = PLANS[planId];
-      await createOrder({ planId, amount: selected.price }); // continues to Razorpay
-      // after success, your payment verifier should set seller pack & expiry in Firestore
-      navigate("/seller/dashboard", { replace:true });
-    }catch(e){
-      alert("Payment failed. Please try again.");
-      console.error(e);
-    }
+export default function SellerPlan() {
+  const onChoose = async (plan) => {
+    // Create order on server, then open Razorpay (client handler not shown here)
+    const order = await createPackOrder(plan.id);
+    // If you already have a helper to open Razorpay, call it here.
+    // For now, redirect to /seller/renew so user can complete from there:
+    window.location.href = "/seller/renew";
   };
 
   return (
-    <main className="container">
-      <h1 className="h1">Choose Your Seller Pack</h1>
-      <p className="subtle" style={{marginBottom:24}}>
-        Pick a pack to unlock uploads. Limits are enforced automatically.
-      </p>
+    <main className="page">
+      <div className="container">
+        <h1 className="page-title" style={{ textAlign: "center" }}>
+          Choose Your Seller Pack
+        </h1>
 
-      <div className="grid cols-3">
-        <PlanCard
-          title="Starter"
-          price="₹100"
-          bullets={[
-            "Upload up to 25 images",
-            "Max price per image ₹199",
-          ]}
-          onClick={()=>subscribe("starter")}
-        />
-        <PlanCard
-          title="Pro"
-          price="₹300"
-          bullets={[
-            "Upload up to 30 images",
-            "Max price per image ₹249",
-          ]}
-          onClick={()=>subscribe("pro")}
-        />
-        <PlanCard
-          title="Elite"
-          price="₹800"
-          bullets={[
-            "Upload up to 50 images",
-            "Max price per image ₹249",
-          ]}
-          onClick={()=>subscribe("elite")}
-        />
+        <div className="grid">
+          {PLAN_LIST.map((p) => (
+            <article key={p.id} className="photo-card" style={{ padding: 20 }}>
+              <h3 style={{ marginTop: 0 }}>{p.label}</h3>
+              <div style={{ fontSize: 28, fontWeight: 800, margin: "8px 0" }}>
+                ₹{p.priceINR}
+              </div>
+              <ul style={{ color: "#475569", lineHeight: 1.6, paddingLeft: 18 }}>
+                <li>Upload limit: {p.uploadLimit} images</li>
+                <li>Max price per image: ₹{p.maxPricePerImage}</li>
+              </ul>
+              <button className="btn primary w-full" onClick={() => onChoose(p)}>
+                Select
+              </button>
+            </article>
+          ))}
+        </div>
       </div>
     </main>
-  );
-}
-
-function PlanCard({title, price, bullets, onClick}){
-  return (
-    <div className="card" style={{textAlign:"center"}}>
-      <div style={{fontWeight:800, fontSize:18, marginBottom:6}}>{title}</div>
-      <div style={{fontSize:28, fontWeight:800, marginBottom:12}}>{price}</div>
-      <ul className="subtle" style={{textAlign:"left", display:"inline-block", margin:"0 0 16px 0", padding:"0 0 0 18px"}}>
-        {bullets.map((b,i)=><li key={i} style={{marginBottom:6}}>{b}</li>)}
-      </ul>
-      <button className="btn block" onClick={onClick}>Continue</button>
-    </div>
   );
 }

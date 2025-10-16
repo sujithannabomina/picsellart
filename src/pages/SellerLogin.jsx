@@ -1,30 +1,50 @@
 // src/pages/SellerLogin.jsx
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import { useAuth } from "../context/AuthContext";
 
-export default function SellerLogin(){
+export default function SellerLogin() {
+  const { user, profile, signInWithGoogle, loading } = useAuth();
   const navigate = useNavigate();
 
-  const login = async () => {
-    try{
-      const prov = new GoogleAuthProvider();
-      await signInWithPopup(auth, prov);
-      navigate("/seller/plan", { replace:true });
-    }catch(e){
-      alert("Google sign-in failed. Please try again.");
-      console.error(e);
+  // after login decide where to go
+  useEffect(() => {
+    if (loading) return;
+    if (!user) return;
+    // if the pack is missing or expired, push to renew
+    const expiresAt = profile?.seller?.packExpiresAt?.seconds
+      ? profile.seller.packExpiresAt.seconds * 1000
+      : null;
+    const active = expiresAt ? Date.now() < expiresAt : false;
+
+    if (!active) {
+      navigate("/seller/renew");
+    } else {
+      navigate("/seller/dashboard");
     }
-  };
+  }, [loading, user, profile, navigate]);
 
   return (
-    <main className="container" style={{maxWidth: 560}}>
-      <h1 className="h1">Seller Login / Sign Up</h1>
-      <p className="subtle" style={{marginBottom:16}}>Pick a plan to upload and sell your photos.</p>
-      <button className="btn google block" onClick={login}>
-        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" width="18" height="18"/>
-        Continue with Google
-      </button>
+    <main className="page">
+      <div className="container" style={{ maxWidth: 460 }}>
+        <h1 className="page-title">Seller Login / Sign Up</h1>
+        <p style={{ color: "#64748b", marginBottom: 18 }}>
+          Use Google to access your seller account.
+        </p>
+        <button
+          className="btn primary w-full"
+          onClick={async () => await signInWithGoogle()}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+          }}
+        >
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="" width="18" height="18" />
+          Continue with Google
+        </button>
+      </div>
     </main>
   );
 }

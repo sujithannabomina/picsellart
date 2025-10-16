@@ -1,229 +1,167 @@
+// src/pages/Explore.jsx
 import { useEffect, useMemo, useState } from "react";
-import { storage, db } from "../firebase";
-import { ref, listAll, getDownloadURL } from "firebase/storage";
+import { useAuth } from "../context/AuthContext";
+import { db, storage } from "../firebase";
 import {
   collection,
   getDocs,
-  limit,
   orderBy,
   query,
   where,
 } from "firebase/firestore";
-import { useAuth } from "../context/AuthContext";
+import {
+  getDownloadURL,
+  listAll,
+  ref as sref,
+} from "firebase/storage";
+import { useNavigate } from "react-router-dom";
 
-/** Stable price in ₹149–₹249 derived from filename (so it doesn't jump) */
-function priceFromName(name) {
-  // Simple hash
-  let h = 0;
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
-  const min = 149;
-  const max = 249;
-  return min + (h % (max - min + 1));
+const SAMPLE_COUNT = 112;
+const SAMPLE_DIRS = ["public", "Buyer"]; // check both
+
+const randomPrice = () => {
+  // platform sample price buckets
+  const buckets = [99, 149, 199, 249];
+  return buckets[Math.floor(Math.random() * buckets.length)];
+};
+
+async function findSampleUrl(filename) {
+  // tries "public/<file>" then "Buyer/<file>"
+  for (const dir of SAMPLE_DIRS) {
+    try {
+      const r = sref(storage, `${dir}/${filename}`);
+      const url = await getDownloadURL(r);
+      return url;
+    } catch {
+      // keep looking in other dir
+    }
+  }
+  return null;
+}
+
+async function loadAllSamples() {
+  // use listAll only to quickly ensure folder exists (optional)
+  // we directly look up known filenames for speed
+  const items = [];
+  const tasks = [];
+  for (let i = 1; i <= SAMPLE_COUNT; i++) {
+    const name = `sample${i}.jpg`;
+    tasks.push(
+      (async () => {
+        const url = await findSampleUrl(name);
+        if (url) {
+          items.push({
+            id: `sample-${i}`,
+            title: "Street Photography",
+            price: randomPrice(),
+            watermarkedUrl: url,
+            isSample: true,
+            sellerId: "platform",
+          });
+        }
+      })()
+    );
+  }
+  await Promise.all(tasks);
+  return items;
 }
 
 export default function Explore() {
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [samples, setSamples] = useState([]);
-  const [userPhotos, setUserPhotos] = useState([]);
+  const navigate = useNavigate();
   const [qText, setQText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [items, setItems] = useState([]);
 
-  // 1) Load SAMPLE IMAGES directly from Firebase Storage: public/*
   useEffect(() => {
     const run = async () => {
+      setBusy(true);
       try {
-        const baseRef = ref(storage, "public");
-        const ls = await listAll(baseRef); // lists all items under /public
-        const items = await Promise.all(
-          ls.items.map(async (itemRef) => {
-            const url = await getDownloadURL(itemRef);
-            const name = itemRef.name || "sample";
-            return {
-              id: `sample::${name}`, // deterministic id
-              title: "Street Photography",
-              tags: ["street", "sample"],
-              price: priceFromName(name),
-              // Storage samples are not watermarked; we display as-is
-              watermarkedUrl: url,
-              originalUrl: url,
-              isPublished: true,
-              isSample: true,
-              storagePath: `public/${name}`,
-              createdAt: new Date(0), // keep samples sorted after user content
-              ownerUid: "admin",
-            };
-          })
-        );
+        // A) samples from Storage
+        const samples = await loadAllSamples();
 
-        // Keep a nice order by filename (sample1, sample2, …)
-        items.sort((a, b) => a.id.localeCompare(b.id));
-        setSamples(items);
-      } catch (e) {
-        console.error("Storage/public load failed:", e);
-        setSamples([]);
-      }
-    };
-    run();
-  }, []);
-
-  // 2) Load USER UPLOADS from Firestore: photos (isPublished==true)
-  useEffect(() => {
-    const run = async () => {
-      try {
-        const refCol = collection(db, "photos");
-        const snap = await getDocs(
-          query(
-            refCol,
-            where("isPublished", "==", true),
-            orderBy("createdAt", "desc"),
-            limit(120)
-          )
+        // B) real uploads from Firestore (approved/public)
+        const qRef = query(
+          collection(db, "photos"),
+          where("status", "==", "public"),
+          orderBy("createdAt", "desc")
         );
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setUserPhotos(rows);
-      } catch (e) {
-        console.error("Firestore photos load failed:", e);
-        setUserPhotos([]);
+        const snap = await getDocs(qRef);
+        const live = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+        setItems([...samples, ...live]);
+      } catch (err) {
+        console.error("Explore load error:", err);
+        setItems([]);
       } finally {
-        setLoading(false);
+        setBusy(false);
       }
     };
     run();
   }, []);
-
-  const allItems = useMemo(
-    () => [...userPhotos, ...samples], // show user content first (newest)
-    [userPhotos, samples]
-  );
 
   const filtered = useMemo(() => {
-    const needle = qText.trim().toLowerCase();
-    if (!needle) return allItems;
-    return allItems.filter((p) => {
-      const t = (p.title || "").toLowerCase();
-      const tags = (p.tags || []).join(" ").toLowerCase();
-      return t.includes(needle) || tags.includes(needle);
+    const t = qText.trim().toLowerCase();
+    if (!t) return items;
+    return items.filter((it) => {
+      const hay =
+        `${it.title ?? ""} ${
+          Array.isArray(it.tags) ? it.tags.join(" ") : ""
+        }`.toLowerCase();
+      return hay.includes(t);
     });
-  }, [qText, allItems]);
+  }, [qText, items]);
 
-  /** Ensure there's a Firestore doc for a sample so the normal purchase flow works. */
-  const ensureSampleDoc = async (sample) => {
-    const res = await fetch("/api/getOrCreateSamplePhoto", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        id: sample.id, // "sample::filename.jpg"
-        title: sample.title,
-        price: sample.price,
-        originalUrl: sample.originalUrl,
-        watermarkedUrl: sample.watermarkedUrl,
-        storagePath: sample.storagePath,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "Failed to prepare sample");
-    return data.photoId; // returns the Firestore doc id
-  };
-
-  const createOrder = async (photoId, title, price) => {
-    const res = await fetch("/api/createPhotoOrder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ photoId }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error || "Order error");
-
-    const rzp = new window.Razorpay({
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      order_id: data.orderId,
-      amount: data.amount,
-      currency: "INR",
-      name: "Picsellart",
-      description: title || "Photo",
-      handler: async (response) => {
-        await fetch("/api/verifyPhotoPayment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ photoId, ...response }),
-        });
-        window.location.href = "/buyer/dashboard";
-      },
-      prefill: user
-        ? { email: user.email || "", name: user.displayName || "" }
-        : {},
-    });
-    rzp.open();
-  };
-
-  const startBuy = async (item) => {
-    try {
-      // If the user is not logged in, send to buyer login first
-      if (!user) {
-        window.location.href = "/buyer/login";
-        return;
-      }
-
-      if (item.isSample) {
-        // Create/ensure a doc for the Storage sample, then use normal createPhotoOrder
-        const photoId = await ensureSampleDoc(item);
-        await createOrder(photoId, item.title, item.price);
-      } else {
-        await createOrder(item.id, item.title, item.price);
-      }
-    } catch (e) {
-      alert(e.message);
+  const onBuy = (photo) => {
+    if (!user) {
+      navigate("/buyer/login");
+      return;
     }
+    navigate(`/photo/${photo.id}`, { state: { photo } });
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
-          Explore Pictures
-        </h1>
-        <input
-          value={qText}
-          onChange={(e) => setQText(e.target.value)}
-          placeholder="Search by title or tag..."
-          className="w-80 rounded-xl border border-gray-200 px-4 py-2 text-sm outline-none focus:border-indigo-300"
-        />
-      </div>
+    <main className="page">
+      <div className="container">
+        <h1 className="page-title">Explore Pictures</h1>
 
-      {loading && <p className="text-gray-500">Loading…</p>}
-      {!loading && filtered.length === 0 && (
-        <p className="text-gray-500">No results.</p>
-      )}
+        <div className="toolbar">
+          <input
+            className="input"
+            placeholder="Search by title or tag..."
+            value={qText}
+            onChange={(e) => setQText(e.target.value)}
+          />
+        </div>
 
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {filtered.map((p) => (
-          <div
-            key={p.id}
-            className="overflow-hidden rounded-3xl border border-gray-100 shadow-sm"
-          >
-            <img
-              src={p.watermarkedUrl || p.originalUrl}
-              alt={p.title || "Photo"}
-              className="h-60 w-full object-cover"
-              loading="lazy"
-            />
-            <div className="flex items-center justify-between px-4 py-3">
-              <div>
-                <div className="text-sm font-semibold text-gray-900">
-                  {p.title || "Untitled"}
+        {busy ? (
+          <p>Loading…</p>
+        ) : filtered.length === 0 ? (
+          <p>No results.</p>
+        ) : (
+          <div className="grid">
+            {filtered.map((p) => (
+              <article key={p.id} className="photo-card">
+                <div className="img-wrap">
+                  <img
+                    src={p.watermarkedUrl || p.url}
+                    alt={p.title || "Untitled"}
+                    loading="lazy"
+                  />
+                  <span className="wm">picsellart</span>
                 </div>
-                <div className="text-xs text-gray-500">₹{p.price}</div>
-              </div>
-              <button
-                onClick={() => startBuy(p)}
-                className="rounded-xl bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-              >
-                Buy
-              </button>
-            </div>
+                <div className="meta">
+                  <div className="title">{p.title || "Untitled"}</div>
+                  <div className="price">₹{p.price}</div>
+                </div>
+                <button className="btn primary w-full" onClick={() => onBuy(p)}>
+                  Buy
+                </button>
+              </article>
+            ))}
           </div>
-        ))}
+        )}
       </div>
-    </div>
+    </main>
   );
 }

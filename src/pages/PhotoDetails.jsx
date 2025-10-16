@@ -1,102 +1,119 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { db } from '../firebase'
-import { doc, getDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore'
-import { useAuth } from '../context/AuthContext'
-import { loadRazorpay, openCheckout } from '../utils/razorpay'
+// src/pages/PhotoDetails.jsx
+import { useLocation, useNavigate } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { openRazorpay } from "../utils/loadRazorpay";
+
+function usePhotoPayload() {
+  const { state } = useLocation();
+  const query = new URLSearchParams(window.location.search);
+
+  // Prefer router state, fallback to query params
+  const payload = state || {
+    title: query.get("title") || "Street Photography",
+    price: Number(query.get("price") || 0),
+    photoPath: query.get("path") || "",     // e.g. "public/sample23.jpg" or "Buyer/uid/abc.jpg"
+    sellerId: query.get("sellerId") || null,
+    isSample: query.get("isSample") === "1",
+    url: query.get("url") || "",            // public URL if already resolved
+  };
+  return payload;
+}
 
 export default function PhotoDetails() {
-  const { id } = useParams()
-  const [photo, setPhoto] = useState(null)
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const { user, role } = useAuth()
-  const navigate = useNavigate()
+  const nav = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const p = usePhotoPayload();
 
-  useEffect(() => { loadRazorpay() }, [])
-  useEffect(() => {
-    (async () => {
-      const snap = await getDoc(doc(db, 'photos', id))
-      if (snap.exists()) setPhoto({ id: snap.id, ...snap.data() })
-    })()
-  }, [id])
+  const displayPrice = useMemo(() => {
+    if (Number.isFinite(p.price)) return `₹${p.price}`;
+    return "₹—";
+  }, [p.price]);
 
-  const buy = async () => {
-    if (!user) return navigate('/buyer/login')
-    setErr(''); setBusy(true)
+  const startCheckout = async () => {
+    if (!p.photoPath || !Number.isFinite(p.price)) {
+      alert("Missing photo info.");
+      return;
+    }
+    setBusy(true);
     try {
-      const amount = Number(photo.price || 0)
-      // 1) create order
-      const resp = await fetch('/api/createOrder', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/createPhotoOrder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          purpose: 'purchase',
-          amount,
-          currency: 'INR',
-          meta: { photoId: photo.id, sellerUid: photo.ownerUid, buyerUid: user.uid },
+          title: p.title || "Street Photography",
+          price: p.price,
+          photoPath: p.photoPath,
+          sellerId: p.sellerId || null, // null means platform sale (sample photos)
+          isSample: !!p.isSample,
         }),
-      })
-      const { order, keyId, error } = await resp.json()
-      if (error) throw new Error(error)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Order creation failed");
 
-      // 2) open checkout
-      await openCheckout({
-        key: keyId,
-        amount,
-        name: 'Picsellart',
-        description: photo.title || 'Photo',
-        orderId: order?.id,
-        prefill: { name: user.displayName || '', email: user.email || '' },
-        notes: { photoId: photo.id, sellerUid: photo.ownerUid, buyerUid: user.uid },
-        handler: async (rzpRes) => {
-          // 3) verify
-          const ver = await fetch('/api/verifyPayment', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...rzpRes, meta: { photoId: photo.id, buyerUid: user.uid } }),
-          })
-          const v = await ver.json()
-          if (!v.ok) throw new Error(v.error || 'Verification failed')
-
-          // 4) create Firestore order (buyer & seller can see it by rules)
-          await addDoc(collection(db, 'orders'), {
-            buyerUid: user.uid,
-            sellerUid: photo.ownerUid,
-            photoId: photo.id,
-            photoTitle: photo.title || '',
-            amount,
-            currency: 'INR',
-            downloadUrl: photo.url, // Optional: switch to signed URL later
-            createdAt: serverTimestamp(),
-            paymentId: rzpRes.razorpay_payment_id,
-            orderId: rzpRes.razorpay_order_id,
-          })
-          alert('Purchase successful! Find it in your dashboard.')
-          navigate('/buyer/dashboard')
+      await openRazorpay({
+        order: data.order,
+        metadata: {
+          title: p.title,
+          photoPath: p.photoPath,
+          sellerId: p.sellerId,
+          isSample: !!p.isSample,
         },
-      })
+        onSuccess: () => {
+          nav("/buyer/dashboard");
+        },
+        onFailure: () => setBusy(false),
+      });
     } catch (e) {
-      setErr(e?.message || 'Payment failed')
-    } finally { setBusy(false) }
-  }
-
-  if (!photo) return <div className="max-w-6xl mx-auto px-4 py-10">Loading…</div>
+      console.error(e);
+      alert(e.message || "Could not start checkout.");
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      <div className="grid md:grid-cols-2 gap-8">
-        <img src={photo.url} alt={photo.title} className="w-full rounded-2xl shadow" />
+    <div className="max-w-5xl mx-auto px-5 py-10">
+      <button className="text-sm text-indigo-600 hover:underline" onClick={() => nav(-1)}>
+        ← Back
+      </button>
+
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+        <div className="w-full bg-slate-50 rounded-2xl overflow-hidden border">
+          {/* We keep it simple: if a URL was provided we show it; otherwise we rely on the explore card to pass a resolved URL. */}
+          {p.url ? (
+            <img src={p.url} alt={p.title} className="w-full h-auto object-cover" />
+          ) : (
+            <div className="p-10 text-center text-slate-500">Preview will appear when opened from Explore.</div>
+          )}
+        </div>
+
         <div>
-          <h1 className="text-3xl font-bold mb-2">{photo.title}</h1>
-          <p className="text-slate-600 mb-4 capitalize">{photo.category}</p>
-          <div className="text-2xl font-semibold mb-6">₹{Number(photo.price || 0).toFixed(2)}</div>
-          {err && <p className="text-red-600 mb-3">{err}</p>}
-          <div className="flex gap-3">
-            <button onClick={buy} disabled={busy} className="bg-black text-white px-6 py-3 rounded-lg">
-              {busy ? 'Processing…' : 'Buy & Download'}
+          <h1 className="text-3xl font-extrabold tracking-tight">{p.title || "Street Photography"}</h1>
+          <p className="mt-2 text-slate-600">
+            Royalty-free, single-seat license. Instant download after successful payment.
+          </p>
+
+          <div className="mt-6 flex items-center gap-4">
+            <div className="text-2xl font-bold">{displayPrice}</div>
+            <button
+              className="px-5 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-60"
+              onClick={startCheckout}
+              disabled={busy}
+            >
+              {busy ? "Processing..." : "Buy & Download"}
             </button>
           </div>
+
+          {p.isSample ? (
+            <p className="mt-3 text-xs text-slate-500">
+              Sold by Picsellart. This image comes from our curated catalog.
+            </p>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">
+              Sold by the original creator on Picsellart. We settle payouts weekly.
+            </p>
+          )}
         </div>
       </div>
     </div>
-  )
+  );
 }
