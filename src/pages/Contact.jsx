@@ -1,26 +1,22 @@
-export default function Contact() {
+// src/pages/Contact.jsx
+export default function Contact(){
   return (
-    <main className="container page">
+    <div className="container py-10">
       <h1>Contact</h1>
-      <form
-        onSubmit={(e) => { e.preventDefault(); alert("Thanks! We received your message."); }}
-        className="card"
-        style={{padding:"18px"}}
-      >
-        <div style={{display:"grid", gap:"12px", gridTemplateColumns:"1fr 1fr"}}>
-          <input className="input" type="email" placeholder="Your email" required />
-          <select className="input" defaultValue="Suggestion">
+      <div className="card p-6 bg-slate-50">
+        <form className="grid md:grid-cols-2 gap-4">
+          <input className="input" type="email" placeholder="Your email" />
+          <select className="input">
             <option>Suggestion</option>
-            <option>Report a bug</option>
-            <option>Billing</option>
-            <option>Other</option>
+            <option>Refund</option>
+            <option>License</option>
           </select>
-        </div>
-        <textarea className="input" rows={6} placeholder="Write your message..." style={{marginTop:12}}/>
-        <div style={{marginTop:12}}>
-          <button className="btn btn-primary" type="submit">Send</button>
-        </div>
-      </form>
-    </main>
+          <textarea className="input md:col-span-2" rows="5" placeholder="Write your message..." />
+          <div>
+            <button type="button" className="btn">Send</button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }

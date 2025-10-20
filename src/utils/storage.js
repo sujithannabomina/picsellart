@@ -1,44 +1,42 @@
-// Storage helpers for Explore (Firebase client SDK)
+// src/utils/storage.js
 import { getStorage, ref, list, getDownloadURL } from "firebase/storage";
 import { app } from "../firebase";
 
 /**
- * Lists a page of images from Firebase Storage under "public/".
- * It tries "public/watermarked/<name>" first, falling back to "public/<name>"
- * and flags overlay=true so the component can add a client watermark.
+ * Fetch items from a storage folder with pagination.
+ * @param {string} folder e.g. "public" or "Buyer"
+ * @param {number} pageSize
+ * @param {string|null} pageToken
+ * @returns {Promise<{items: Array<{name,url}>, nextPageToken: string|null}>}
  */
-export async function listExplorePage({ pageSize = 24, pageToken = undefined } = {}) {
+export async function fetchStorageBatch(folder, pageSize=24, pageToken=null){
   const storage = getStorage(app);
-  const baseRef = ref(storage, "public");
+  const r = ref(storage, folder);
+  const { items, nextPageToken } = await list(r, { maxResults: pageSize, pageToken: pageToken || undefined });
+  const urls = await Promise.all(items.map(i=> getDownloadURL(i)));
+  const out = items.map((i,idx)=>({ name: i.name, url: urls[idx] }));
+  return { items: out, nextPageToken: nextPageToken || null };
+}
 
-  const { items, nextPageToken } = await list(baseRef, { maxResults: pageSize, pageToken });
+/**
+ * Convenience: fetch both "public" and "Buyer" page in parallel, then merge.
+ * We tag source so you can split later if needed.
+ */
+export async function fetchExplorePage({pageSize=24, tokenPublic=null, tokenBuyer=null}){
+  const [a,b] = await Promise.all([
+    fetchStorageBatch("public", pageSize, tokenPublic),
+    fetchStorageBatch("Buyer",  pageSize, tokenBuyer),
+  ]);
 
-  const results = await Promise.all(items.map(async (itemRef) => {
-    const name = itemRef.name; // e.g. sample42.jpg
-    // Try server watermarked copy first
-    let url, overlay = false;
-    try {
-      const wmRef = ref(storage, `public/watermarked/${name}`);
-      url = await getDownloadURL(wmRef);
-    } catch {
-      // fallback to original + client overlay
-      url = await getDownloadURL(itemRef);
-      overlay = true;
-    }
-
-    // Simple deterministic price banding by filename number (keeps sample pricing varied)
-    const match = name.match(/(\d+)/);
-    const n = match ? parseInt(match[1], 10) : 0;
-    const price = n % 5 === 0 ? 249 : n % 3 === 0 ? 149 : 99;
-
-    return {
-      id: name,
-      title: "Street Photography",
-      price,
-      url,
-      overlay, // if true, component will draw watermark overlay
-    };
-  }));
-
-  return { items: results, nextPageToken };
+  // Merge, keep order alternating between folders for variety
+  const merged = [];
+  const maxLen = Math.max(a.items.length, b.items.length);
+  for(let i=0;i<maxLen;i++){
+    if(a.items[i]) merged.push({...a.items[i], source:"public"});
+    if(b.items[i]) merged.push({...b.items[i], source:"Buyer"});
+  }
+  return {
+    items: merged,
+    next: { public: a.nextPageToken, buyer: b.nextPageToken }
+  };
 }

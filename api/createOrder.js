@@ -1,29 +1,33 @@
-// Vercel serverless function – creates a Razorpay order
+// api/createOrder.js
 import Razorpay from "razorpay";
 
-const PLANS = {
-  starter: { name: "Starter", amount: 19900 },
-  pro:     { name: "Pro",     amount: 49900 },
-  elite:   { name: "Elite",   amount: 99900 },
-};
-
 export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).end();
-  const { planId } = req.body || {};
-  const plan = PLANS[planId];
-  if (!plan) return res.status(400).json({ error: "invalid-plan" });
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+  try {
+    const { amount, currency = "INR", itemId, title, source = "explore-public" } = req.body || {};
+    if (!amount || !itemId) {
+      return res.status(400).json({ error: "amount and itemId required" });
+    }
 
-  const rzp = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-  });
+    // Your master account (for public/explore images)
+    const rzp = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
 
-  const order = await rzp.orders.create({
-    amount: plan.amount,
-    currency: "INR",
-    receipt: `plan_${planId}_${Date.now()}`,
-    notes: { planId },
-  });
+    const order = await rzp.orders.create({
+      amount: Math.max(100, Number(amount)), // >= ₹1.00
+      currency,
+      receipt: `picsellart_${itemId}_${Date.now()}`,
+      notes: { title, source },
+    });
 
-  res.json({ orderId: order.id, amount: plan.amount, planId, planName: plan.name });
+    return res.status(200).json(order);
+  } catch (e) {
+    console.error("createOrder error", e);
+    return res.status(500).json({ error: "server" });
+  }
 }
