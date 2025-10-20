@@ -1,146 +1,157 @@
 // src/pages/Explore.jsx
-import { useEffect, useMemo, useState } from "react";
-import WatermarkedImage from "../components/WatermarkedImage";
-import { fetchExplorePage } from "../utils/storage";
+import React, { useEffect, useMemo, useState } from "react";
+import { getDownloadURL, listAll, ref } from "firebase/storage";
+import { storage } from "../firebase"; // your existing initialized storage
 
 const PAGE_SIZE = 24;
+const SAMPLE_COUNT = 112;
 
-export default function Explore(){
-  const [batches, setBatches] = useState([]); // accumulated items
-  const [tokens, setTokens] = useState({ public: null, buyer: null });
-  const [loading, setLoading] = useState(false);
-  const [q, setQ] = useState("");
+/**
+ * Builds ref paths we’ll try to list:
+ *  - "public/" (common bucket for samples + user-approved uploads)
+ *  - "Buyer/"  (if you also mirror public items here; listing may be denied by rules — we ignore errors)
+ */
+const PATHS = ["public/", "Buyer/"];
 
-  useEffect(() => { loadMore(); /* first page */ }, []);
+/** create sample file names sample1.jpg ... sample112.jpg under "public/" */
+function buildSampleRefs() {
+  return Array.from({ length: SAMPLE_COUNT }, (_, i) => `public/sample${i + 1}.jpg`);
+}
 
-  async function loadMore(){
-    if(loading) return;
-    setLoading(true);
-    try{
-      const res = await fetchExplorePage({
-        pageSize: PAGE_SIZE,
-        tokenPublic: tokens.public,
-        tokenBuyer : tokens.buyer
-      });
-      setBatches(prev => [...prev, ...res.items]);
-      setTokens(res.next);
-    } finally {
-      setLoading(false);
+/** Fetch a unique set of candidate refs by trying to list folders if rules allow; otherwise fall back to samples */
+async function collectRefs() {
+  const set = new Set();
+  // try listing folders (best effort)
+  for (const p of PATHS) {
+    try {
+      const listing = await listAll(ref(storage, p));
+      listing.items.forEach((it) => set.add(it.fullPath));
+    } catch {
+      // ignore permission errors
     }
   }
+  // ensure samples exist even if listing blocked
+  buildSampleRefs().forEach((p) => set.add(p));
+  return Array.from(set);
+}
 
-  // Derived: enrich with title & price (samples use Street Photography + random price)
-  const enriched = useMemo(()=>{
-    const rnd = (min,max)=> Math.floor(Math.random()*(max-min+1))+min;
-    return batches.map(item=>{
-      const isSample = /^sample\d+\.jpg$/i.test(item.name);
-      return {
-        ...item,
-        title: isSample ? "Street Photography" : prettify(item.name),
-        price: isSample ? rnd(99, 249) : extractPrice(item.name) ?? rnd(149, 299),
-      };
-    });
-  }, [batches]);
+/** Fetch download URL with caching */
+const urlCache = new Map();
+async function toCard(path) {
+  if (!urlCache.has(path)) {
+    try {
+      const url = await getDownloadURL(ref(storage, path));
+      urlCache.set(path, url);
+    } catch {
+      // missing in bucket – skip by storing null to avoid repeated calls
+      urlCache.set(path, null);
+    }
+  }
+  const url = urlCache.get(path);
+  if (!url) return null;
 
-  const filtered = useMemo(()=>{
-    const term = q.trim().toLowerCase();
-    if(!term) return enriched;
-    return enriched.filter(x =>
-      x.title.toLowerCase().includes(term) ||
-      x.name.toLowerCase().includes(term)
-    );
-  }, [enriched, q]);
+  // Title & price rules
+  const title = "street photography";
+  // Deterministic pseudo-random price (₹49–₹249) derived from filename
+  const seed = Array.from(path).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const price = 49 + (seed % 201);
+
+  return { id: path, url, title, price };
+}
+
+export default function Explore() {
+  const [all, setAll] = useState([]);      // all cards
+  const [page, setPage] = useState(1);
+  const [q, setQ] = useState("");
+
+  useEffect(() => {
+    let ok = true;
+    (async () => {
+      const paths = await collectRefs();
+      // Fetch in parallel but keep order stable
+      const results = await Promise.all(paths.map((p) => toCard(p)));
+      const cards = results.filter(Boolean);
+      if (ok) setAll(cards);
+    })();
+    return () => { ok = false; };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return all;
+    return all.filter((c) => c.title.toLowerCase().includes(needle));
+  }, [q, all]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const start = (page - 1) * PAGE_SIZE;
+  const current = filtered.slice(start, start + PAGE_SIZE);
+
+  useEffect(() => { if (page > pageCount) setPage(1); }, [pageCount]); // reset if filter shrinks
 
   return (
-    <div className="container py-10">
-      <div className="flex items-center justify-between mb-6 gap-4">
-        <h1>Explore Pictures</h1>
+    <div style={{ maxWidth: 1200, margin: "32px auto", padding: "0 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+        <h1 style={{ fontSize: 40, margin: "10px 0" }}>Explore Pictures</h1>
         <input
-          className="input max-w-md"
+          className="input"
           placeholder="Search by title or tag..."
           value={q}
-          onChange={e=>setQ(e.target.value)}
+          onChange={(e) => setQ(e.target.value)}
+          style={{ maxWidth: 360 }}
         />
       </div>
 
-      {filtered.length === 0 && !loading && (
-        <p className="text-slate-600">No results.</p>
-      )}
+      {current.length === 0 ? (
+        <p style={{ color: "#64748b", marginTop: 16 }}>No results.</p>
+      ) : (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+            gap: 16,
+            marginTop: 18,
+          }}
+        >
+          {current.map((item) => (
+            <div key={item.id} style={{ position: "relative" }}>
+              <img
+                src={item.url}
+                alt={item.title}
+                style={{ width: "100%", height: 250, objectFit: "cover", borderRadius: 12, display: "block" }}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
+              {/* watermark overlay */}
+              <div className="watermark">Demo · Picsellart</div>
 
-      <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {filtered.map(item => (
-          <article key={item.url} className="card overflow-hidden">
-            <WatermarkedImage src={item.url} alt={item.title}/>
-            <div className="p-3">
-              <div className="text-sm text-slate-700">{item.title}</div>
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-slate-900 text-base">₹{item.price}</span>
-                <button className="btn text-sm" onClick={()=>onBuy(item)}>
+              <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontWeight: 600 }}>{item.title}</div>
+                  <div style={{ color: "#475569", fontSize: 14 }}>₹{item.price}</div>
+                </div>
+                <button className="btn-outline" onClick={() => alert("Login to buy in this demo.")}>
                   Buy
                 </button>
               </div>
             </div>
-          </article>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <div className="flex justify-center mt-10">
-        {(tokens.public || tokens.buyer) ? (
-          <button className="btn" onClick={loadMore} disabled={loading}>
-            {loading ? "Loading..." : "Load more"}
+      {/* pagination */}
+      {pageCount > 1 && (
+        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 18 }}>
+          <button className="btn-outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
+            Prev
           </button>
-        ) : null}
-      </div>
+          <div style={{ padding: "10px 14px" }}>
+            Page {page} of {pageCount}
+          </div>
+          <button className="btn-outline" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page === pageCount}>
+            Next
+          </button>
+        </div>
+      )}
     </div>
   );
-}
-
-/** Helpers for title/price inferred from filename */
-function prettify(name){
-  // strip extension, replace dashes/underscores
-  return name.replace(/\.[^.]+$/,"").replace(/[_-]+/g," ").trim().replace(/\b\w/g,m=>m.toUpperCase());
-}
-function extractPrice(name){
-  const m = name.match(/(?:p|price)(\d{2,4})/i);
-  return m ? parseInt(m[1],10) : null;
-}
-
-/** Razorpay hook (POST only; no 405) — backend already exists at /api/createPhotoOrder */
-async function onBuy(item){
-  try{
-    const res = await fetch("/api/createPhotoOrder",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        price: item.price,
-        title: item.title,
-        // If image came from Buyer uploads, include seller mapping here when you wire payouts
-        source: item.source || "public",
-        fileName: item.name,
-        fileUrl: item.url
-      })
-    });
-    if(!res.ok){ throw new Error(`Order init failed: ${res.status}`); }
-    const data = await res.json();
-    // open Razorpay here (left as-is to avoid breaking prod if key isn’t injected)
-    if (window.Razorpay && data.key) {
-      const rzp = new window.Razorpay({
-        key: data.key,
-        amount: data.amount,
-        currency: data.currency,
-        order_id: data.orderId,
-        name: "Picsellart",
-        description: item.title,
-        handler: () => alert("Payment successful"),
-        prefill: data.prefill || {},
-        modal: { ondismiss: ()=>{} }
-      });
-      rzp.open();
-    } else {
-      alert("Order created. Razorpay key missing on client.");
-    }
-  } catch(err){
-    console.error(err);
-    alert("Could not start checkout.");
-  }
 }
