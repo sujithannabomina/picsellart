@@ -1,81 +1,118 @@
 // src/utils/loadRazorpay.js
-let scriptLoaded = false;
-let loadingPromise = null;
+// Single, safe loader + a helper to launch checkout and a tiny client for /api/createOrder
 
-export async function ensureRazorpay() {
-  if (scriptLoaded) return;
-  if (!loadingPromise) {
-    loadingPromise = new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      s.src = "https://checkout.razorpay.com/v1/checkout.js";
-      s.async = true;
-      s.onload = () => {
-        scriptLoaded = true;
-        resolve();
+let razorpayScriptPromise = null;
+
+/**
+ * Load Razorpay Checkout script once and return window.Razorpay
+ */
+export function loadRazorpay() {
+  if (typeof window !== "undefined" && window.Razorpay) {
+    return Promise.resolve(window.Razorpay);
+  }
+
+  if (!razorpayScriptPromise) {
+    razorpayScriptPromise = new Promise((resolve, reject) => {
+      if (typeof document === "undefined") {
+        reject(new Error("Document not available"));
+        return;
+      }
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => {
+        if (window.Razorpay) resolve(window.Razorpay);
+        else reject(new Error("Razorpay failed to load"));
       };
-      s.onerror = () => reject(new Error("Razorpay SDK failed to load"));
-      document.body.appendChild(s);
+      script.onerror = () => reject(new Error("Failed to load Razorpay script"));
+      document.body.appendChild(script);
     });
   }
-  return loadingPromise;
+
+  return razorpayScriptPromise;
 }
 
 /**
- * Opens Razorpay Checkout
- * @param {{order: any, metadata?: object, onSuccess?: Function, onFailure?: Function}} params
+ * Launch Razorpay checkout
+ * @param {Object} opts
+ * @param {string} opts.key           - Public key id (returned by /api/createOrder)
+ * @param {string} opts.orderId       - Razorpay order id
+ * @param {number} opts.amount        - amount in paise
+ * @param {string} [opts.name]        - merchant / app name
+ * @param {string} [opts.description] - description shown in widget
+ * @param {string} [opts.image]       - logo url
+ * @param {Object} [opts.prefill]     - { name, email }
+ * @param {Object} [opts.notes]       - extra notes
+ * @param {string} [opts.themeColor]  - hex color
+ * @param {Function} [opts.handler]   - callback on success
  */
-export async function openRazorpay({ order, metadata = {}, onSuccess, onFailure }) {
-  await ensureRazorpay();
-
-  const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-  if (!key) {
-    console.error("Missing VITE_RAZORPAY_KEY_ID in environment");
-    alert("Payment config error. Contact support.");
-    return;
-  }
-
-  const options = {
+export async function launchRazorpay(opts) {
+  const {
     key,
-    amount: order.amount,      // in paise
-    currency: order.currency || "INR",
-    name: "Picsellart",
-    description: metadata.title ? `License: ${metadata.title}` : "Image License",
-    order_id: order.id,
-    handler: async function (response) {
-      try {
-        const res = await fetch("/api/verifyPhotoPayment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-            photoPath: metadata.photoPath,
-            sellerId: metadata.sellerId || null,
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Verification failed");
-        onSuccess?.(data);
-      } catch (e) {
-        console.error(e);
-        alert("Payment verified but fulfilment failed. Please contact support with your Order ID.");
-        onFailure?.(e);
-      }
-    },
-    notes: {
-      photoPath: metadata.photoPath || "",
-      sellerId: metadata.sellerId || "",
-      isSample: metadata.isSample ? "1" : "0",
-    },
-    theme: { color: "#6d5efc" },
-    modal: { ondismiss: () => onFailure?.(new Error("Payment cancelled"))) },
-    prefill: {
-      name: metadata.prefillName || "",
-      email: metadata.prefillEmail || "",
-    },
-  };
+    orderId,
+    amount,
+    name = "Picsellart",
+    description = "",
+    image = "/logo.png",
+    prefill = {},
+    notes = {},
+    themeColor = "#6C63FF",
+    handler,
+  } = opts || {};
 
-  const rzp = new window.Razorpay(options);
-  rzp.open();
+  const Razorpay = await loadRazorpay();
+
+  return new Promise((resolve, reject) => {
+    const rzp = new Razorpay({
+      key,
+      order_id: orderId,
+      amount,
+      currency: "INR",
+      name,
+      description,
+      image,
+      notes,
+      prefill,
+      theme: { color: themeColor },
+      handler: (response) => {
+        try {
+          if (typeof handler === "function") handler(response);
+        } catch (_) {}
+        resolve(response);
+      },
+      modal: {
+        ondismiss: () => reject(new Error("Payment closed by user")),
+      },
+    });
+
+    rzp.open();
+  });
+}
+
+/**
+ * POST helper to your serverless API to create an order
+ * payload example:
+ *  - { mode: "buyer", amount: 49900 }  // amount in paise
+ *  - { mode: "seller", plan: "starter" } // plan is server-validated
+ */
+export async function createOrderClient(payload) {
+  const res = await fetch("/api/createOrder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload || {}),
+  });
+
+  if (!res.ok) {
+    const err = await safeJson(res);
+    throw new Error(err?.error || "Failed to create order");
+  }
+  return res.json(); // => { order: {...}, key: "<public-key>" }
+}
+
+async function safeJson(r) {
+  try {
+    return await r.json();
+  } catch {
+    return null;
+  }
 }
