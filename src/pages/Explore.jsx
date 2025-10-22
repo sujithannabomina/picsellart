@@ -1,157 +1,235 @@
 // src/pages/Explore.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { getDownloadURL, listAll, ref } from "firebase/storage";
-import { storage } from "../firebase"; // your existing initialized storage
-
-const PAGE_SIZE = 24;
-const SAMPLE_COUNT = 112;
-
-/**
- * Builds ref paths we’ll try to list:
- *  - "public/" (common bucket for samples + user-approved uploads)
- *  - "Buyer/"  (if you also mirror public items here; listing may be denied by rules — we ignore errors)
- */
-const PATHS = ["public/", "Buyer/"];
-
-/** create sample file names sample1.jpg ... sample112.jpg under "public/" */
-function buildSampleRefs() {
-  return Array.from({ length: SAMPLE_COUNT }, (_, i) => `public/sample${i + 1}.jpg`);
-}
-
-/** Fetch a unique set of candidate refs by trying to list folders if rules allow; otherwise fall back to samples */
-async function collectRefs() {
-  const set = new Set();
-  // try listing folders (best effort)
-  for (const p of PATHS) {
-    try {
-      const listing = await listAll(ref(storage, p));
-      listing.items.forEach((it) => set.add(it.fullPath));
-    } catch {
-      // ignore permission errors
-    }
-  }
-  // ensure samples exist even if listing blocked
-  buildSampleRefs().forEach((p) => set.add(p));
-  return Array.from(set);
-}
-
-/** Fetch download URL with caching */
-const urlCache = new Map();
-async function toCard(path) {
-  if (!urlCache.has(path)) {
-    try {
-      const url = await getDownloadURL(ref(storage, path));
-      urlCache.set(path, url);
-    } catch {
-      // missing in bucket – skip by storing null to avoid repeated calls
-      urlCache.set(path, null);
-    }
-  }
-  const url = urlCache.get(path);
-  if (!url) return null;
-
-  // Title & price rules
-  const title = "street photography";
-  // Deterministic pseudo-random price (₹49–₹249) derived from filename
-  const seed = Array.from(path).reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
-  const price = 49 + (seed % 201);
-
-  return { id: path, url, title, price };
-}
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import ImageCard from "../components/ImageCard";
+import { EXPLORE_PAGE_SIZE, loadExplorePage } from "../utils/exploreData";
 
 export default function Explore() {
-  const [all, setAll] = useState([]);      // all cards
-  const [page, setPage] = useState(1);
-  const [q, setQ] = useState("");
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [source, setSource] = useState("firestore"); // or "storage"
+  const [error, setError] = useState("");
+
+  // Cursor stacks to support Prev
+  const fsCursors = useRef([]);         // stack of Firestore cursors (DocumentSnapshot)
+  const stCursors = useRef([]);         // stack of Storage cursors ({prefix, pageToken})
+
+  // Current cursors
+  const [cursor, setCursor] = useState(null);           // Firestore cursor
+  const [storageCursor, setStorageCursor] = useState(null); // Storage cursor
+
+  const pageTitle = useMemo(() => {
+    if (!search) return "Explore Pictures";
+    return `Explore: “${search}”`;
+  }, [search]);
 
   useEffect(() => {
-    let ok = true;
-    (async () => {
-      const paths = await collectRefs();
-      // Fetch in parallel but keep order stable
-      const results = await Promise.all(paths.map((p) => toCard(p)));
-      const cards = results.filter(Boolean);
-      if (ok) setAll(cards);
-    })();
-    return () => { ok = false; };
-  }, []);
+    let alive = true;
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return all;
-    return all.filter((c) => c.title.toLowerCase().includes(needle));
-  }, [q, all]);
+    async function load() {
+      setLoading(true);
+      setError("");
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const start = (page - 1) * PAGE_SIZE;
-  const current = filtered.slice(start, start + PAGE_SIZE);
+      try {
+        const { items, next, storageNext, source } = await loadExplorePage({
+          cursor,
+          search,
+          storageCursor,
+        });
 
-  useEffect(() => { if (page > pageCount) setPage(1); }, [pageCount]); // reset if filter shrinks
+        if (!alive) return;
+
+        setItems(items);
+        setSource(source || "firestore");
+
+        // Update the next pointers for the "Next" button
+        setCursor(next || null);
+        setStorageCursor(storageNext || null);
+      } catch (e) {
+        if (!alive) return;
+        setError("Could not load images. Please try again.");
+        setItems([]);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      alive = false;
+    };
+  }, [search]); // initial load only uses search; next/prev handlers mutate cursors manually
+
+  // Handlers for pagination
+  const goNext = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      // Push current cursor to stacks for "Prev" to work
+      if (source === "firestore") {
+        fsCursors.current.push(cursor);
+      } else {
+        stCursors.current.push(storageCursor);
+      }
+
+      const { items, next, storageNext, source: src } = await loadExplorePage({
+        cursor,
+        search,
+        storageCursor,
+      });
+
+      setItems(items);
+      setSource(src || "firestore");
+      setCursor(next || null);
+      setStorageCursor(storageNext || null);
+    } catch {
+      setError("Could not load next page.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goPrev = async () => {
+    if (source === "firestore") {
+      const prev = fsCursors.current.pop() || null;
+      // When going back on Firestore, we need to rebuild the page correctly:
+      // Reload from the beginning and walk the stack except the last.
+      await reloadFromStart(search, fsCursors.current, null);
+      setCursor(prev);
+    } else {
+      const prev = stCursors.current.pop() || null;
+      await reloadFromStart(search, null, stCursors.current);
+      setStorageCursor(prev);
+    }
+  };
+
+  // Replay from page 1 until the last saved cursor in the stack.
+  const reloadFromStart = async (q, fsStack, stStack) => {
+    setLoading(true);
+    setError("");
+
+    try {
+      let tmpCursor = null;
+      let tmpStorage = null;
+      let lastPage = [];
+
+      // Number of forward steps to reproduce
+      const steps =
+        (fsStack ? fsStack.length : 0) || (stStack ? stStack.length : 0);
+
+      for (let i = 0; i <= steps; i++) {
+        const { items, next, storageNext, source } = await loadExplorePage({
+          cursor: tmpCursor,
+          search: q,
+          storageCursor: tmpStorage,
+        });
+        lastPage = items;
+        tmpCursor = next || null;
+        tmpStorage = storageNext || null;
+
+        // stop if storage hits the end
+        if (source === "storage" && !storageNext) break;
+      }
+
+      setItems(lastPage);
+      setSource(fsStack ? "firestore" : "storage");
+      setCursor(tmpCursor);
+      setStorageCursor(tmpStorage);
+    } catch {
+      setError("Could not load previous page.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const hasNext = !!cursor || !!storageCursor;
+  const hasPrev =
+    fsCursors.current.length > 0 || stCursors.current.length > 0;
 
   return (
-    <div style={{ maxWidth: 1200, margin: "32px auto", padding: "0 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-        <h1 style={{ fontSize: 40, margin: "10px 0" }}>Explore Pictures</h1>
-        <input
-          className="input"
-          placeholder="Search by title or tag..."
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          style={{ maxWidth: 360 }}
-        />
-      </div>
+    <div className="min-h-screen">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl text-gray-900">{pageTitle}</h1>
+            <p className="text-gray-500 text-sm mt-1">
+              Showing up to {EXPLORE_PAGE_SIZE} photos per page
+              {source === "storage" ? " (via Storage fallback)" : ""}.
+            </p>
+          </div>
 
-      {current.length === 0 ? (
-        <p style={{ color: "#64748b", marginTop: 16 }}>No results.</p>
-      ) : (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-            gap: 16,
-            marginTop: 18,
-          }}
-        >
-          {current.map((item) => (
-            <div key={item.id} style={{ position: "relative" }}>
-              <img
-                src={item.url}
-                alt={item.title}
-                style={{ width: "100%", height: 250, objectFit: "cover", borderRadius: 12, display: "block" }}
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
-              {/* watermark overlay */}
-              <div className="watermark">Demo · Picsellart</div>
+          <div className="w-full sm:w-80">
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => {
+                // reset stacks when search changes
+                fsCursors.current = [];
+                stCursors.current = [];
+                setCursor(null);
+                setStorageCursor(null);
+                setSearch(e.target.value);
+              }}
+              placeholder="Search by title or tag…"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+        </div>
 
-              <div style={{ marginTop: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>{item.title}</div>
-                  <div style={{ color: "#475569", fontSize: 14 }}>₹{item.price}</div>
-                </div>
-                <button className="btn-outline" onClick={() => alert("Login to buy in this demo.")}>
-                  Buy
+        {/* Content */}
+        <div className="mt-6">
+          {loading && (
+            <div className="text-gray-500 text-sm">Loading photos…</div>
+          )}
+
+          {!loading && error && (
+            <div className="text-red-600 text-sm">{error}</div>
+          )}
+
+          {!loading && !error && items.length === 0 && (
+            <div className="text-gray-500 text-sm">No results.</div>
+          )}
+
+          {!loading && items.length > 0 && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                {items.map((photo) => (
+                  <ImageCard key={photo.id} photo={photo} />
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between mt-8">
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  disabled={!hasPrev}
+                  className={`px-3 py-2 rounded-lg border text-sm ${
+                    hasPrev
+                      ? "border-gray-300 text-gray-700 hover:bg-gray-50"
+                      : "border-gray-200 text-gray-400 cursor-not-allowed"
+                  }`}
+                >
+                  ← Previous
+                </button>
+
+                <button
+                  type="button"
+                  onClick={goNext}
+                  disabled={!hasNext}
+                  className={`px-3 py-2 rounded-lg text-sm ${
+                    hasNext
+                      ? "bg-indigo-500 text-white hover:bg-indigo-600"
+                      : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                  }`}
+                >
+                  Next →
                 </button>
               </div>
-            </div>
-          ))}
+            </>
+          )}
         </div>
-      )}
-
-      {/* pagination */}
-      {pageCount > 1 && (
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 18 }}>
-          <button className="btn-outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-            Prev
-          </button>
-          <div style={{ padding: "10px 14px" }}>
-            Page {page} of {pageCount}
-          </div>
-          <button className="btn-outline" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page === pageCount}>
-            Next
-          </button>
-        </div>
-      )}
+      </section>
     </div>
   );
 }

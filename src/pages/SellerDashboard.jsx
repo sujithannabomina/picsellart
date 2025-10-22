@@ -1,110 +1,183 @@
 // src/pages/SellerDashboard.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { db } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { PLANS } from "../utils/plans";
-import { Link } from "react-router-dom";
+import {
+  addDoc, collection, doc, getDoc, runTransaction,
+  serverTimestamp
+} from "firebase/firestore";
+import { db, storage } from "../firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { format } from "./_utils_date"; // tiny formatter below in this file
 
 export default function SellerDashboard() {
-  const { user } = useAuth();
+  const { user, loading, logout } = useAuth();
   const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Upload form state
+  const [title, setTitle] = useState("");
+  const [price, setPrice] = useState("");
+  const [tags, setTags] = useState("");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    let alive = true;
+    if (!user || loading) return;
     (async () => {
-      if (!user) return;
-      const snap = await getDoc(doc(db, "users", user.uid));
-      if (alive) {
-        setProfile(snap.exists() ? snap.data() : null);
-        setLoading(false);
-      }
+      const uref = doc(db, "users", user.uid);
+      const snap = await getDoc(uref);
+      setProfile(snap.exists() ? snap.data() : null);
     })();
-    return () => { alive = false; };
-  }, [user]);
+  }, [user, loading, refreshKey]);
 
-  const planInfo = useMemo(() => {
-    if (!profile?.plan) return null;
-    return PLANS[profile.plan] || null;
-  }, [profile]);
+  const caps = useMemo(() => ({
+    maxUploads: profile?.maxUploads ?? 0,
+    used: profile?.uploadsUsed ?? 0,
+    maxPrice: profile?.maxPricePerImage ?? 0,
+    expired: profile?.expiresAt?.toDate ? profile.expiresAt.toDate() < new Date() : true,
+  }), [profile]);
 
-  const uploadsUsed = profile?.usedUploads ?? 0;
-  const uploadsLimit = profile?.uploadLimit ?? planInfo?.uploadLimit ?? 0;
-  const priceCap = profile?.priceCap ?? planInfo?.priceCap ?? 0;
+  const canUpload = user && profile && !caps.expired && caps.used < caps.maxUploads;
 
-  const expired = useMemo(() => {
-    const ts = profile?.planExpiresAt;
-    if (!ts) return true;
-    const ms = typeof ts === "number" ? ts : ts?.toMillis?.() ?? 0;
-    return Date.now() > ms;
-  }, [profile]);
+  async function handleUpload(e) {
+    e.preventDefault();
+    if (!canUpload) return;
+    if (!file) return alert("Choose an image file");
+    const priceNum = Number(price);
+    if (!priceNum || priceNum <= 0) return alert("Enter a valid price");
+    if (caps.maxPrice && priceNum > caps.maxPrice) return alert(`Max price per image is ₹${caps.maxPrice}`);
 
-  if (!user) {
-    return (
-      <div className="max-w-4xl mx-auto px-5 py-10">
-        <h1 className="text-2xl font-bold">Seller Dashboard</h1>
-        <p className="mt-3">Please sign in.</p>
-      </div>
-    );
-  }
+    setBusy(true);
+    try {
+      const filename = `${Date.now()}_${file.name}`.replace(/\s+/g, "_");
+      const sref = ref(storage, `sellers/${user.uid}/${filename}`);
+      await uploadBytes(sref, file);
+      const publicUrl = await getDownloadURL(sref);
 
-  if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto px-5 py-10">
-        <h1 className="text-2xl font-bold">Seller Dashboard</h1>
-        <p className="mt-3 text-slate-600">Loading your account…</p>
-      </div>
-    );
+      // Create photo + increment uploadsUsed atomically
+      await runTransaction(db, async (tx) => {
+        const uref = doc(db, "users", user.uid);
+        const usnap = await tx.get(uref);
+        if (!usnap.exists()) throw new Error("User profile missing");
+        const u = usnap.data();
+
+        const now = new Date();
+        if (u.expiresAt?.toDate && u.expiresAt.toDate() < now) {
+          throw new Error("Plan expired");
+        }
+        if ((u.uploadsUsed ?? 0) >= (u.maxUploads ?? 0)) {
+          throw new Error("Upload limit reached");
+        }
+        if (u.maxPricePerImage && priceNum > u.maxPricePerImage) {
+          throw new Error("Price exceeds plan cap");
+        }
+
+        const photosRef = collection(db, "photos");
+        const docRef = await tx.set(doc(photosRef), {
+          sellerId: user.uid,
+          title: title || "Untitled",
+          tags: tags ? tags.split(",").map(t => t.trim()).filter(Boolean) : [],
+          price: priceNum,
+          currency: "INR",
+          storagePath: `sellers/${user.uid}/${filename}`,
+          publicUrl,                   // watermarked URL can be swapped later
+          watermarkUrl: publicUrl,     // placeholder; you can replace with wm path later
+          isPublic: true,              // listed on Explore
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        }, { merge: false });
+
+        tx.update(uref, {
+          uploadsUsed: (u.uploadsUsed ?? 0) + 1,
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      // Reset form + refresh profile
+      setTitle(""); setPrice(""); setTags(""); setFile(null);
+      setRefreshKey(x => x + 1);
+      alert("Uploaded successfully!");
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Upload failed");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
-    <div className="max-w-5xl mx-auto px-5 py-10">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-extrabold">Seller Dashboard</h1>
-        {expired ? (
-          <Link
-            to="/seller/renew"
-            className="px-4 py-2 rounded-xl bg-rose-600 text-white hover:bg-rose-500"
-          >
-            Renew Pack
-          </Link>
-        ) : (
-          <span className="px-3 py-1 rounded-full text-xs bg-emerald-50 text-emerald-700 border border-emerald-200">
-            Access Active
-          </span>
-        )}
+    <main className="section container">
+      <div className="flex items-center justify-between mb-6">
+        <h1>Seller Dashboard</h1>
+        <button className="btn" onClick={logout}>Logout</button>
       </div>
 
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <div className="rounded-2xl border p-5">
-          <div className="text-sm text-slate-500">Current Plan</div>
-          <div className="mt-1 text-xl font-semibold">{profile?.plan ?? "—"}</div>
-          <div className="mt-2 text-sm text-slate-600">
-            Max price per image: <strong>₹{priceCap || 0}</strong>
-          </div>
-        </div>
+      {!user && !loading && <p>Please sign in.</p>}
+      {loading && <p>Loading...</p>}
 
-        <div className="rounded-2xl border p-5">
-          <div className="text-sm text-slate-500">Uploads</div>
-          <div className="flex items-baseline gap-2 mt-1">
-            <div className="text-xl font-semibold">{uploadsUsed}</div>
-            <div className="text-slate-500">/ {uploadsLimit}</div>
-          </div>
-          <div className="mt-3 h-3 w-full bg-slate-100 rounded-full overflow-hidden">
-            <div
-              className="h-3 bg-indigo-600"
-              style={{ width: `${Math.min(100, (uploadsUsed / Math.max(1, uploadsLimit)) * 100)}%` }}
-            />
-          </div>
-        </div>
-      </div>
+      {user && profile && (
+        <>
+          <div className="grid">
+            <div className="rounded-2xl border border-[#e2e8f0] p-5 bg-white">
+              <h3 className="text-lg font-medium text-slate-900">Plan</h3>
+              <div className="mt-2 text-sm text-slate-700">Current pack: <b>{profile.planId?.toUpperCase() || "—"}</b></div>
+              <div className="mt-1 text-sm text-slate-700">Uploads: {caps.used} / {caps.maxUploads}</div>
+              <div className="mt-1 text-sm text-slate-700">Max price per image: ₹{caps.maxPrice || 0}</div>
+              <div className="mt-1 text-sm text-slate-700">Expires on: {format(profile.expiresAt)}</div>
+              {caps.expired && (
+                <div className="mt-2 text-sm text-red-600">Access expired — please go to “Pay” and activate a pack.</div>
+              )}
+            </div>
 
-      {expired && (
-        <div className="mt-6 rounded-2xl border p-5 bg-rose-50 border-rose-200 text-rose-800">
-          Your access has expired. Please renew to continue uploading or editing your images.
-        </div>
+            <div className="rounded-2xl border border-[#e2e8f0] p-5 bg-white">
+              <h3 className="text-lg font-medium text-slate-900">Upload new image</h3>
+              <form className="mt-3 space-y-3" onSubmit={handleUpload}>
+                <input
+                  className="input w-full"
+                  placeholder="Title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+                <input
+                  className="input w-full"
+                  placeholder="Tags (comma separated)"
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                />
+                <input
+                  className="input w-full"
+                  type="number"
+                  placeholder={`Price (max ₹${caps.maxPrice || 0})`}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  min={1}
+                  max={caps.maxPrice || undefined}
+                />
+                <input
+                  className="input w-full"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                />
+                <button className="btn btn-primary" type="submit" disabled={!canUpload || busy}>
+                  {!canUpload ? "Upload not available" : busy ? "Uploading..." : "Upload"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </>
       )}
-    </div>
+    </main>
   );
+}
+
+/* -------- tiny date formatter (no external deps) -------- */
+function pad(n){ return n < 10 ? `0${n}` : `${n}`; }
+export function format(ts) {
+  if (!ts) return "—";
+  try {
+    const d = ts.toDate ? ts.toDate() : ts;
+    if (!(d instanceof Date) || isNaN(d.getTime())) return "—";
+    return `${pad(d.getDate())}-${pad(d.getMonth()+1)}-${d.getFullYear()}`;
+  } catch { return "—"; }
 }

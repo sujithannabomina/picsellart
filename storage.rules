@@ -1,16 +1,20 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /public/watermarked/{allPaths=**} {
-      allow read: if true;
-      allow write: if false;
+    // Public watermarked copies
+    match /public/{uid}/{file} {
+      allow read: if true;             // anyone can read Explore
+      allow write: if false;           // only Functions write here
     }
-    match /originals/{photoId}/{fileName} {
-      allow write: if request.auth != null;
-      allow read: if false; // downloads use signed URLs only
-    }
-    match /seller/{uid}/{file} {
+
+    // Originals uploaded by signed-in user
+    match /Buyer/{uid}/{file} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
     }
   }
 }

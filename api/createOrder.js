@@ -1,74 +1,57 @@
 // api/createOrder.js
-import crypto from "crypto";
+import crypto from "node:crypto";
+
+// Use server-side env names (no VITE_ prefix)
+const key_id = process.env.RAZORPAY_KEY_ID;
+const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const keyId = process.env.RAZORPAY_KEY_ID;
-  const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  if (!keyId || !keySecret) {
-    res.status(500).json({ error: "Razorpay env vars missing" });
-    return;
-  }
-
   try {
-    const body = req.body || {};
-    const mode = body.mode;
-
-    let amount = 0; // paise
-    let notes = {};
-    if (mode === "buyer") {
-      // client sends amount in paise; clamp just to be safe
-      const a = Number(body.amount || 0);
-      if (!Number.isFinite(a) || a < 1000 || a > 5000000) {
-        return res.status(400).json({ error: "Invalid amount" });
-      }
-      amount = Math.floor(a);
-      notes = body.notes || {};
-    } else if (mode === "seller") {
-      // server-enforced prices
-      const plan = String(body.plan || "");
-      const PLAN_PRICES = {
-        starter: 10000, // ₹100
-        pro: 30000,     // ₹300
-        elite: 80000,   // ₹800
-      };
-      if (!PLAN_PRICES[plan]) {
-        return res.status(400).json({ error: "Invalid plan" });
-      }
-      amount = PLAN_PRICES[plan];
-      notes = { plan };
-    } else {
-      return res.status(400).json({ error: "Invalid mode" });
+    if (req.method !== "POST") {
+      res.setHeader("Allow", "POST");
+      return res.status(405).json({ error: "Method Not Allowed" });
+    }
+    if (!key_id || !key_secret) {
+      return res.status(500).json({ error: "Razorpay keys missing" });
     }
 
-    // Create order via Razorpay REST
-    const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
-    const resp = await fetch("https://api.razorpay.com/v1/orders", {
+    const { mode, amount } = req.body || {};
+    if (!mode || !amount || typeof amount !== "number") {
+      return res.status(400).json({ error: "Invalid payload" });
+    }
+
+    // Create order
+    const payload = {
+      amount: Math.round(amount * 100), // paise
+      currency: "INR",
+      receipt: `picsellart_${mode}_${Date.now()}`,
+      payment_capture: 1,
+    };
+
+    // Create using REST — minimal dependency (no SDK)
+    const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
       method: "POST",
       headers: {
-        Authorization: `Basic ${auth}`,
         "Content-Type": "application/json",
+        Authorization:
+          "Basic " + Buffer.from(`${key_id}:${key_secret}`).toString("base64"),
       },
-      body: JSON.stringify({
-        amount,
-        currency: "INR",
-        receipt: `rcpt_${Date.now()}`,
-        notes,
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      return res.status(500).json({ error: "Razorpay order failed", detail: err });
+    if (!orderRes.ok) {
+      const msg = await orderRes.text();
+      return res.status(502).json({ error: "Razorpay order failed", msg });
     }
+    const orderJson = await orderRes.json();
 
-    const order = await resp.json();
-    res.status(200).json({ order, key: keyId });
+    // Return only what client needs
+    return res.status(200).json({
+      orderId: orderJson.id,
+      currency: orderJson.currency || "INR",
+    });
   } catch (e) {
-    res.status(500).json({ error: "Server error", detail: e?.message || String(e) });
+    console.error(e);
+    return res.status(500).json({ error: "Server error" });
   }
 }

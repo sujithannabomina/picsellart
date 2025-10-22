@@ -2,41 +2,40 @@
 import { getStorage, ref, list, getDownloadURL } from "firebase/storage";
 import { app } from "../firebase";
 
+const storage = getStorage(app);
+
 /**
- * Fetch items from a storage folder with pagination.
- * @param {string} folder e.g. "public" or "Buyer"
- * @param {number} pageSize
- * @param {string|null} pageToken
- * @returns {Promise<{items: Array<{name,url}>, nextPageToken: string|null}>}
+ * List one page (maxResults) from a given folder.
+ * Returns { items: [{name, url, path}], nextPageToken }
  */
-export async function fetchStorageBatch(folder, pageSize=24, pageToken=null){
-  const storage = getStorage(app);
+export async function listPage(folder, pageToken = undefined, maxResults = 24) {
   const r = ref(storage, folder);
-  const { items, nextPageToken } = await list(r, { maxResults: pageSize, pageToken: pageToken || undefined });
-  const urls = await Promise.all(items.map(i=> getDownloadURL(i)));
-  const out = items.map((i,idx)=>({ name: i.name, url: urls[idx] }));
-  return { items: out, nextPageToken: nextPageToken || null };
+  const res = await list(r, { maxResults, pageToken });
+  const items = await Promise.all(
+    res.items.map(async (i) => ({
+      name: i.name,
+      path: i.fullPath,
+      url: await getDownloadURL(i),
+    }))
+  );
+  return { items, nextPageToken: res.nextPageToken || null };
 }
 
 /**
- * Convenience: fetch both "public" and "Buyer" page in parallel, then merge.
- * We tag source so you can split later if needed.
+ * Fetches one merged page from both "public/" and "Buyer/".
+ * Keeps their next tokens separate so we can load more later.
  */
-export async function fetchExplorePage({pageSize=24, tokenPublic=null, tokenBuyer=null}){
-  const [a,b] = await Promise.all([
-    fetchStorageBatch("public", pageSize, tokenPublic),
-    fetchStorageBatch("Buyer",  pageSize, tokenBuyer),
+export async function listMerged(first = false, tokens = { public: null, buyer: null }) {
+  const [pub, buy] = await Promise.all([
+    listPage("public", tokens.public),
+    listPage("Buyer", tokens.buyer),
   ]);
 
-  // Merge, keep order alternating between folders for variety
-  const merged = [];
-  const maxLen = Math.max(a.items.length, b.items.length);
-  for(let i=0;i<maxLen;i++){
-    if(a.items[i]) merged.push({...a.items[i], source:"public"});
-    if(b.items[i]) merged.push({...b.items[i], source:"Buyer"});
-  }
+  // interleave-ish (simple concat also fine)
+  const items = [...pub.items, ...buy.items];
+
   return {
-    items: merged,
-    next: { public: a.nextPageToken, buyer: b.nextPageToken }
+    items,
+    nextTokens: { public: pub.nextPageToken, buyer: buy.nextPageToken },
   };
 }
