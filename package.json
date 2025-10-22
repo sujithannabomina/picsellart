@@ -6,39 +6,21 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --host"
-  },
-  "dependencies": {
-    "firebase": "^10.14.1",
-    "razorpay": "^2.9.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.1",
-    "uuid": "^9.0.1"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.46",
-    "@types/react-dom": "^18.2.18",
-    "@vitejs/plugin-react": "^4.3.2",
-    "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.41",
-    "tailwindcss": "^3.4.13",
-    "vite": "^5.4.8"
+    "preview": "vite preview --port 5173"
   },
   "engines": {
     "node": "20.x"
   },
-  "description": "Picsellart — Buy & Sell Licensed Photos",
-  "author": "Sujith Annabomina",
-  "license": "MIT",
-  "keywords": [
-    "vite",
-    "react",
-    "tailwind",
-    "firebase",
-    "razorpay",
-    "vercel",
-    "photo-marketplace",
-    "picsellart"
-  ]
+  "dependencies": {
+    "firebase": "^10.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.1",
+    "razorpay": "^2.9.3",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
+    "vite": "^5.4.9"
+  }
 }

@@ -1,125 +1,54 @@
-import { Routes, Route } from "react-router-dom";
-import Header from "./components/Header";
+import React, { Suspense, lazy } from 'react'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import Header from './components/Header.jsx'
 
-// Try to import your pages; if not present, fall back to stubs.
-// This avoids Vercel build breaks if a page file is temporarily absent.
-let Landing;
-try {
-  Landing = (await import("./pages/LandingPage.jsx")).default;
-} catch {
-  Landing = function LandingFallback() {
-    return (
-      <main className="section container">
-        <h1>Welcome to Picsellart</h1>
-        <p>LandingPage.jsx is not found; showing a safe fallback.</p>
-      </main>
-    );
-  };
-}
+// Lazy route components — code-split without top-level await
+const Landing      = lazy(() => import('./pages/LandingPage.jsx'))
+const Explore      = lazy(() => import('./pages/Explore.jsx'))
+const Faq          = lazy(() => import('./pages/Faq.jsx'))
+const Refund       = lazy(() => import('./pages/Refund.jsx'))
+const Contact      = lazy(() => import('./pages/Contact.jsx'))
+const BuyerLogin   = lazy(() => import('./pages/BuyerLogin.jsx'))
+const SellerLogin  = lazy(() => import('./pages/SellerLogin.jsx'))
+const BuyerDash    = lazy(() => import('./pages/BuyerDashboard.jsx'))
+const SellerDash   = lazy(() => import('./pages/SellerDashboard.jsx'))
+const SellerPlan   = lazy(() => import('./pages/SellerPlan.jsx'))
+const SellerRenew  = lazy(() => import('./pages/SellerRenew.jsx'))
+const PhotoDetails = lazy(() => import('./pages/PhotoDetails.jsx'))
 
-let Explore;
-try {
-  Explore = (await import("./pages/Explore.jsx")).default;
-} catch {
-  Explore = function ExploreFallback() {
-    return (
-      <main className="section container">
-        <h1>Explore Pictures</h1>
-        <p>Explore.jsx is missing; fallback rendered to keep build healthy.</p>
-      </main>
-    );
-  };
-}
-
-let Faq;
-try {
-  Faq = (await import("./pages/Faq.jsx")).default;
-} catch {
-  Faq = () => (
+function Fallback() {
+  return (
     <main className="section container">
-      <h1>FAQ</h1>
-      <p>Faq.jsx not found; fallback in use.</p>
+      <p>Loading…</p>
     </main>
-  );
-}
-
-let Refund;
-try {
-  Refund = (await import("./pages/Refund.jsx")).default;
-} catch {
-  Refund = () => (
-    <main className="section container">
-      <h1>Refund</h1>
-      <p>Refund.jsx not found; fallback in use.</p>
-    </main>
-  );
-}
-
-let Contact;
-try {
-  Contact = (await import("./pages/Contact.jsx")).default;
-} catch {
-  Contact = () => (
-    <main className="section container">
-      <h1>Contact</h1>
-      <p>Contact.jsx not found; fallback in use.</p>
-    </main>
-  );
-}
-
-let BuyerLogin;
-try {
-  BuyerLogin = (await import("./pages/BuyerLogin.jsx")).default;
-} catch {
-  BuyerLogin = () => (
-    <main className="section container">
-      <h1>Buyer Login</h1>
-      <p>BuyerLogin.jsx not found; fallback in use.</p>
-    </main>
-  );
-}
-
-let SellerLogin;
-try {
-  SellerLogin = (await import("./pages/SellerLogin.jsx")).default;
-} catch {
-  SellerLogin = () => (
-    <main className="section container">
-      <h1>Seller Login</h1>
-      <p>SellerLogin.jsx not found; fallback in use.</p>
-    </main>
-  );
+  )
 }
 
 export default function App() {
   return (
-    <div className="min-h-dvh flex flex-col">
+    <>
       <Header />
-      <div className="flex-1">
+      <Suspense fallback={<Fallback />}>
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/explore" element={<Explore />} />
           <Route path="/faq" element={<Faq />} />
           <Route path="/refund" element={<Refund />} />
           <Route path="/contact" element={<Contact />} />
+
           <Route path="/buyer/login" element={<BuyerLogin />} />
           <Route path="/seller/login" element={<SellerLogin />} />
-          {/* Fallback route */}
-          <Route
-            path="*"
-            element={
-              <main className="section container">
-                <h1>404</h1>
-                <p>Page not found.</p>
-              </main>
-            }
-          />
-        </Routes>
-      </div>
 
-      <footer>
-        © {new Date().getFullYear()} Picsellart. All rights reserved.
-      </footer>
-    </div>
-  );
+          <Route path="/buyer/dashboard" element={<BuyerDash />} />
+          <Route path="/seller/dashboard" element={<SellerDash />} />
+          <Route path="/seller/plan" element={<SellerPlan />} />
+          <Route path="/seller/renew" element={<SellerRenew />} />
+
+          <Route path="/photo/:id" element={<PhotoDetails />} />
+
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
+    </>
+  )
 }

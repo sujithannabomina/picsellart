@@ -1,0 +1,28 @@
+.site-header {
+  position: sticky; top: 0; z-index: 40;
+  background: #fff; border-bottom: 1px solid #eef0f3;
+}
+.header-inner {
+  height: 64px; display: flex; align-items: center; justify-content: space-between;
+}
+.brand { display:flex; align-items:center; gap:10px; text-decoration:none; }
+.brand-logo { width:28px; height:28px; }
+.brand-text { font-weight:600; color:#111827; letter-spacing:.2px; }
+
+.nav { display:flex; gap:20px; }
+.nav-link {
+  color:#374151; text-decoration:none; font-weight:500;
+  padding:8px 6px; border-radius:8px;
+}
+.nav-link.active { color:#111827; background:#f3f4f6; }
+
+.cta { display:flex; gap:10px; }
+.btn { border:none; border-radius:10px; padding:10px 16px; text-decoration:none; font-weight:600; }
+.btn-ghost { background:#f3f4f6; color:#111827; }
+.btn-ghost:hover { background:#e5e7eb; }
+.btn-primary { background:#6b66ff; color:#fff; box-shadow: 0 6px 14px rgba(107,102,255,.25); }
+.btn-primary:hover { filter:brightness(.95); }
+
+@media (max-width: 900px) {
+  .nav { display:none; }
+}
