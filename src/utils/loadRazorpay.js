@@ -1,109 +1,109 @@
 // src/utils/loadRazorpay.js
-// ----------------------------------------------------
-// Utility to handle Razorpay checkout and order creation
-// ----------------------------------------------------
+// Zero-axios version (uses fetch). Works in browsers and Vercel.
+// Exports: loadRazorpayScript, createOrderClient, launchRazorpay
 
-import axios from "axios";
+const RZP_SCRIPT_ID = "rzp-sdk";
 
-/**
- * Dynamically load the Razorpay checkout script.
- * Returns a promise that resolves when the SDK is loaded.
- */
-export async function loadRazorpayScript() {
-  return new Promise((resolve) => {
-    if (document.getElementById("razorpay-sdk")) return resolve(true);
+/** Dynamically inject Razorpay script if not present. */
+export function loadRazorpayScript(src = "https://checkout.razorpay.com/v1/checkout.js") {
+  return new Promise((resolve, reject) => {
+    if (typeof window === "undefined") return reject(new Error("window unavailable"));
+    if (document.getElementById(RZP_SCRIPT_ID)) return resolve(true);
 
-    const script = document.createElement("script");
-    script.id = "razorpay-sdk";
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
+    const s = document.createElement("script");
+    s.id = RZP_SCRIPT_ID;
+    s.src = src;
+    s.async = true;
+    s.onload = () => resolve(true);
+    s.onerror = () => reject(new Error("Failed loading Razorpay SDK"));
+    document.head.appendChild(s);
   });
 }
 
-/**
- * Create an order on your backend (Vercel serverless or Firebase Functions).
- * Expects your backend endpoint at /api/createOrder or similar.
- * Returns { id, amount, currency } for Razorpay checkout.
- */
-export async function createOrderClient({ amount, currency, planId, userId }) {
-  try {
-    const res = await axios.post("/api/createOrder", {
-      amount,
-      currency,
-      planId,
-      userId,
-    });
-    return res.data;
-  } catch (err) {
-    console.error("createOrderClient error:", err);
-    throw new Error("Order creation failed");
+/** Create an order via our API route. */
+export async function createOrderClient({ amount, planId, mode = "seller", notes = {} }) {
+  // amount in INR rupees -> server expects paise
+  const body = { amount, planId, mode, notes };
+  const res = await fetch("/api/createOrder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`createOrder failed: ${res.status} ${text}`);
   }
+  const data = await res.json();
+  // Expecting { orderId, amount, currency, key }
+  if (!data?.orderId || !data?.key) throw new Error("Invalid order response");
+  return data;
 }
 
-/**
- * Launch Razorpay checkout widget in browser.
- * Accepts options and a callback for successful payment.
- */
-export async function launchRazorpay({ order, user, onSuccess }) {
-  const loaded = await loadRazorpayScript();
-  if (!loaded) {
-    alert("Razorpay SDK failed to load. Please check your internet connection.");
-    return;
-  }
+/** Open Razorpay Checkout and return the payment payload (or throw on failure). */
+export async function launchRazorpay({
+  order,
+  onSuccess,
+  onDismiss,
+  prefill,
+  themeColor = "#6d5afc",
+  description = "",
+  name = "Picsellart",
+  image = "/logo.svg",
+}) {
+  await loadRazorpayScript();
 
-  if (!window.Razorpay) {
-    alert("Razorpay SDK not found in window scope.");
-    return;
-  }
+  return new Promise((resolve, reject) => {
+    /* global Razorpay */
+    if (typeof window.Razorpay === "undefined") {
+      reject(new Error("Razorpay SDK not available"));
+      return;
+    }
 
-  const options = {
-    key: import.meta.env.VITE_RAZORPAY_KEY_ID, // your public key from Razorpay dashboard
-    amount: order.amount,
-    currency: order.currency,
-    name: "Picsellart",
-    description: "Plan Purchase",
-    order_id: order.id,
-    handler: async function (response) {
-      try {
-        // verify signature on your backend
-        const verifyRes = await axios.post("/api/verifyPayment", {
-          order_id: response.razorpay_order_id,
-          payment_id: response.razorpay_payment_id,
-          signature: response.razorpay_signature,
-          userId: user?.uid,
-          planId: order.planId,
-        });
-        if (verifyRes.data.success) {
-          onSuccess?.(verifyRes.data);
-        } else {
-          alert("Payment verification failed.");
+    const options = {
+      key: order.key, // publishable key returned by API
+      amount: order.amount, // in paise
+      currency: order.currency || "INR",
+      name,
+      description,
+      image,
+      order_id: order.orderId,
+      prefill: prefill || {},
+      theme: { color: themeColor },
+      handler: async function (response) {
+        try {
+          // Optional: verify on server
+          const verifyRes = await fetch("/api/verifyPayment", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              orderId: order.orderId,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_signature: response.razorpay_signature,
+            }),
+          });
+
+          const verifyJson = await verifyRes.json().catch(() => ({}));
+          if (!verifyRes.ok || verifyJson?.status !== "ok") {
+            throw new Error("Server verification failed");
+          }
+
+          onSuccess && onSuccess({ ...response, orderId: order.orderId });
+          resolve({ ...response, verified: true });
+        } catch (e) {
+          reject(e);
         }
-      } catch (err) {
-        console.error("Verification error:", err);
-        alert("Verification failed. Please contact support.");
-      }
-    },
-    prefill: {
-      name: user?.displayName || "",
-      email: user?.email || "",
-    },
-    theme: { color: "#2563eb" },
-  };
+      },
+      modal: {
+        ondismiss: function () {
+          onDismiss && onDismiss();
+          reject(new Error("Payment dismissed"));
+        },
+      },
+      notes: order.notes || {},
+    };
 
-  const paymentObject = new window.Razorpay(options);
-  paymentObject.open();
-}
-
-/**
- * Optional helper to verify webhook signature from Razorpay
- * (only runs on server in /api/verifyWebhook.js, not in browser)
- */
-export function verifyWebhookSignature(body, signature, secret) {
-  const crypto = require("crypto");
-  const shasum = crypto.createHmac("sha256", secret);
-  shasum.update(JSON.stringify(body));
-  const digest = shasum.digest("hex");
-  return digest === signature;
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+  });
 }
