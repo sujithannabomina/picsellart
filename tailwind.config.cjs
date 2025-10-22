@@ -7,7 +7,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        brand: "#2563eb" // blue-600
+        brand: "#2563eb"
       },
       borderRadius: {
         xl: "12px",
