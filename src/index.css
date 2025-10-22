@@ -1,34 +1,125 @@
+/* src/index.css
+   Plain CSS (no Tailwind). Global reset + layout + clean, lightweight UI.
+   Works with Vite, React Router, and our components without extra plugins. */
+
+/* CSS Reset (modern-normalize style) */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; }
+html, body, #root { height: 100%; }
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  color: #0f172a;
+  background: #f8fafc;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Ubuntu, Cantarell, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+img, picture, video, canvas, svg { display: block; max-width: 100%; }
+input, button, textarea, select { font: inherit; }
+a { color: inherit; text-decoration: none; }
+button { border: 0; background: none; cursor: pointer; }
+
+/* Theme tokens */
 :root{
-  --bg:#ffffff;
-  --ink:#0f172a;
-  --muted:#374151;
-  --primary:#6b66ff;
-  --mutebg:#f3f4f6;
-  --ring:#dbe3ff;
+  --bg: #ffffff;
+  --bg-soft: #f1f5f9;
+  --text: #0f172a;
+  --muted: #475569;
+  --brand: #6d5cff;        /* primary */
+  --brand-600:#5a48ff;
+  --brand-700:#4a3ae6;
+  --danger:#ef4444;
+  --ring: 0 0 0 4px rgba(109,92,255,.15);
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(2,6,23,.08), 0 2px 6px rgba(2,6,23,.06);
 }
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{
-  margin:0; font-family: ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
-  color:var(--ink); background:var(--bg);
-  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+
+/* Layout */
+.container{ width:min(1200px, 92%); margin-inline:auto; }
+.section{ padding: 64px 0; }
+.grid{ display:grid; gap:24px; }
+.grid--3{ grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width: 1024px){ .grid--3{ grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 640px){ .grid--3{ grid-template-columns: 1fr; } }
+
+/* Header (sticky) */
+.header{
+  position: sticky; top: 0; z-index: 40;
+  background: rgba(255,255,255,.8);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e2e8f0;
 }
-.container{max-width:1100px;margin:0 auto;padding:0 16px}
-.section{padding:32px 0}
-a{color:inherit;text-decoration:none}
-button{font:inherit}
-input,select,textarea{font:inherit}
-h1,h2,h3{margin:0 0 8px 0;font-weight:700;letter-spacing:.2px}
-p{margin:0 0 14px 0;color:var(--muted)}
+.nav{ display:flex; align-items:center; justify-content:space-between; height:64px; }
+.brand{ display:flex; align-items:center; gap:10px; font-weight:600; letter-spacing:.3px;}
+.brand img{ height:28px; width:auto; }
+.nav-links{ display:flex; gap:22px; align-items:center; }
+.nav-links a{ color:#334155; padding:8px 10px; border-radius:10px; }
+.nav-links a:hover{ background:#eef2ff; color:#4338ca; }
+.nav-cta{ display:flex; gap:10px; align-items:center; }
+
+/* Buttons */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center;
+  height:40px; padding:0 16px; border-radius:12px; font-weight:600;
+  transition:transform .12s ease, box-shadow .12s ease, background .2s ease, color .2s ease;
+  border:1px solid #e5e7eb; background:#fff; color:#111827;
+}
+.btn:hover{ transform: translateY(-1px); box-shadow: var(--shadow); }
+.btn:focus-visible{ outline:none; box-shadow: var(--ring); }
+.btn--brand{ background: var(--brand); color:#fff; border-color: transparent; }
+.btn--brand:hover{ background: var(--brand-600); }
+.btn--subtle{ background:#eef2ff; color:#4338ca; border-color:transparent; }
+.btn--danger{ background: var(--danger); color:#fff; border-color: transparent; }
+
+/* Cards */
 .card{
-  background:#fff;border:1px solid #eef0f3;border-radius:14px;padding:16px;
-  box-shadow:0 2px 8px rgba(15,23,42,.04);
+  background: var(--bg);
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
-.badge{background:var(--mutebg);padding:4px 8px;border-radius:999px;font-size:.8rem;color:#111827}
-.btn{border:none;border-radius:12px;padding:10px 16px;cursor:pointer;font-weight:600}
-.btn.primary{background:var(--primary);color:#fff;box-shadow:0 8px 20px rgba(107,102,255,.25)}
-.btn.ghost{background:var(--mutebg);color:#111827}
-.grid{display:grid;gap:16px}
-.grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
-@media (max-width: 900px){.grid.cols-3{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width: 640px){.grid.cols-3{grid-template-columns:1fr}}
+.card--soft{ background: var(--bg-soft); }
+.card-header{ padding:20px; border-bottom: 1px solid #e5e7eb; font-weight:700; letter-spacing:.2px; }
+.card-body{ padding:20px; }
+
+/* Forms */
+.input, .select, .textarea{
+  width:100%; border:1px solid #e5e7eb; background:#fff;
+  height:40px; padding:0 12px; border-radius:12px; color:var(--text);
+}
+.textarea{ height:auto; padding:12px; min-height:120px; resize:vertical; }
+.input:focus, .select:focus, .textarea:focus{ outline:none; box-shadow: var(--ring); border-color:#c7d2fe; }
+
+/* Page titles */
+.page-title{ font-size:clamp(28px, 3.4vw, 44px); font-weight:800; letter-spacing:.3px; color:#0f172a; }
+.page-desc{ color: var(--muted); margin-top:8px; }
+
+/* Explore gallery */
+.gallery{ column-count:3; column-gap: 18px; }
+@media (max-width: 1024px){ .gallery{ column-count:2; } }
+@media (max-width: 640px){ .gallery{ column-count:1; } }
+.tile{ break-inside: avoid; margin-bottom:18px; position:relative; overflow:hidden; border-radius:16px; background:#e2e8f0; }
+.tile img{ width:100%; height:auto; display:block; transition: transform .4s ease; }
+.tile:hover img{ transform: scale(1.03); }
+.tile-badge{
+  position:absolute; left:12px; bottom:12px; padding:6px 10px;
+  background: rgba(15,23,42,.72); color:#fff; font-size:12px; border-radius:9999px;
+}
+
+/* Footer */
+.footer{ padding:20px 0 40px; color:#64748b; text-align:center; }
+
+/* Utility classes */
+.muted{ color: var(--muted); }
+.mt-2{ margin-top:8px; } .mt-3{ margin-top:12px; } .mt-4{ margin-top:16px; }
+.mb-2{ margin-bottom:8px; } .mb-3{ margin-bottom:12px; } .mb-4{ margin-bottom:16px; }
+
+/* Skeleton loader (optional) */
+.skeleton{
+  position:relative; overflow:hidden; background:#e2e8f0; border-radius:12px; min-height:120px;
+}
+.skeleton::after{
+  content:""; position:absolute; inset:0;
+  background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.55) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-100%); animation: shimmer 1.25s infinite;
+}
+@keyframes shimmer{ 100%{ transform: translateX(100%);} }

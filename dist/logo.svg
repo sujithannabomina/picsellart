@@ -1,0 +1,5 @@
+<!-- public/logo.svg -->
+<svg width="140" height="36" viewBox="0 0 140 36" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Picsellart">
+  <rect rx="8" width="140" height="36" fill="#6C63FF"/>
+  <text x="70" y="24" text-anchor="middle" font-family="Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial" font-size="18" font-weight="700" fill="white">Picsellart</text>
+</svg>

@@ -1,119 +1,168 @@
 // src/pages/PhotoDetails.jsx
+import React, { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
-import { openRazorpay } from "../utils/loadRazorpay";
+import { useAuth } from "../context/AuthContext";
+import { createOrderClient, launchRazorpay } from "../utils/loadRazorpay";
+
+/**
+ * This page expects to receive a `photo` payload via router state:
+ *   navigate("/photo/:id", { state: { photo } })
+ * where `photo` includes:
+ *   {
+ *     id, title, price, ownerId, ownerName?,
+ *     watermarkedUrl?, publicUrl?, thumbUrl?,
+ *     tags?, isSample? (boolean)  // for Picsellart-owned samples
+ *   }
+ *
+ * Behavior:
+ * - Shows watermarked image (if available) before purchase.
+ * - "Buy" opens Razorpay; on success, backend verifies & grants access.
+ * - If user is not signed in, redirects to Buyer Login.
+ */
 
 function usePhotoPayload() {
   const { state } = useLocation();
-  const query = new URLSearchParams(window.location.search);
+  // If deep-linked without state, you could fetch by route param here (omitted for simplicity).
+  return state?.photo ?? null;
+}
 
-  // Prefer router state, fallback to query params
-  const payload = state || {
-    title: query.get("title") || "Street Photography",
-    price: Number(query.get("price") || 0),
-    photoPath: query.get("path") || "",     // e.g. "public/sample23.jpg" or "Buyer/uid/abc.jpg"
-    sellerId: query.get("sellerId") || null,
-    isSample: query.get("isSample") === "1",
-    url: query.get("url") || "",            // public URL if already resolved
-  };
-  return payload;
+function Price({ value }) {
+  if (value == null) return <span className="muted">—</span>;
+  return <span style={{ fontWeight: 800 }}>₹{value}</span>;
 }
 
 export default function PhotoDetails() {
-  const nav = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const p = usePhotoPayload();
+  const photo = usePhotoPayload();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [buying, setBuying] = useState(false);
 
-  const displayPrice = useMemo(() => {
-    if (Number.isFinite(p.price)) return `₹${p.price}`;
-    return "₹—";
-  }, [p.price]);
+  const displayUrl = useMemo(() => {
+    // Prefer watermarked; fallback to thumb/public
+    return photo?.watermarkedUrl || photo?.thumbUrl || photo?.publicUrl || "";
+  }, [photo]);
 
-  const startCheckout = async () => {
-    if (!p.photoPath || !Number.isFinite(p.price)) {
-      alert("Missing photo info.");
+  async function handleBuy() {
+    if (!photo) return;
+    if (!user) {
+      // Force buyer login before purchase
+      navigate("/buyer/login", { replace: true });
       return;
     }
-    setBusy(true);
-    try {
-      const res = await fetch("/api/createPhotoOrder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: p.title || "Street Photography",
-          price: p.price,
-          photoPath: p.photoPath,
-          sellerId: p.sellerId || null, // null means platform sale (sample photos)
-          isSample: !!p.isSample,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Order creation failed");
 
-      await openRazorpay({
-        order: data.order,
-        metadata: {
-          title: p.title,
-          photoPath: p.photoPath,
-          sellerId: p.sellerId,
-          isSample: !!p.isSample,
-        },
+    try {
+      setBuying(true);
+      // Create an order for a photo purchase (not a plan)
+      // The backend /api/createOrder should accept purchaseType === "photo"
+      const order = await createOrderClient({
+        amount: Number(photo.price) * 100, // paisa
+        currency: "INR",
+        userId: user.uid,
+        purchaseType: "photo",
+        photoId: photo.id,
+        sellerId: photo.ownerId || "picsellart",
+        title: photo.title || "Photo",
+        isSample: !!photo.isSample
+      });
+
+      await launchRazorpay({
+        order,
+        user,
         onSuccess: () => {
-          nav("/buyer/dashboard");
-        },
-        onFailure: () => setBusy(false),
+          // After successful verification, buyer should see their purchase
+          alert("Payment successful! Your HD download will be available in your dashboard.");
+          navigate("/buyer/dashboard");
+        }
       });
     } catch (e) {
-      console.error(e);
-      alert(e.message || "Could not start checkout.");
-      setBusy(false);
+      console.error("Buy failed:", e);
+      alert("Unable to start payment. Please try again.");
+    } finally {
+      setBuying(false);
     }
-  };
+  }
+
+  if (!photo) {
+    return (
+      <main className="section">
+        <div className="container card">
+          <div className="card-body">
+            <h1 className="page-title">Photo not found</h1>
+            <p className="page-desc">This photo link appears to be invalid or missing.</p>
+            <div style={{ marginTop: 12 }}>
+              <button className="btn" onClick={() => navigate("/explore")}>Back to Explore</button>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <div className="max-w-5xl mx-auto px-5 py-10">
-      <button className="text-sm text-indigo-600 hover:underline" onClick={() => nav(-1)}>
-        ← Back
-      </button>
+    <main className="section">
+      <div className="container">
+        <div className="card" style={{ overflow: "hidden" }}>
+          <div className="card-body" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24 }}>
+            <div>
+              {displayUrl ? (
+                <img
+                  src={displayUrl}
+                  alt={photo.title || "Photo"}
+                  style={{ width: "100%", height: "auto", borderRadius: 12 }}
+                />
+              ) : (
+                <div className="skeleton" style={{ height: 420 }} />
+              )}
+            </div>
+            <div>
+              <h1 className="page-title" style={{ fontSize: 28 }}>{photo.title || "Untitled"}</h1>
+              <p className="muted" style={{ marginTop: 6 }}>
+                {photo.ownerName ? `By ${photo.ownerName}` : (photo.isSample ? "Picsellart Sample" : "Seller")}
+              </p>
 
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
-        <div className="w-full bg-slate-50 rounded-2xl overflow-hidden border">
-          {/* We keep it simple: if a URL was provided we show it; otherwise we rely on the explore card to pass a resolved URL. */}
-          {p.url ? (
-            <img src={p.url} alt={p.title} className="w-full h-auto object-cover" />
-          ) : (
-            <div className="p-10 text-center text-slate-500">Preview will appear when opened from Explore.</div>
-          )}
+              <div style={{ marginTop: 18, fontSize: 18 }}>
+                Price: <Price value={photo.price} />
+              </div>
+
+              {Array.isArray(photo.tags) && photo.tags.length > 0 ? (
+                <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {photo.tags.map((t) => (
+                    <span key={t} className="badge">{t}</span>
+                  ))}
+                </div>
+              ) : null}
+
+              <div style={{ marginTop: 20, display: "flex", gap: 10 }}>
+                <button
+                  className="btn btn--brand"
+                  onClick={handleBuy}
+                  disabled={buying}
+                >
+                  {buying ? "Processing…" : "Buy & Download HD"}
+                </button>
+                <button className="btn" onClick={() => navigate(-1)}>Back</button>
+              </div>
+
+              <div className="muted" style={{ marginTop: 14, fontSize: 13 }}>
+                • Watermark will be removed after successful purchase.<br />
+                • Purchased images appear in your Buyer Dashboard with invoice & license info.
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight">{p.title || "Street Photography"}</h1>
-          <p className="mt-2 text-slate-600">
-            Royalty-free, single-seat license. Instant download after successful payment.
-          </p>
-
-          <div className="mt-6 flex items-center gap-4">
-            <div className="text-2xl font-bold">{displayPrice}</div>
-            <button
-              className="px-5 py-2 rounded-xl bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-60"
-              onClick={startCheckout}
-              disabled={busy}
-            >
-              {busy ? "Processing..." : "Buy & Download"}
-            </button>
+        <div className="card" style={{ marginTop: 20 }}>
+          <div className="card-body">
+            <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>License & Usage</h3>
+            <p className="muted">
+              This purchase grants a standard license to use the image for personal or commercial
+              projects according to our <a href="/policy" className="link">policy</a>. Redistribution
+              or resale is not permitted. For extended licenses, contact us via the
+              <a href="/contact" className="link"> contact page</a>.
+            </p>
           </div>
-
-          {p.isSample ? (
-            <p className="mt-3 text-xs text-slate-500">
-              Sold by Picsellart. This image comes from our curated catalog.
-            </p>
-          ) : (
-            <p className="mt-3 text-xs text-slate-500">
-              Sold by the original creator on Picsellart. We settle payouts weekly.
-            </p>
-          )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

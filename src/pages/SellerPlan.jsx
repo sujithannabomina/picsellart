@@ -1,103 +1,103 @@
 // src/pages/SellerPlan.jsx
-import { useEffect, useMemo, useState } from "react";
-import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from "firebase/firestore";
-import { db } from "../firebase";
+import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { PLANS } from "../utils/plans";
-import { openRazorpay } from "../utils/loadRazorpay";
 import { useNavigate } from "react-router-dom";
+import { createOrderClient, launchRazorpay } from "../utils/loadRazorpay";
 
-function addDays(ts, days) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return Timestamp.fromDate(d);
-}
+const PLANS = [
+  { id: "starter", name: "Starter", priceINR: 100, uploads: 25, maxPrice: 199, days: 180 },
+  { id: "pro", name: "Pro", priceINR: 300, uploads: 30, maxPrice: 249, days: 180 },
+  { id: "elite", name: "Elite", priceINR: 800, uploads: 50, maxPrice: 249, days: 180 },
+];
 
 export default function SellerPlan() {
-  const { user, loading, loginWithGoogle } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [userDoc, setUserDoc] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const planList = useMemo(() => Object.values(PLANS), []);
-
-  useEffect(() => {
-    if (!user || loading) return;
-    (async () => {
-      const ref = doc(db, "users", user.uid);
-      const snap = await getDoc(ref);
-      setUserDoc(snap.exists() ? snap.data() : null);
-    })();
-  }, [user, loading]);
-
-  async function handlePay(plan) {
+  async function handleBuy(plan) {
     if (!user) {
-      await loginWithGoogle();
+      alert("Please login as seller first.");
+      navigate("/seller/login");
       return;
     }
-    setBusy(true);
+    setLoading(true);
     try {
-      await openRazorpay({
-        mode: "seller",
-        amount: plan.price, // rupees
-        meta: { planId: plan.id, uid: user.uid },
+      // 1️⃣ Create Razorpay order via backend
+      const order = await createOrderClient({
+        amount: plan.priceINR * 100, // convert to paisa
+        currency: "INR",
+        planId: plan.id,
+        userId: user.uid,
       });
 
-      // Mark/refresh seller plan (client-side; consider webhook later)
-      const ref = doc(db, "users", user.uid);
-      await setDoc(
-        ref,
-        {
-          role: "seller",
-          email: user.email || "",
-          planId: plan.id,
-          maxUploads: plan.maxUploads,
-          maxPricePerImage: plan.maxPricePerImage,
-          uploadsUsed: 0,                 // fresh count for new pack
-          expiresAt: addDays(Timestamp.now(), plan.days),
-          updatedAt: serverTimestamp(),
-          createdAt: serverTimestamp(),
+      // 2️⃣ Launch Razorpay checkout
+      await launchRazorpay({
+        order,
+        user,
+        onSuccess: () => {
+          alert("Payment successful! Your plan will be activated shortly.");
+          navigate("/seller/dashboard");
         },
-        { merge: true }
-      );
-      navigate("/seller/dashboard");
-    } catch (e) {
-      console.error(e);
-      alert("Payment not completed.");
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Payment initiation failed. Please try again.");
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   }
 
   return (
-    <main className="section container">
-      <div className="text-center mb-8">
-        <h1>Choose your Seller Pack</h1>
-        <p className="text-slate-600">Simple, creator-friendly pricing. Pay once and start selling.</p>
-      </div>
+    <main className="section">
+      <div className="container">
+        <h1 className="page-title">Choose a Seller Plan</h1>
+        <p className="page-desc">
+          Select a plan to unlock upload access and start selling on Picsellart.
+        </p>
 
-      <div className="grid">
-        {planList.map((p) => (
-          <article key={p.id} className="rounded-2xl border border-[#e2e8f0] p-6 bg-white">
-            <div className="flex items-baseline justify-between">
-              <h3 className="text-lg font-medium text-slate-900">{p.label}</h3>
-              <div className="text-slate-900 text-xl">₹{p.price}</div>
+        <div className="grid grid--3" style={{ marginTop: 24 }}>
+          {PLANS.map((plan) => (
+            <div key={plan.id} className="card">
+              <div className="card-body">
+                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>
+                  {plan.name}
+                </h2>
+                <p className="muted" style={{ marginBottom: 12 }}>
+                  {plan.uploads} uploads · Max ₹{plan.maxPrice} per photo
+                </p>
+                <div style={{ fontSize: 22, fontWeight: 800 }}>
+                  ₹{plan.priceINR}
+                </div>
+                <div className="muted" style={{ fontSize: 13 }}>
+                  Valid for {plan.days} days
+                </div>
+
+                <button
+                  onClick={() => handleBuy(plan)}
+                  className="btn btn--brand"
+                  disabled={loading}
+                  style={{ marginTop: 16, width: "100%" }}
+                >
+                  {loading ? "Processing..." : "Buy Now"}
+                </button>
+              </div>
             </div>
-            <ul className="mt-3 text-sm text-slate-600 space-y-1">
-              <li>Upload limit: {p.maxUploads} images</li>
-              <li>Max price per image: ₹{p.maxPricePerImage}</li>
-              {/* Intentionally do NOT mention days per your rule */}
-            </ul>
-            <button
-              className="btn btn-primary mt-4 w-full"
-              disabled={busy}
-              onClick={() => handlePay(p)}
-              aria-label={`Pay for ${p.label}`}
-            >
-              {busy ? "Processing..." : `Pay ₹${p.price}`}
-            </button>
-          </article>
-        ))}
+          ))}
+        </div>
+
+        <div className="card" style={{ marginTop: 32 }}>
+          <div className="card-body">
+            <h3 style={{ fontSize: 18, fontWeight: 800 }}>Need help?</h3>
+            <p className="muted">
+              Having trouble purchasing?{" "}
+              <a href="/contact" className="link">
+                Contact our support team
+              </a>{" "}
+              and we’ll help you set up your plan.
+            </p>
+          </div>
+        </div>
       </div>
     </main>
   );
