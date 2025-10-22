@@ -13,14 +13,27 @@
   },
   "dependencies": {
     "firebase": "^10.13.1",
+    "razorpay": "^2.9.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.1",
-    "razorpay": "^2.9.3",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
-    "vite": "^5.4.9"
-  }
+    "vite": "^5.4.9",
+    "postcss": "^8.4.47",
+    "autoprefixer": "^10.4.20"
+  },
+  "keywords": [
+    "react",
+    "vite",
+    "firebase",
+    "razorpay",
+    "picsellart",
+    "photo-marketplace"
+  ],
+  "description": "Picsellart — a modern React + Firebase photo selling platform with Razorpay integration for sellers and buyers.",
+  "author": "Sujith Annabomina",
+  "license": "MIT"
 }

@@ -1,6 +1,4 @@
+// postcss.config.js — ESM safe
 export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {}
-  }
+  plugins: {}
 };

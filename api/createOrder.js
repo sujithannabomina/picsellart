@@ -1,57 +1,80 @@
-// api/createOrder.js
-import crypto from "node:crypto";
-
-// Use server-side env names (no VITE_ prefix)
-const key_id = process.env.RAZORPAY_KEY_ID;
-const key_secret = process.env.RAZORPAY_KEY_SECRET;
+// /api/createOrder.js
+import Razorpay from "razorpay";
+import crypto from "crypto";
+import { adminDb, adminTimestamp } from "./_firebaseAdmin.js";
 
 export default async function handler(req, res) {
   try {
     if (req.method !== "POST") {
-      res.setHeader("Allow", "POST");
-      return res.status(405).json({ error: "Method Not Allowed" });
+      return res.status(405).json({ error: "Method not allowed" });
     }
+
+    const {
+      amount,          // in paise
+      currency,        // "INR"
+      userId,          // auth uid
+      purchaseType,    // "plan" | "photo"
+      planId,          // for purchaseType === "plan"
+      photoId,         // for purchaseType === "photo"
+      sellerId,        // for purchaseType === "photo"
+      title,           // optional, display title
+      isSample         // boolean (true if Picsellart-owned sample)
+    } = req.body || {};
+
+    if (!amount || !currency || !userId) {
+      return res.status(400).json({ error: "amount, currency, userId required" });
+    }
+
+    const key_id = process.env.RAZORPAY_KEY_ID;
+    const key_secret = process.env.RAZORPAY_KEY_SECRET;
     if (!key_id || !key_secret) {
       return res.status(500).json({ error: "Razorpay keys missing" });
     }
 
-    const { mode, amount } = req.body || {};
-    if (!mode || !amount || typeof amount !== "number") {
-      return res.status(400).json({ error: "Invalid payload" });
-    }
+    const instance = new Razorpay({ key_id, key_secret });
 
-    // Create order
-    const payload = {
-      amount: Math.round(amount * 100), // paise
-      currency: "INR",
-      receipt: `picsellart_${mode}_${Date.now()}`,
-      payment_capture: 1,
-    };
-
-    // Create using REST — minimal dependency (no SDK)
-    const orderRes = await fetch("https://api.razorpay.com/v1/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization:
-          "Basic " + Buffer.from(`${key_id}:${key_secret}`).toString("base64"),
+    // Create an order in Razorpay
+    const order = await instance.orders.create({
+      amount,
+      currency,
+      receipt: `rcpt_${Date.now()}`,
+      notes: {
+        userId,
+        purchaseType: purchaseType || (planId ? "plan" : "photo"),
+        planId: planId || "",
+        photoId: photoId || "",
+        sellerId: sellerId || "",
+        title: title || "",
+        isSample: isSample ? "true" : "false",
       },
-      body: JSON.stringify(payload),
     });
 
-    if (!orderRes.ok) {
-      const msg = await orderRes.text();
-      return res.status(502).json({ error: "Razorpay order failed", msg });
-    }
-    const orderJson = await orderRes.json();
+    // Save a pending order in Firestore for bookkeeping (optional but helpful)
+    await adminDb.collection("orders").doc(order.id).set({
+      orderId: order.id,
+      amount,
+      currency,
+      status: "created",
+      userId,
+      purchaseType: purchaseType || (planId ? "plan" : "photo"),
+      planId: planId || null,
+      photoId: photoId || null,
+      sellerId: sellerId || null,
+      title: title || null,
+      isSample: !!isSample,
+      createdAt: adminTimestamp.now(),
+    });
 
-    // Return only what client needs
+    // Return order to client (include planId so client can use it later)
     return res.status(200).json({
-      orderId: orderJson.id,
-      currency: orderJson.currency || "INR",
+      id: order.id,
+      amount: order.amount,
+      currency: order.currency,
+      planId: planId || null,
+      photoId: photoId || null,
     });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: "Server error" });
+  } catch (err) {
+    console.error("createOrder error:", err);
+    return res.status(500).json({ error: "createOrder failed" });
   }
 }

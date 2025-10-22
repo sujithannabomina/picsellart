@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    target: 'esnext',           // prevents downleveling that breaks dynamic imports
+    target: 'esnext',
     modulePreload: { polyfill: false },
     sourcemap: false,
     outDir: 'dist',

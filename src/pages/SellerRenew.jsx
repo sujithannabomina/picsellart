@@ -1,56 +1,89 @@
 // src/pages/SellerRenew.jsx
 import React, { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import { createOrderClient, launchRazorpay } from "../utils/loadRazorpay";
 
 const PLANS = [
-  { id: "starter", name: "Starter", price: 100, uploads: 25, maxPrice: 199 },
-  { id: "pro",     name: "Pro",     price: 300, uploads: 30, maxPrice: 249 },
-  { id: "elite",   name: "Elite",   price: 800, uploads: 50, maxPrice: 249 },
+  { id: "starter", name: "Starter", priceINR: 100, uploads: 25, maxPrice: 199, days: 180 },
+  { id: "pro",     name: "Pro",     priceINR: 300, uploads: 30, maxPrice: 249, days: 180 },
+  { id: "elite",   name: "Elite",   priceINR: 800, uploads: 50, maxPrice: 249, days: 180 },
 ];
 
 export default function SellerRenew() {
-  const [busy, setBusy] = useState(null);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
 
-  async function handlePay(planId) {
+  async function handleRenew(plan) {
+    if (!user) {
+      alert("Please login as a seller first.");
+      navigate("/seller/login");
+      return;
+    }
+    setBusy(true);
     try {
-      setBusy(planId);
-      const { order, key } = await createOrderClient({ mode: "seller", plan: planId });
-      await launchRazorpay({
-        key,
-        orderId: order.id,
-        amount: order.amount,
-        name: "Picsellart",
-        description: `Seller Pack: ${planId}`,
+      // Create a plan order
+      const order = await createOrderClient({
+        amount: plan.priceINR * 100,
+        currency: "INR",
+        userId: user.uid,
+        purchaseType: "plan",
+        planId: plan.id,
       });
-      // You can add a toast here; server-side will verify payment via webhook if you add one later
+
+      await launchRazorpay({
+        order,
+        user,
+        onSuccess: () => {
+          alert("Payment successful! Your plan is active.");
+          navigate("/seller/dashboard");
+        },
+      });
     } catch (e) {
-      // optional toast
       console.error(e);
+      alert("Could not start payment. Please try again.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 1100, margin: "40px auto", padding: "0 16px" }}>
-      <h1 style={{ fontSize: 42, marginBottom: 10 }}>Choose Your Seller Pack</h1>
-      <p style={{ color: "#475569", marginBottom: 28 }}>Pay securely with Razorpay. Limits apply instantly.</p>
+    <main className="section">
+      <div className="container">
+        <h1 className="page-title">Renew your plan</h1>
+        <p className="page-desc">Keep selling without interruption. Choose a plan below.</p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 18 }}>
-        {PLANS.map((p) => (
-          <div key={p.id} className="card" style={{ background: "#fff" }}>
-            <h3 style={{ marginTop: 0 }}>{p.name}</h3>
-            <div style={{ fontSize: 32, margin: "8px 0 12px" }}>₹{p.price}</div>
-            <ul style={{ paddingLeft: 18, color: "#475569", lineHeight: 1.8, marginBottom: 16 }}>
-              <li>Upload limit: {p.uploads} images</li>
-              <li>Max price per image: ₹{p.maxPrice}</li>
-            </ul>
-            <button onClick={() => handlePay(p.id)} disabled={busy === p.id}>
-              {busy === p.id ? "Processing…" : "Pay"}
-            </button>
+        <div className="grid grid--3" style={{ marginTop: 24 }}>
+          {PLANS.map((p) => (
+            <div key={p.id} className="card">
+              <div className="card-body">
+                <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 6 }}>{p.name}</h2>
+                <div className="muted" style={{ marginBottom: 12 }}>
+                  {p.uploads} uploads · Max ₹{p.maxPrice} per photo
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700 }}>₹{p.priceINR}</div>
+                <div className="muted" style={{ fontSize: 13 }}>Valid for {p.days} days</div>
+                <button
+                  className="btn btn--brand"
+                  style={{ width: "100%", marginTop: 14 }}
+                  onClick={() => handleRenew(p)}
+                  disabled={busy}
+                >
+                  {busy ? "Processing…" : "Buy"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="card-body">
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>Need help?</h3>
+            <p className="muted">Contact us via the <a className="link" href="/contact">contact page</a>.</p>
           </div>
-        ))}
+        </div>
       </div>
-    </div>
+    </main>
   );
 }
