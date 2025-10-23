@@ -28,15 +28,5 @@
   },
   "engines": {
     "node": "22.x"
-  },
-  "keywords": [
-    "react",
-    "vite",
-    "firebase",
-    "razorpay",
-    "vercel",
-    "marketplace",
-    "picsellart"
-  ],
-  "license": "MIT"
+  }
 }
