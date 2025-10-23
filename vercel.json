@@ -1,17 +1,31 @@
 {
   "version": 2,
   "framework": "vite",
-  "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
 
-  // We deploy only the frontend here. Your server_api runs on Firebase (or another backend).
-  // This prevents Vercel from trying to treat server_api as a Serverless Function set.
-  "ignoreCommand": "echo 'Ignoring server_api for Vercel frontend deploy'",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs22.x",
+      "memory": 256,
+      "maxDuration": 15
+    }
+  },
 
-  // SPA fallback: let Vercel serve static files first, then rewrite everything to index.html
-  "routes": [
-    { "handle": "filesystem" },
-    { "src": "/(.*)", "dest": "/index.html" }
-  ]
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ],
+
+  "cleanUrls": true,
+  "trailingSlash": false
 }

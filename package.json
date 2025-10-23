@@ -2,17 +2,22 @@
   "name": "picsellart",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
+  "description": "Picsellart — buyers & sellers of photos. Vite + React + Firebase + Razorpay.",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview --port 4173"
+    "preview": "vite preview --port 4173",
+    "postinstall": "echo Skipping postinstall"
   },
   "dependencies": {
-    "firebase": "^10.14.1",
+    "axios": "^1.7.7",
+    "firebase": "^10.12.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.26.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
