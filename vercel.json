@@ -1,31 +1,33 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+
+  // We’re deploying a Vite SPA that builds to /dist
   "framework": "vite",
+  "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
 
+  // Nice URLs and no trailing slash
+  "cleanUrls": true,
+  "trailingSlash": false,
+
+  // Use modern Functions config (not legacy "builds")
+  // Keeps your Node serverless handlers in /api working.
   "functions": {
     "api/**/*.js": {
       "runtime": "nodejs22.x",
       "memory": 256,
-      "maxDuration": 15
+      "maxDuration": 10
     }
   },
 
+  // SPA routing: let /api/* hit serverless, everything else to /index.html
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
 
-  "headers": [
-    {
-      "source": "/assets/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    }
-  ],
-
-  "cleanUrls": true,
-  "trailingSlash": false
+  // Skip build if nothing changed (optional optimization)
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD ./src ./public ./api ./index.html ./package.json ./vite.config.js ./vercel.json"
 }
