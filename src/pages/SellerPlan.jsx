@@ -1,103 +1,62 @@
 // src/pages/SellerPlan.jsx
 import React, { useState } from "react";
-import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { createOrderClient, launchRazorpay } from "../utils/loadRazorpay";
-
-const PLANS = [
-  { id: "starter", name: "Starter", priceINR: 100, uploads: 25, maxPrice: 199, days: 180 },
-  { id: "pro", name: "Pro", priceINR: 300, uploads: 30, maxPrice: 249, days: 180 },
-  { id: "elite", name: "Elite", priceINR: 800, uploads: 50, maxPrice: 249, days: 180 },
-];
+import { openRazorpay, toCustomer } from "../utils/loadRazorpay";
+import { useAuth } from "../context/AuthContext";     // keep your existing context
+import { PLANS } from "../utils/plans";               // [{id, name, price, uploads, maxPrice, days}]
 
 export default function SellerPlan() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth?.() || { user: null };
+  const nav = useNavigate();
+  const [loadingId, setLoadingId] = useState(null);
+  const customer = toCustomer(user);
 
-  async function handleBuy(plan) {
-    if (!user) {
-      alert("Please login as seller first.");
-      navigate("/seller/login");
-      return;
-    }
-    setLoading(true);
+  async function buyPlan(plan) {
+    if (!user) return nav("/seller/login");
+    setLoadingId(plan.id);
     try {
-      // 1️⃣ Create Razorpay order via backend
-      const order = await createOrderClient({
-        amount: plan.priceINR * 100, // convert to paisa
-        currency: "INR",
+      await openRazorpay({
+        mode: "seller_plan",
+        userId: user.uid || user.id,
         planId: plan.id,
-        userId: user.uid,
+        customer,
+        meta: { planName: plan.name },
       });
-
-      // 2️⃣ Launch Razorpay checkout
-      await launchRazorpay({
-        order,
-        user,
-        onSuccess: () => {
-          alert("Payment successful! Your plan will be activated shortly.");
-          navigate("/seller/dashboard");
-        },
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Payment initiation failed. Please try again.");
+      // The webhook will enable the plan. We route to dashboard with a notice.
+      nav("/seller/dashboard");
+    } catch (e) {
+      console.error(e);
+      alert("Payment could not be started. Please try again.");
     } finally {
-      setLoading(false);
+      setLoadingId(null);
     }
   }
 
   return (
-    <main className="section">
-      <div className="container">
-        <h1 className="page-title">Choose a Seller Plan</h1>
-        <p className="page-desc">
-          Select a plan to unlock upload access and start selling on Picsellart.
-        </p>
+    <main className="section container">
+      <h1>Choose a Seller Plan</h1>
+      <p className="muted">Upload limits, per-image price caps and access duration are enforced automatically.</p>
 
-        <div className="grid grid--3" style={{ marginTop: 24 }}>
-          {PLANS.map((plan) => (
-            <div key={plan.id} className="card">
-              <div className="card-body">
-                <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>
-                  {plan.name}
-                </h2>
-                <p className="muted" style={{ marginBottom: 12 }}>
-                  {plan.uploads} uploads · Max ₹{plan.maxPrice} per photo
-                </p>
-                <div style={{ fontSize: 22, fontWeight: 800 }}>
-                  ₹{plan.priceINR}
-                </div>
-                <div className="muted" style={{ fontSize: 13 }}>
-                  Valid for {plan.days} days
-                </div>
-
-                <button
-                  onClick={() => handleBuy(plan)}
-                  className="btn btn--brand"
-                  disabled={loading}
-                  style={{ marginTop: 16, width: "100%" }}
-                >
-                  {loading ? "Processing..." : "Buy Now"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="card" style={{ marginTop: 32 }}>
-          <div className="card-body">
-            <h3 style={{ fontSize: 18, fontWeight: 800 }}>Need help?</h3>
-            <p className="muted">
-              Having trouble purchasing?{" "}
-              <a href="/contact" className="link">
-                Contact our support team
-              </a>{" "}
-              and we’ll help you set up your plan.
-            </p>
+      <div className="grid" style={{ marginTop: 20 }}>
+        {PLANS.map((p) => (
+          <div key={p.id} className="card" style={{ gridColumn: "span 4", padding: 16 }}>
+            <h3 style={{ marginTop: 0 }}>{p.name}</h3>
+            <p className="muted">₹{p.price} / {p.days} days</p>
+            <ul className="muted" style={{ marginTop: 10, lineHeight: 1.6 }}>
+              <li>Uploads: {p.uploads}</li>
+              <li>Max per-image price: ₹{p.maxPrice}</li>
+              <li>Access duration: {p.days} days</li>
+            </ul>
+            <button
+              className="btn"
+              style={{ marginTop: 12, width: "100%" }}
+              onClick={() => buyPlan(p)}
+              disabled={loadingId === p.id}
+            >
+              {loadingId === p.id ? "Starting payment…" : "Buy plan"}
+            </button>
           </div>
-        </div>
+        ))}
       </div>
     </main>
   );

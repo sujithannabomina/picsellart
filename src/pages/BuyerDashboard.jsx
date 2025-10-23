@@ -1,96 +1,55 @@
 // src/pages/BuyerDashboard.jsx
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { collection, getDocs, orderBy, query } from "firebase/firestore";
-
-function fmt(ts) {
-  try {
-    if (!ts) return "—";
-    const d = ts.toDate ? ts.toDate() : new Date(ts);
-    return d.toLocaleString();
-  } catch {
-    return "—";
-  }
-}
+import { db } from "../firebase.js";
+import { collection, query, where, orderBy, getDocs, limit } from "firebase/firestore";
 
 export default function BuyerDashboard() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [items, setItems] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth?.() || { user: null };
+  const [items, setItems] = useState([]);
 
   useEffect(() => {
-    if (!user) {
-      navigate("/buyer/login");
-      return;
-    }
+    if (!user) return;
     (async () => {
       try {
-        const purchasesQ = query(
-          collection(db, "buyers", user.uid, "purchases"),
-          orderBy("createdAt", "desc")
+        // Orders that webhook marked as paid for this user
+        const q = query(
+          collection(db, "orders"),
+          where("buyerId", "==", user.uid || user.id),
+          where("status", "==", "paid"),
+          orderBy("paidAt", "desc"),
+          limit(50)
         );
-        const snap = await getDocs(purchasesQ);
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setItems(list);
+        const snap = await getDocs(q);
+        const rows = [];
+        snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+        setItems(rows);
       } catch (e) {
         console.error(e);
-        setItems([]);
-      } finally {
-        setLoading(false);
       }
     })();
-  }, [user, navigate]);
-
-  if (!user) return null;
+  }, [user]);
 
   return (
-    <main className="section">
-      <div className="container">
-        <h1 className="page-title">Your purchases</h1>
-        <p className="page-desc">Downloaded photos and license details.</p>
-
-        {loading ? (
-          <div className="card"><div className="card-body">Loading…</div></div>
-        ) : (items?.length ?? 0) === 0 ? (
-          <div className="card"><div className="card-body">No purchases yet.</div></div>
+    <main className="section container">
+      <h1>Buyer Dashboard</h1>
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Your purchases</h3>
+        {items.length === 0 ? (
+          <div className="muted">No purchases yet.</div>
         ) : (
-          <div className="grid grid--3" style={{ marginTop: 16 }}>
-            {items.map((it) => (
-              <div key={it.id} className="card">
-                <div className="card-body">
-                  <div className="muted" style={{ fontSize: 13, marginBottom: 4 }}>
-                    Order: {it.orderId || it.id}
-                  </div>
-                  <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>
-                    {it.title || "Photo"}
-                  </h3>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    Date: {fmt(it.createdAt)}
-                  </div>
-                  <div className="muted" style={{ fontSize: 13 }}>
-                    Amount: ₹{(it.amount ?? 0) / 100} {it.currency || "INR"}
-                  </div>
-                  <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                    <a
-                      className={`btn ${it.hdUrl ? "btn--brand" : ""}`}
-                      href={it.hdUrl || "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      onClick={(e) => { if (!it.hdUrl) e.preventDefault(); }}
-                    >
-                      {it.hdUrl ? "Download HD" : "Download not ready"}
-                    </a>
-                    <button className="btn" onClick={() => window.open("/policy", "_blank")}>
-                      License Policy
-                    </button>
-                  </div>
-                </div>
-              </div>
+          <ul className="muted">
+            {items.map(x => (
+              <li key={x.id} style={{ marginBottom: 8 }}>
+                {x.photo?.title || "Photo"} — ₹{Number(x.amount || 0)/100}
+                {x.downloadUrl ? (
+                  <>
+                    {" "}- <a href={x.downloadUrl} target="_blank" rel="noreferrer">Download</a>
+                  </>
+                ) : null}
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </main>

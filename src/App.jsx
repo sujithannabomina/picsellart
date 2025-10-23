@@ -1,54 +1,58 @@
-import React, { Suspense, lazy } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import Header from './components/Header.jsx'
+import React from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 
-// Lazy route components — code-split without top-level await
-const Landing      = lazy(() => import('./pages/LandingPage.jsx'))
-const Explore      = lazy(() => import('./pages/Explore.jsx'))
-const Faq          = lazy(() => import('./pages/Faq.jsx'))
-const Refund       = lazy(() => import('./pages/Refund.jsx'))
-const Contact      = lazy(() => import('./pages/Contact.jsx'))
-const BuyerLogin   = lazy(() => import('./pages/BuyerLogin.jsx'))
-const SellerLogin  = lazy(() => import('./pages/SellerLogin.jsx'))
-const BuyerDash    = lazy(() => import('./pages/BuyerDashboard.jsx'))
-const SellerDash   = lazy(() => import('./pages/SellerDashboard.jsx'))
-const SellerPlan   = lazy(() => import('./pages/SellerPlan.jsx'))
-const SellerRenew  = lazy(() => import('./pages/SellerRenew.jsx'))
-const PhotoDetails = lazy(() => import('./pages/PhotoDetails.jsx'))
+// layout & shared
+import Header from "./components/Header.jsx";
 
-function Fallback() {
-  return (
-    <main className="section container">
-      <p>Loading…</p>
-    </main>
-  )
-}
+// pages
+import LandingPage from "./pages/LandingPage.jsx";
+import Explore from "./pages/Explore.jsx";
+import Faq from "./pages/Faq.jsx";
+import Refund from "./pages/Refund.jsx";
+import Contact from "./pages/Contact.jsx";
+
+import BuyerLogin from "./pages/BuyerLogin.jsx";
+import SellerLogin from "./pages/SellerLogin.jsx";
+
+import SellerPlan from "./pages/SellerPlan.jsx";
+import SellerRenew from "./pages/SellerRenew.jsx";
+
+import BuyerDashboard from "./pages/BuyerDashboard.jsx";
+import SellerDashboard from "./pages/SellerDashboard.jsx";
+
+import PhotoDetails from "./pages/PhotoDetails.jsx";
+
+// If you have an Auth context, keep using it.
+// import { AuthProvider } from "./context/AuthContext";  // example
 
 export default function App() {
   return (
+    // <AuthProvider>  {/* Uncomment if you’re using this already */}
     <>
       <Header />
-      <Suspense fallback={<Fallback />}>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/faq" element={<Faq />} />
-          <Route path="/refund" element={<Refund />} />
-          <Route path="/contact" element={<Contact />} />
 
-          <Route path="/buyer/login" element={<BuyerLogin />} />
-          <Route path="/seller/login" element={<SellerLogin />} />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/explore" element={<Explore />} />
+        <Route path="/faq" element={<Faq />} />
+        <Route path="/refund" element={<Refund />} />
+        <Route path="/contact" element={<Contact />} />
 
-          <Route path="/buyer/dashboard" element={<BuyerDash />} />
-          <Route path="/seller/dashboard" element={<SellerDash />} />
-          <Route path="/seller/plan" element={<SellerPlan />} />
-          <Route path="/seller/renew" element={<SellerRenew />} />
+        <Route path="/buyer/login" element={<BuyerLogin />} />
+        <Route path="/seller/login" element={<SellerLogin />} />
 
-          <Route path="/photo/:id" element={<PhotoDetails />} />
+        <Route path="/seller/plan" element={<SellerPlan />} />
+        <Route path="/seller/renew" element={<SellerRenew />} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Suspense>
+        <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
+        <Route path="/seller/dashboard" element={<SellerDashboard />} />
+
+        <Route path="/photo/:id" element={<PhotoDetails />} />
+
+        {/* catch-all */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </>
-  )
+    // </AuthProvider>
+  );
 }

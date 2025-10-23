@@ -1,312 +1,243 @@
 // src/pages/SellerDashboard.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-
-// Auth / Firebase (assumes your project already has these set up)
-import { useAuth } from "../context/AuthContext"; // must expose { user }
-import { db } from "../firebase";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { db, storage } from "../firebase.js";
 import {
+  collection,
   doc,
   getDoc,
-  collection,
-  query,
-  where,
-  orderBy,
-  limit,
   getDocs,
-  getCountFromServer,
-  Timestamp,
+  limit,
+  orderBy,
+  query,
+  updateDoc,
+  where,
 } from "firebase/firestore";
+import {
+  ref as sRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "firebase/storage";
+import { PLANS } from "../utils/plans";
+import { openRazorpay, toCustomer } from "../utils/loadRazorpay";
 
-/* ----------------------------------------------------------------
-   Local plan map (kept here to avoid import/name mismatches)
-   If you already centralize plans in src/utils/plans.js, keep both
-   in sync; this local map prevents broken imports during deploy.
------------------------------------------------------------------ */
-const PLAN_MAP = {
-  starter: { id: "starter", name: "Starter", uploads: 25, maxPrice: 199, days: 180, priceINR: 100 },
-  pro:     { id: "pro",     name: "Pro",     uploads: 30, maxPrice: 249, days: 180, priceINR: 300 },
-  elite:   { id: "elite",   name: "Elite",   uploads: 50, maxPrice: 249, days: 180, priceINR: 800 },
-};
-
-/* -------- tiny date helpers (no external deps) -------- */
-function pad(n){ return n < 10 ? `0${n}` : `${n}`; }
-function formatDate(ts) {
+// --- tiny utils (no external deps) ---
+function pad(n) { return n < 10 ? `0${n}` : `${n}`; }
+function format(ts) {
   if (!ts) return "—";
   try {
-    const d = ts instanceof Date ? ts : new Date(ts?.toMillis ? ts.toMillis() : ts);
-    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}`;
-  } catch {
-    return "—";
-  }
+    const d = typeof ts === "number" ? new Date(ts) : ts.toDate?.() ?? new Date(ts);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  } catch { return "—"; }
 }
-function daysLeft(exp) {
-  if (!exp) return 0;
-  const end = exp instanceof Date ? exp : new Date(exp?.toMillis ? exp.toMillis() : exp);
-  const ms = end.getTime() - Date.now();
-  return Math.max(0, Math.ceil(ms / (1000 * 60 * 60 * 24)));
+function rupees(n) {
+  const v = Number(n ?? 0);
+  return Number.isFinite(v) ? `₹${v.toFixed(2)}` : "₹0.00";
 }
 
-/* -------- UI bits -------- */
-function Stat({ label, value, hint }) {
-  return (
-    <div className="card">
-      <div className="card-body">
-        <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>{label}</div>
-        <div style={{ fontSize: 22, fontWeight: 800 }}>{value}</div>
-        {hint ? <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>{hint}</div> : null}
-      </div>
-    </div>
-  );
-}
-
-function Section({ title, children, right }) {
-  return (
-    <section className="section">
-      <div className="container" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-        <h2 style={{ fontSize: 20, fontWeight: 800 }}>{title}</h2>
-        {right ?? null}
-      </div>
-      <div className="container" style={{ marginTop: 16 }}>
-        {children}
-      </div>
-    </section>
-  );
-}
-
-/* ----------------------------------------------------------------
-   SellerDashboard
-   - Reads seller profile from Firestore: sellers/{uid}
-   - Shows plan, upload count, remaining days
-   - Enforces (client-side) upload cap and max price per plan
-   - Links to Pay/Renew page when expired or no plan
-   - Lists latest uploads (from photos where ownerId == uid)
------------------------------------------------------------------ */
 export default function SellerDashboard() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-
+  const { user } = useAuth?.() || { user: null };
+  const nav = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [sellerDoc, setSellerDoc] = useState(null);
-  const [uploadCount, setUploadCount] = useState(0);
-  const [recent, setRecent] = useState([]);
+  const [plan, setPlan] = useState(null);
+  const [uploadsUsed, setUploadsUsed] = useState(0);
+  const [photos, setPhotos] = useState([]);
+  const [busyId, setBusyId] = useState(null);
 
-  const plan = useMemo(() => {
-    if (!sellerDoc?.planId) return null;
-    return PLAN_MAP[sellerDoc.planId] ?? null;
-  }, [sellerDoc?.planId]);
+  const customer = toCustomer(user);
 
-  const expired = useMemo(() => {
-    if (!sellerDoc?.expiresAt) return true;
-    return Date.now() > new Date(sellerDoc.expiresAt?.toMillis ? sellerDoc.expiresAt.toMillis() : sellerDoc.expiresAt).getTime();
-  }, [sellerDoc?.expiresAt]);
+  // ---- derived limits from current plan
+  const planLimits = useMemo(() => {
+    if (!plan) return { uploads: 0, maxPrice: 0, days: 0, expiresAt: null };
+    const found = PLANS.find(p => p.id === plan.planId) || {};
+    return {
+      uploads: plan.uploadsRemaining ?? found.uploads ?? 0,
+      maxPrice: found.maxPrice ?? 0,
+      days: found.days ?? 0,
+      expiresAt: plan.expiresAt ?? null,
+    };
+  }, [plan]);
 
-  const remainingDays = useMemo(() => daysLeft(sellerDoc?.expiresAt), [sellerDoc?.expiresAt]);
-
+  // ---- guards
   useEffect(() => {
-    let mounted = true;
-    async function boot() {
-      if (!user?.uid) {
-        setLoading(false);
-        return;
-      }
+    if (!user) nav("/seller/login");
+  }, [user, nav]);
+
+  // ---- load plan + usage + recent photos
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
       try {
-        // 1) read seller profile
-        const ref = doc(db, "sellers", user.uid);
-        const snap = await getDoc(ref);
-        const data = snap.exists() ? snap.data() : null;
+        const userDoc = await getDoc(doc(db, "users", user.uid || user.id));
+        const data = userDoc.exists() ? userDoc.data() : {};
+        setPlan(data.sellerPlan || null);
 
-        // 2) count uploads
-        const countQ = query(collection(db, "photos"), where("ownerId", "==", user.uid));
-        const agg = await getCountFromServer(countQ);
-
-        // 3) recent uploads list (up to 10)
-        const recentQ = query(
+        // uploads used (count photos where ownerId==user)
+        const photosQ = query(
           collection(db, "photos"),
-          where("ownerId", "==", user.uid),
+          where("ownerId", "==", user.uid || user.id),
           orderBy("createdAt", "desc"),
-          limit(10)
+          limit(25)
         );
-        const rs = await getDocs(recentQ);
-        const rows = rs.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        if (!mounted) return;
-        setSellerDoc(data);
-        setUploadCount(agg.data().count);
-        setRecent(rows);
+        const snap = await getDocs(photosQ);
+        const rows = [];
+        snap.forEach(d => rows.push({ id: d.id, ...d.data() }));
+        setPhotos(rows);
+        setUploadsUsed(rows.length);
       } catch (e) {
-        console.error("Dashboard load failed:", e);
+        console.error(e);
       } finally {
-        if (mounted) setLoading(false);
+        setLoading(false);
       }
+    })();
+  }, [user]);
+
+  // ---- upload image (respect plan)
+  async function handleUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // plan checks
+    if (!plan) return alert("You need an active plan to upload. Please buy a plan.");
+    const now = Date.now();
+    if (plan.expiresAt && now > plan.expiresAt) return alert("Your plan expired. Please renew.");
+    if (uploadsUsed >= planLimits.uploads) return alert("Upload limit reached for your plan.");
+
+    // basic create (you might already have your own server/API to watermark)
+    try {
+      setBusyId("upload");
+      const id = `${(user.uid || user.id)}_${Date.now()}`;
+      const uploadRef = sRef(storage, `Buyer/${user.uid || user.id}/${id}.jpg`);
+      await uploadBytes(uploadRef, file);
+
+      const url = await getDownloadURL(uploadRef);
+
+      // Save metadata (watermarked version should be created by your function/webhook if you have it)
+      const docRef = doc(collection(db, "photos"));
+      await updateDoc(docRef, {}); // placeholder to reserve id (noop if your logic uses addDoc separately)
+      const meta = {
+        ownerId: user.uid || user.id,
+        title: file.name.replace(/\.[^.]+$/, ""),
+        price: Math.min((planLimits.maxPrice || 0), 4999) || 0, // sanity cap
+        storagePath: `Buyer/${user.uid || user.id}/${id}.jpg`,
+        previewUrl: url,
+        createdAt: Date.now(),
+      };
+      await updateDoc(docRef, meta); // if you use addDoc, replace with addDoc(collection(db, "photos"), meta);
+
+      // local lists
+      setPhotos(p => [{ id: docRef.id, ...meta }, ...p]);
+      setUploadsUsed(n => n + 1);
+
+      // decrement uploadsRemaining on user document
+      const userRef = doc(db, "users", user.uid || user.id);
+      await updateDoc(userRef, {
+        "sellerPlan.uploadsRemaining": Math.max(0, (plan.uploadsRemaining ?? planLimits.uploads) - 1),
+      });
+      setPlan(pl => pl ? { ...pl, uploadsRemaining: Math.max(0, (pl.uploadsRemaining ?? planLimits.uploads) - 1) } : pl);
+    } catch (err) {
+      console.error(err);
+      alert("Upload failed.");
+    } finally {
+      setBusyId(null);
+      e.target.value = "";
     }
-    boot();
-    return () => { mounted = false; };
-  }, [user?.uid]);
+  }
 
-  const canUploadMore = useMemo(() => {
-    if (!plan || expired) return false;
-    return uploadCount < (plan?.uploads ?? 0);
-  }, [plan, expired, uploadCount]);
+  async function removePhoto(photo) {
+    if (!window.confirm("Delete this photo?")) return;
+    try {
+      setBusyId(photo.id);
+      await deleteObject(sRef(storage, photo.storagePath));
+      // If you store Firestore doc, delete it here (not shown to keep this simple).
+      setPhotos(arr => arr.filter(p => p.id !== photo.id));
+      setUploadsUsed(n => Math.max(0, n - 1));
+    } catch (e) {
+      console.error(e);
+      alert("Could not delete.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
-  if (!user) {
-    return (
-      <main className="section">
-        <div className="container card">
-          <div className="card-body">
-            <h1 className="page-title">Seller dashboard</h1>
-            <p className="page-desc">Please sign in first.</p>
-            <div style={{ marginTop: 16 }}>
-              <Link to="/seller/login" className="btn btn--brand">Seller Login</Link>
-            </div>
-          </div>
-        </div>
-      </main>
-    );
+  async function renew() {
+    if (!user) return nav("/seller/login");
+    const current = PLANS.find(p => p.id === (plan?.planId || "")) || PLANS[0];
+    try {
+      await openRazorpay({
+        mode: "seller_renew",
+        userId: user.uid || user.id,
+        planId: current.id,
+        customer,
+        meta: { renew: true, planName: current.name },
+      });
+      alert("Payment started. Your plan will extend automatically after webhook verification.");
+    } catch (e) {
+      console.error(e);
+      alert("Could not start renewal.");
+    }
   }
 
   if (loading) {
-    return (
-      <main className="section">
-        <div className="container">
-          <div className="skeleton" style={{ height: 140, marginBottom: 16 }} />
-          <div className="grid grid--3">
-            <div className="skeleton" style={{ height: 120 }} />
-            <div className="skeleton" style={{ height: 120 }} />
-            <div className="skeleton" style={{ height: 120 }} />
-          </div>
-        </div>
-      </main>
-    );
+    return <main className="section container"><div className="muted">Loading…</div></main>;
   }
 
   return (
-    <main>
-      {/* Top card */}
-      <section className="section">
-        <div className="container card">
-          <div className="card-body" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-            <div>
-              <div className="muted" style={{ marginBottom: 6 }}>Welcome</div>
-              <h1 className="page-title" style={{ margin: 0 }}>{user.displayName || "Seller"}</h1>
-              <div className="muted" style={{ marginTop: 6, fontSize: 14 }}>{user.email}</div>
-            </div>
+    <main className="section container">
+      <h1>Seller Dashboard</h1>
 
-            <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-              {(!plan || expired) ? (
-                <>
-                  <span className="badge" style={{ background: "#fee2e2", color: "#991b1b" }}>
-                    {plan ? "Plan expired" : "No active plan"}
-                  </span>
-                  <Link to="/seller/plan" className="btn btn--brand">Buy a Plan</Link>
-                </>
-              ) : (
-                <>
-                  <span className="badge" style={{ background: "#dcfce7", color: "#166534" }}>
-                    {plan.name} / ₹{plan.priceINR} / {plan.uploads} uploads / Max ₹{plan.maxPrice}
-                  </span>
-                  <span className="badge">Expires: {formatDate(sellerDoc.expiresAt)}</span>
-                  <span className="badge">{remainingDays} days left</span>
-                  <Link to="/seller/renew" className="btn btn--subtle">Pay Again</Link>
-                </>
-              )}
-              <button
-                className="btn btn--brand"
-                disabled={!canUploadMore}
-                onClick={() => navigate("/seller/upload")}
-                title={!canUploadMore ? "Upgrade or renew to upload more" : "Upload a new photo"}
-              >
-                New Upload
-              </button>
-            </div>
-          </div>
+      <div className="grid">
+        <div className="card" style={{ gridColumn: "span 6" }}>
+          <h3 style={{ marginTop: 0 }}>Plan</h3>
+          {plan ? (
+            <>
+              <div className="line"><span>Plan ID</span><span>{plan.planId}</span></div>
+              <div className="line"><span>Uploads remaining</span><span>{plan.uploadsRemaining ?? planLimits.uploads}</span></div>
+              <div className="line"><span>Per-image price limit</span><span>{rupees(planLimits.maxPrice)}</span></div>
+              <div className="line"><span>Expires</span><span>{format(plan.expiresAt)}</span></div>
+              <button className="btn" style={{ marginTop: 12 }} onClick={renew}>Renew plan</button>
+            </>
+          ) : (
+            <>
+              <p className="muted">No active plan.</p>
+              <button className="btn" onClick={() => nav("/seller/plan")}>Buy a plan</button>
+            </>
+          )}
         </div>
-      </section>
 
-      {/* Stats */}
-      <Section title="Your stats">
-        <div className="grid grid--3">
-          <Stat label="Total uploads" value={uploadCount} hint={plan ? `Limit: ${plan.uploads}` : "Buy a plan to upload"} />
-          <Stat label="Max price per image" value={plan ? `₹${plan.maxPrice}` : "—"} hint={plan ? `${plan.name} plan` : "No active plan"} />
-          <Stat label="Plan days remaining" value={plan ? `${remainingDays} days` : "—"} hint={plan ? `Expires ${formatDate(sellerDoc.expiresAt)}` : "No active plan"} />
+        <div className="card" style={{ gridColumn: "span 6" }}>
+          <h3 style={{ marginTop: 0 }}>Upload</h3>
+          <p className="muted">You can upload up to your plan’s limit. Price per image is capped by your plan.</p>
+          <input type="file" accept="image/*" onChange={handleUpload} disabled={!plan || busyId === "upload"} />
         </div>
-      </Section>
 
-      {/* Recent uploads */}
-      <Section
-        title="Recent uploads"
-        right={
-          <button
-            className="btn btn--brand"
-            disabled={!canUploadMore}
-            onClick={() => navigate("/seller/upload")}
-          >
-            Upload photo
-          </button>
-        }
-      >
-        {recent.length === 0 ? (
-          <div className="card">
-            <div className="card-body">
-              <p className="muted">No uploads yet.</p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid--3">
-            {recent.map((r) => (
-              <div key={r.id} className="card" style={{ overflow: "hidden" }}>
-                <div className="card-body" style={{ padding: 0 }}>
-                  {/* Prefer watermarked URL if present */}
-                  {r.watermarkedUrl ? (
-                    <img src={r.watermarkedUrl} alt={r.title || "photo"} />
-                  ) : r.thumbUrl ? (
-                    <img src={r.thumbUrl} alt={r.title || "photo"} />
-                  ) : r.publicUrl ? (
-                    <img src={r.publicUrl} alt={r.title || "photo"} />
-                  ) : (
-                    <div className="skeleton" style={{ height: 180 }} />
-                  )}
-                </div>
-                <div className="card-body">
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 700 }}>{r.title || "Untitled"}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        {r.createdAt?.toMillis ? formatDate(r.createdAt) : "—"}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontWeight: 800 }}>₹{r.price ?? "—"}</div>
-                      <div className="muted" style={{ fontSize: 12 }}>{r.status || "active"}</div>
-                    </div>
+        <div className="card" style={{ gridColumn: "span 12" }}>
+          <h3 style={{ marginTop: 0 }}>Recent uploads</h3>
+          {photos.length === 0 ? (
+            <div className="muted">No uploads yet.</div>
+          ) : (
+            <div className="grid" style={{ rowGap: 16 }}>
+              {photos.map(p => (
+                <div key={p.id} className="card" style={{ gridColumn: "span 3", padding: 12 }}>
+                  <div style={{ aspectRatio: "4/3", overflow: "hidden", borderRadius: 10, background: "#f5f5f7" }}>
+                    {p.previewUrl ? <img src={p.previewUrl} alt={p.title || "photo"} /> : null}
                   </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                    <div className="muted">{rupees(p.price)}</div>
+                    <div className="muted">{format(p.createdAt)}</div>
+                  </div>
+                  <button className="btn" style={{ marginTop: 8, width: "100%" }}
+                          onClick={() => removePhoto(p)} disabled={busyId === p.id}>
+                    {busyId === p.id ? "Deleting…" : "Delete"}
+                  </button>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      {/* Help */}
-      <section className="section">
-        <div className="container card">
-          <div className="card-body">
-            <h3 style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>How pricing and limits work</h3>
-            <ul className="muted" style={{ paddingLeft: 18, marginTop: 6 }}>
-              <li>Your plan enforces a maximum <strong>number of uploads</strong> and a maximum <strong>price per image</strong>.</li>
-              <li>Plan validity is <strong>180 days</strong>. After that, you’ll need to pay again to get access.</li>
-              <li>Watermarks are visible to you and buyers until purchase. After payment, the buyer can download the clean HD image.</li>
-            </ul>
-            <div style={{ marginTop: 14, display: "flex", gap: 10 }}>
-              <Link to="/seller/plan" className="btn btn--brand">Buy a Plan</Link>
-              <Link to="/seller/renew" className="btn btn--subtle">Pay Again</Link>
-              <Link to="/contact" className="btn">Need help?</Link>
+              ))}
             </div>
-          </div>
+          )}
         </div>
-      </section>
-
-      <footer className="footer">© {new Date().getFullYear()} Picsellart</footer>
+      </div>
     </main>
   );
 }
