@@ -1,16 +1,17 @@
 {
   "version": 2,
   "framework": "vite",
-  "installCommand": "npm install",
+  "installCommand": "npm ci",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
 
-  // Single-Page App routing: send all routes to the built index.html
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
+  // We deploy only the frontend here. Your server_api runs on Firebase (or another backend).
+  // This prevents Vercel from trying to treat server_api as a Serverless Function set.
+  "ignoreCommand": "echo 'Ignoring server_api for Vercel frontend deploy'",
 
-  // Optional niceties
-  "cleanUrls": true,
-  "trailingSlash": false
+  // SPA fallback: let Vercel serve static files first, then rewrite everything to index.html
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
 }

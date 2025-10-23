@@ -1,7 +1,12 @@
-import { Link } from "react-router-dom";
-import { useMemo } from "react";
+// src/pages/LandingPage.jsx
+import React, { useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
-const HERO_IMAGES = [
+/**
+ * We render 3 random samples from /public/images/sample{1..6}.jpg
+ * This does NOT hit Firebase — it's instant and always available.
+ */
+const SAMPLE_POOL = [
   "/images/sample1.jpg",
   "/images/sample2.jpg",
   "/images/sample3.jpg",
@@ -10,110 +15,140 @@ const HERO_IMAGES = [
   "/images/sample6.jpg",
 ];
 
-function pickRandomUnique(arr, count) {
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
+function pickRandom(count = 3) {
+  const pool = [...SAMPLE_POOL];
+  const chosen = [];
+  for (let i = 0; i < count && pool.length; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    chosen.push(pool.splice(idx, 1)[0]);
   }
-  return copy.slice(0, count);
+  return chosen;
 }
 
 export default function LandingPage() {
-  // Pick 3 different images on first render/refresh
-  const featured = useMemo(() => pickRandomUnique(HERO_IMAGES, 3), []);
+  const navigate = useNavigate();
+  const randomImages = useMemo(() => pickRandom(3), []);
 
   return (
-    <div className="min-h-screen bg-white text-slate-800">
+    <main className="min-h-screen bg-white text-neutral-900">
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-4 pt-16 pb-10">
-        <div className="text-center">
-          <h1 className="text-4xl sm:text-5xl md:text-6xl tracking-tight font-medium text-slate-900">
-            Turn your photos into income
-          </h1>
-          <p className="mt-4 max-w-3xl mx-auto text-base sm:text-lg text-slate-600">
-            Join our marketplace where photographers, designers, and creators monetize their work.
-            Buyers get instant access to unique, premium images for their projects.
-          </p>
+      <section className="container mx-auto px-4 pt-16 pb-10">
+        <div className="grid lg:grid-cols-2 gap-8 items-center">
+          <div>
+            <h1 className="text-3xl sm:text-5xl font-semibold leading-tight tracking-tight">
+              Turn your Images into Income
+            </h1>
+            <p className="mt-4 text-neutral-600 text-base sm:text-lg">
+              Upload your Photos, designs, or creative content and start selling to designers,
+              architects and creators today.
+              | Secure Payments | Verified Sellers | Instant Downloads |
+            </p>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link
-              to="/seller/start"
-              className="btn btn-primary"
-              aria-label="Become a Seller"
-            >
-              Become a Seller
-            </Link>
+            {/* CTAs */}
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                to="/explore"
+                className="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-brand-600 text-white shadow-soft hover:bg-brand-700 transition"
+              >
+                Explore Photos
+              </Link>
+              <button
+                onClick={() => navigate("/buyer/login")}
+                className="px-5 py-3 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition"
+                aria-label="Buyer Login"
+                title="Buyer Login"
+              >
+                Buyer Login
+              </button>
+              <button
+                onClick={() => navigate("/seller/login")}
+                className="px-5 py-3 rounded-xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition"
+                aria-label="Seller Login"
+                title="Seller Login"
+              >
+                Seller Login
+              </button>
+            </div>
+
+            {/* Selling points */}
+            <ul className="mt-6 space-y-2 text-sm text-neutral-700">
+              <li>• Sellers pay after login and get access for 180 days.</li>
+              <li>• Upload limits & per-image price caps are enforced by plan.</li>
+              <li>
+                • Buyers & Sellers have focused dashboards to track purchases,
+                uploads, and earnings.
+              </li>
+              <li>• Watermarked previews; originals only after payment.</li>
+            </ul>
+          </div>
+
+          {/* Random gallery */}
+          <div className="grid grid-cols-3 gap-3 lg:gap-4">
+            {randomImages.map((src, i) => (
+              <div
+                key={src}
+                className="aspect-[4/5] w-full overflow-hidden rounded-2xl shadow-soft"
+              >
+                <img
+                  src={src}
+                  alt={`Showcase sample ${i + 1}`}
+                  className="h-full w-full object-cover"
+                  loading="eager"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features summary */}
+      <section className="border-t border-neutral-100 bg-neutral-50">
+        <div className="container mx-auto px-4 py-10 grid md:grid-cols-3 gap-6">
+          <div className="rounded-2xl bg-white p-6 shadow-soft">
+            <h3 className="font-semibold">For Buyers</h3>
+            <p className="mt-2 text-sm text-neutral-600">
+              Smart search, quick checkout (Razorpay), secure delivery of the
+              original. Your dashboard stores licenses & downloads.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white p-6 shadow-soft">
+            <h3 className="font-semibold">For Sellers</h3>
+            <p className="mt-2 text-sm text-neutral-600">
+              Upload with automatic watermark, set prices within your plan,
+              track views, sales, and payouts in a simple dashboard.
+            </p>
+          </div>
+          <div className="rounded-2xl bg-white p-6 shadow-soft">
+            <h3 className="font-semibold">Secure & Smooth</h3>
+            <p className="mt-2 text-sm text-neutral-600">
+              Google sign-in, Firestore + Storage, and server-verified payments
+              give a reliable, fraud-resistant marketplace flow.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Bottom CTA */}
+      <section className="container mx-auto px-4 py-12">
+        <div className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-700 p-8 text-white shadow-soft">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h3 className="text-xl sm:text-2xl font-semibold">
+                Ready to discover your next hero image?
+              </h3>
+              <p className="text-brand-100">
+                Explore curated photos from independent creators.
+              </p>
+            </div>
             <Link
               to="/explore"
-              className="btn btn-secondary"
-              aria-label="Explore Photos"
+              className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-white text-brand-700 font-medium hover:bg-brand-50 transition"
             >
-              Explore Photos
-            </Link>
-            <Link
-              to="/buyer/login"
-              className="btn btn-secondary"
-              aria-label="Buyer Login"
-            >
-              Buyer Login
-            </Link>
-            <Link
-              to="/seller/login"
-              className="btn btn-secondary"
-              aria-label="Seller Login"
-            >
-              Seller Login
+              Start Exploring
             </Link>
           </div>
         </div>
-
-        {/* Featured strip (random 3) */}
-        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {featured.map((src, idx) => (
-            <Link
-              to="/explore"
-              key={src}
-              className="group block overflow-hidden rounded-2xl ring-1 ring-slate-200/70 hover:ring-slate-300 transition"
-            >
-              <div className="aspect-[4/3] bg-slate-100 relative">
-                {/* eslint-disable-next-line jsx-a11y/alt-text */}
-                <img
-                  src={src}
-                  className="absolute inset-0 h-full w-full object-cover group-hover:scale-[1.02] transition-transform"
-                />
-              </div>
-              <div className="p-3 text-sm text-slate-600">
-                Curated from our sample gallery
-              </div>
-            </Link>
-          ))}
-        </div>
       </section>
-
-      {/* Value props (simple, sleek) */}
-      <section className="max-w-6xl mx-auto px-4 pb-20">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <Card title="Upload & Earn">
-            Set your price and start selling. We handle delivery & licensing.
-          </Card>
-          <Card title="Fast Checkout">
-            Buyers pay securely and receive instant download links.
-          </Card>
-          <Card title="Creator Friendly">
-            Transparent terms and easy payouts for creators.
-          </Card>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function Card({ title, children }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 p-5">
-      <h3 className="text-lg font-medium text-slate-900">{title}</h3>
-      <p className="mt-2 text-slate-600">{children}</p>
-    </div>
+    </main>
   );
 }

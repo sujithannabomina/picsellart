@@ -3,30 +3,22 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "PicSellArt – React + Vite + Firebase + Razorpay photo marketplace",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "lint": "eslint . --ext .js,.jsx --report-unused-disable-directives --max-warnings=0"
+    "preview": "vite preview --port 4173"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.2",
-    "axios": "^1.7.4",
-    "firebase": "^11.0.2",
+    "firebase": "^10.14.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.27.0"
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.0",
-    "eslint-plugin-react": "^7.35.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
-    "vite": "^5.4.8"
-  },
-  "engines": {
-    "node": "22.x"
+    "vite": "^5.4.10"
   }
 }
