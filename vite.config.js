@@ -4,32 +4,20 @@ import path from "node:path";
 
 export default defineConfig({
   plugins: [react()],
-  root: ".",                    // project root (contains index.html)
-  publicDir: "public",          // static assets
+  root: ".",
+  publicDir: "public",
   resolve: {
     alias: { "@": path.resolve(__dirname, "src") }
   },
-  server: {
-    port: 5173,
-    strictPort: true,
-    open: false
-  },
-  preview: {
-    port: 4173,
-    strictPort: true
-  },
+  server: { port: 5173, strictPort: true },
+  preview: { port: 4173, strictPort: true },
   build: {
     outDir: "dist",
+    target: "es2020",
     sourcemap: false,
-    target: "es2020",           // avoids top-level-await issues from earlier
-    cssMinify: true,
-    rollupOptions: {
-      // keep axios bundled (don’t externalize)
-      // SPA entry is root index.html – Vite handles it by default
-    }
+    cssMinify: true
   },
   css: {
-    // Use your existing PostCSS / Tailwind config files
     postcss: path.resolve(__dirname, "postcss.config.cjs")
   }
 });
