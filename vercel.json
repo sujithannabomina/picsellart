@@ -1,30 +1,38 @@
 {
   "version": 2,
 
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
+  /*
+    SPA fallback + keep API paths intact.
+    IMPORTANT: Do NOT include legacy `routes` if you use `rewrites`.
+  */
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
 
+  /*
+    Tell Vercel which runtime to use for your JS functions in /api.
+    Use a *valid* runtime version string. nodejs22.x matches your project setting.
+  */
   "functions": {
     "api/**/*.js": {
       "runtime": "nodejs22.x",
-      "memory": 1024,
+      "memory": 512,
       "maxDuration": 10
     }
   },
 
-  "cleanUrls": true,
-  "trailingSlash": false,
+  /*
+    Optional: Skip rebuilds when only docs / non-source files changed.
+    Safe default – you can keep or remove.
+  */
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- . ':!src' ':!public' ':!api' ':!package.json' ':!vite.config.js' ':!vercel.json'",
 
-  "headers": [
-    {
-      "source": "/:all.(js|css|png|jpg|jpeg|gif|webp|svg|ico|txt|xml|woff|woff2)",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
-      ]
-    }
-  ],
-
-  "rewrites": [
-    { "source": "/((?!api/|assets/).*)", "destination": "/index.html" }
-  ]
+  /*
+    Let Vercel know we’re a static (Vite) frontend—build output goes to /dist.
+    (Vercel already detects Vite, but being explicit is harmless.)
+  */
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
 }
