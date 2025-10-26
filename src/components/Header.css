@@ -1,28 +1,108 @@
-.site-header {
-  position: sticky; top: 0; z-index: 40;
-  background: #fff; border-bottom: 1px solid #eef0f3;
+/* Lightweight styles layered on top of Tailwind; uses CSS vars for easy tuning */
+:root {
+  --psa-bg: #ffffff;
+  --psa-text: #0f172a;        /* slate-900 */
+  --psa-muted: #64748b;       /* slate-500 */
+  --psa-border: #e2e8f0;      /* slate-200 */
+  --psa-brand: #111827;       /* near-black for brand text */
 }
-.header-inner {
-  height: 64px; display: flex; align-items: center; justify-content: space-between;
+
+.psa-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: var(--psa-bg);
+  border-bottom: 1px solid var(--psa-border);
+  backdrop-filter: saturate(180%) blur(6px);
 }
-.brand { display:flex; align-items:center; gap:10px; text-decoration:none; }
-.brand-logo { width:28px; height:28px; }
-.brand-text { font-weight:600; color:#111827; letter-spacing:.2px; }
 
-.nav { display:flex; gap:20px; }
-.nav-link {
-  color:#374151; text-decoration:none; font-weight:500;
-  padding:8px 6px; border-radius:8px;
+.psa-header-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
 }
-.nav-link.active { color:#111827; background:#f3f4f6; }
 
-.cta { display:flex; gap:10px; }
-.btn { border:none; border-radius:10px; padding:10px 16px; text-decoration:none; font-weight:600; }
-.btn-ghost { background:#f3f4f6; color:#111827; }
-.btn-ghost:hover { background:#e5e7eb; }
-.btn-primary { background:#6b66ff; color:#fff; box-shadow: 0 6px 14px rgba(107,102,255,.25); }
-.btn-primary:hover { filter:brightness(.95); }
+.psa-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--psa-brand);
+  font-weight: 700;
+  letter-spacing: .2px;
+}
 
-@media (max-width: 900px) {
-  .nav { display:none; }
+.psa-logo {
+  display: block;
+}
+
+.psa-brand-text {
+  font-size: 18px;
+}
+
+.psa-nav {
+  margin-left: 10px;
+  display: none;
+  gap: 14px;
+}
+@media (min-width: 900px) {
+  .psa-nav { display: inline-flex; }
+}
+
+.psa-nav-link {
+  color: var(--psa-muted);
+  text-decoration: none;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.psa-nav-link.active,
+.psa-nav-link:hover {
+  color: var(--psa-text);
+  background: #f8fafc; /* slate-50 */
+}
+
+.psa-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Buttons use the Tailwind layer added in index.css; these ensure nice layout if Tailwind purged */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition: transform .06s ease, box-shadow .15s ease, background .15s ease, color .15s ease, border-color .15s ease;
+  will-change: transform;
+}
+
+.btn:hover { transform: translateY(-1px); }
+
+.btn-primary {
+  background: linear-gradient(135deg, #111827, #1f2937);
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(2,6,23,.15);
+}
+.btn-primary:hover {
+  background: linear-gradient(135deg, #0b1220, #111827);
+}
+
+.btn-ghost {
+  background: #fff;
+  color: var(--psa-text);
+  border-color: var(--psa-border);
+}
+.btn-ghost:hover {
+  background: #f8fafc;
 }

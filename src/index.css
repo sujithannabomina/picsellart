@@ -1,7 +1,70 @@
+/* Tailwind base layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Global tweaks */
-:root { color-scheme: light dark; }
-html, body, #root { height: 100%; }
+/* ---- Base polish (safe, lightweight) ---- */
+@layer base {
+  html, body, #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-white text-slate-900 antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { @apply decoration-0; }
+}
+
+/* ---- Reusable components + landing layout ---- */
+@layer components {
+  /* Buttons */
+  .btn {
+    @apply inline-flex items-center justify-center font-semibold rounded-full
+           h-10 px-4 transition-transform duration-100 ease-out
+           border border-transparent;
+  }
+  .btn:hover { transform: translateY(-1px); }
+
+  .btn-primary {
+    @apply text-white shadow-lg;
+    background-image: linear-gradient(135deg, #111827, #1f2937); /* near-black -> gray-800 */
+  }
+  .btn-primary:hover {
+    background-image: linear-gradient(135deg, #0b1220, #111827);
+  }
+
+  .btn-ghost {
+    @apply bg-white text-slate-900 border-slate-200 hover:bg-slate-50;
+  }
+
+  /* Landing layout */
+  .psa-landing { @apply bg-white; }
+
+  .psa-hero { @apply pt-10 pb-8 md:pt-16 md:pb-12; }
+  .psa-hero-grid {
+    @apply max-w-[1100px] mx-auto px-4 grid gap-8 md:grid-cols-2 items-center;
+  }
+
+  .psa-hero-copy { @apply space-y-5; }
+  .psa-hero-title { @apply text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900; }
+  .psa-hero-subtitle { @apply text-slate-600 leading-relaxed max-w-prose; }
+
+  .psa-cta-row { @apply flex flex-wrap gap-3 pt-2; }
+
+  .psa-trust { @apply text-sm text-slate-500 space-y-1 list-disc pl-5 pt-1; }
+
+  .psa-hero-gallery { @apply flex gap-4 md:justify-end; }
+  .psa-frame {
+    @apply rounded-xl overflow-hidden ring-1 ring-slate-200 bg-slate-100
+           w-44 h-56 md:w-56 md:h-64;
+  }
+  .psa-frame img { @apply w-full h-full object-cover; }
+
+  /* Optional mini features (can be removed) */
+  .psa-feature-strip { @apply bg-slate-50 border-t border-slate-200 mt-10; }
+  .psa-feature-strip > div { @apply max-w-[1100px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 px-4 py-6; }
+  .psa-feature { @apply bg-white rounded-2xl p-4 ring-1 ring-slate-200; }
+  .psa-feature h3 { @apply font-bold text-slate-900 mb-1; }
+  .psa-feature p { @apply text-sm text-slate-600; }
+}

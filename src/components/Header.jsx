@@ -1,24 +1,53 @@
-import React from 'react';
-import { NavLink, Link } from 'react-router-dom';
+import React from "react";
+import { Link, NavLink } from "react-router-dom";
+import "./Header.css";
 
 export default function Header() {
   return (
-    <header className="site-header">
-      <div className="container header-row">
-        <Link to="/" className="logo">
-          <img src="/logo.svg" alt="PicSellArt" height="28" />
-          <span>PicSellArt</span>
+    <header className="psa-header">
+      <div className="psa-header-inner">
+        {/* Logo / Brand */}
+        <Link to="/" className="psa-brand" aria-label="Picsellart Home">
+          <img
+            src="/logo.svg"
+            alt="Picsellart"
+            className="psa-logo"
+            height="28"
+            width="28"
+          />
+          <span className="psa-brand-text">Picsellart</span>
         </Link>
 
-        <nav className="nav">
-          <NavLink to="/explore">Explore</NavLink>
-          <NavLink to="/faq">FAQ</NavLink>
-          <NavLink to="/contact">Contact</NavLink>
+        {/* Primary Nav */}
+        <nav className="psa-nav">
+          <NavLink to="/explore" className="psa-nav-link">
+            Explore
+          </NavLink>
+          <NavLink to="/faq" className="psa-nav-link">
+            FAQ
+          </NavLink>
+          <NavLink to="/contact" className="psa-nav-link">
+            Contact
+          </NavLink>
+          <NavLink to="/license" className="psa-nav-link">
+            License
+          </NavLink>
+          <NavLink to="/refund" className="psa-nav-link">
+            Refunds
+          </NavLink>
         </nav>
 
-        <div className="cta">
-          <Link to="/buyer-login" className="btn btn-outline">Buyer Login</Link>
-          <Link to="/seller-login" className="btn btn-primary">Seller Login</Link>
+        {/* Auth + CTA */}
+        <div className="psa-actions">
+          <Link to="/buyer-login" className="btn btn-ghost">
+            Buyer Login
+          </Link>
+          <Link to="/seller-login" className="btn btn-ghost">
+            Seller Login
+          </Link>
+          <Link to="/seller-subscribe" className="btn btn-primary">
+            Start Selling
+          </Link>
         </div>
       </div>
     </header>
