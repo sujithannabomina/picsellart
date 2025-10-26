@@ -2,15 +2,16 @@ import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 /**
- * Landing page:
- * - Keeps your exact headline/subtitle copy
- * - Pill buttons (Buyer Login, Seller Login, Start Selling)
- * - 3 showcase images randomized on each refresh (from /public/images)
- * - No backend details shown; just short trust bullets
- * - Optional tiny feature strip at bottom (can be removed)
+ * LandingPage.jsx
+ * - Clean hero like your older mock
+ * - Rotating 3-image filmstrip from /public/images
+ * - Primary CTA routes sellers to plan/payment
+ * - Secondary CTA routes to explore grid
+ *
+ * Keep the headline/subcopy EXACT as requested.
  */
 
-const CATALOG = [
+const ALL_IMAGES = [
   "/images/sample1.jpg",
   "/images/sample2.jpg",
   "/images/sample3.jpg",
@@ -19,78 +20,56 @@ const CATALOG = [
   "/images/sample6.jpg",
 ];
 
-function pickThree(from) {
-  const arr = [...from];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+function pickThree(arr) {
+  // Deterministic-ish shuffle per refresh, then take 3
+  const seed = Date.now() % 97;
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = (i + seed) % (i + 1);
+    [copy[i], copy[j]] = [copy[j], copy[i]];
   }
-  return arr.slice(0, 3);
+  return copy.slice(0, 3);
 }
 
 export default function LandingPage() {
-  const images = useMemo(() => pickThree(CATALOG), []);
+  // Pick three on each mount/refresh
+  const picks = useMemo(() => pickThree(ALL_IMAGES), []);
 
   return (
-    <main className="psa-landing">
-      {/* Hero */}
-      <section className="psa-hero">
-        <div className="psa-hero-grid">
-          {/* Left: copy + CTAs */}
-          <div className="psa-hero-copy">
-            <h1 className="psa-hero-title">Turn your Images into Income</h1>
+    <main className="main-safe-top">
+      <section className="section-pad">
+        <div className="hero-wrap">
+          {/* HERO */}
+          <header aria-label="Intro">
+            <h1 className="hero-title">Turn your Images into Income</h1>
 
-            <p className="psa-hero-subtitle">
+            <p className="hero-sub">
               Upload your Photos, designs, or creative content and start selling to
               designers, architects and creators today. | Secure Payments | Verified
               Sellers | Instant Downloads |
             </p>
 
-            <div className="psa-cta-row">
-              <Link to="/buyer-login" className="btn btn-ghost">
-                Buyer Login
-              </Link>
-              <Link to="/seller-login" className="btn btn-ghost">
-                Seller Login
-              </Link>
-              <Link to="/seller-subscribe" className="btn btn-primary">
+            {/* CTAs */}
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <Link to="/seller/plan" className="btn btn-primary">
                 Start Selling
+              </Link>
+              <Link to="/explore" className="btn btn-ghost">
+                Explore Photos
               </Link>
             </div>
 
-            {/* short, user-facing assurances (kept compact) */}
-            <ul className="psa-trust">
-              <li>Server-verified payments with Razorpay.</li>
-              <li>Originals delivered only after successful payment.</li>
-              <li>Watermarked previews protect your work.</li>
-            </ul>
-          </div>
+            {/* Tiny trust line (kept compact) */}
+            <div className="hero-badges">Secure • Fast Payouts • Simple Setup</div>
+          </header>
 
-          {/* Right: randomized images */}
-          <div className="psa-hero-gallery">
-            {images.map((src, i) => (
-              <div className="psa-frame" key={src}>
-                <img src={src} alt={`Showcase ${i + 1}`} loading="eager" />
-              </div>
+          {/* FILMSTRIP (3 images) */}
+          <div className="filmstrip">
+            {picks.map((src, i) => (
+              <figure key={src + i} className="film-img">
+                <img src={src} alt="Popular photo on picsellart" loading="eager" />
+              </figure>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Optional micro-features. Remove this whole section if you want zero content below hero. */}
-      <section className="psa-feature-strip">
-        <div>
-          <div className="psa-feature">
-            <h3>For Buyers</h3>
-            <p>Quick checkout with Razorpay. Licenses & downloads saved to your dashboard.</p>
-          </div>
-          <div className="psa-feature">
-            <h3>For Sellers</h3>
-            <p>Upload, auto-watermark previews, set prices by plan, track sales & payouts.</p>
-          </div>
-          <div className="psa-feature">
-            <h3>Secure & Smooth</h3>
-            <p>Google sign-in, Firebase storage, and verified payments for a safe flow.</p>
           </div>
         </div>
       </section>

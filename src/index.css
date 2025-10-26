@@ -1,70 +1,77 @@
-/* Tailwind base layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ---- Base polish (safe, lightweight) ---- */
-@layer base {
-  html, body, #root {
-    height: 100%;
-  }
-  body {
-    @apply bg-white text-slate-900 antialiased;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-  a { @apply decoration-0; }
+/* -------- Theme tokens (light, subtle) -------- */
+:root {
+  --brand: #2563eb;  /* blue-600 */
+  --brand-700: #1d4ed8;
+  --ink: #0f172a;    /* slate-900 */
+  --sub: #475569;    /* slate-600 */
+  --muted: #94a3b8;  /* slate-400 */
+  --ring: 0 0 0 3px rgba(37, 99, 235, 0.25);
 }
 
-/* ---- Reusable components + landing layout ---- */
-@layer components {
-  /* Buttons */
-  .btn {
-    @apply inline-flex items-center justify-center font-semibold rounded-full
-           h-10 px-4 transition-transform duration-100 ease-out
-           border border-transparent;
-  }
-  .btn:hover { transform: translateY(-1px); }
+/* -------- Reusable bits -------- */
+.btn {
+  @apply inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-medium transition;
+}
 
-  .btn-primary {
-    @apply text-white shadow-lg;
-    background-image: linear-gradient(135deg, #111827, #1f2937); /* near-black -> gray-800 */
-  }
-  .btn-primary:hover {
-    background-image: linear-gradient(135deg, #0b1220, #111827);
-  }
+.btn-primary {
+  background: var(--brand);
+  color: white;
+}
+.btn-primary:hover { background: var(--brand-700); }
+.btn-primary:focus { outline: none; box-shadow: var(--ring); }
 
-  .btn-ghost {
-    @apply bg-white text-slate-900 border-slate-200 hover:bg-slate-50;
-  }
+.btn-ghost {
+  @apply border border-slate-300 text-slate-700 bg-white;
+}
+.btn-ghost:hover { @apply border-slate-400 bg-slate-50; }
+.btn-ghost:focus { outline: none; box-shadow: var(--ring); }
 
-  /* Landing layout */
-  .psa-landing { @apply bg-white; }
+.hero-wrap {
+  @apply mx-auto w-full max-w-6xl px-4 md:px-6;
+}
 
-  .psa-hero { @apply pt-10 pb-8 md:pt-16 md:pb-12; }
-  .psa-hero-grid {
-    @apply max-w-[1100px] mx-auto px-4 grid gap-8 md:grid-cols-2 items-center;
-  }
+.hero-eyebrow {
+  @apply text-xs font-medium uppercase tracking-wider text-slate-500;
+}
 
-  .psa-hero-copy { @apply space-y-5; }
-  .psa-hero-title { @apply text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900; }
-  .psa-hero-subtitle { @apply text-slate-600 leading-relaxed max-w-prose; }
+.hero-title {
+  @apply text-3xl leading-tight font-extrabold text-slate-900 md:text-5xl;
+}
 
-  .psa-cta-row { @apply flex flex-wrap gap-3 pt-2; }
+.hero-sub {
+  @apply mt-3 max-w-2xl text-sm md:text-base text-slate-600;
+}
 
-  .psa-trust { @apply text-sm text-slate-500 space-y-1 list-disc pl-5 pt-1; }
+.hero-badges {
+  @apply mt-2 text-xs text-slate-500;
+}
 
-  .psa-hero-gallery { @apply flex gap-4 md:justify-end; }
-  .psa-frame {
-    @apply rounded-xl overflow-hidden ring-1 ring-slate-200 bg-slate-100
-           w-44 h-56 md:w-56 md:h-64;
-  }
-  .psa-frame img { @apply w-full h-full object-cover; }
+/* Row of rotating images */
+.filmstrip {
+  @apply mt-8 flex items-center gap-4;
+}
 
-  /* Optional mini features (can be removed) */
-  .psa-feature-strip { @apply bg-slate-50 border-t border-slate-200 mt-10; }
-  .psa-feature-strip > div { @apply max-w-[1100px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 px-4 py-6; }
-  .psa-feature { @apply bg-white rounded-2xl p-4 ring-1 ring-slate-200; }
-  .psa-feature h3 { @apply font-bold text-slate-900 mb-1; }
-  .psa-feature p { @apply text-sm text-slate-600; }
+.film-img {
+  @apply h-40 w-28 shrink-0 overflow-hidden rounded-xl bg-slate-100 ring-1 ring-slate-200 md:h-48 md:w-36;
+}
+.film-img img {
+  @apply h-full w-full object-cover transition-transform duration-500 ease-out;
+}
+.film-img:hover img { transform: scale(1.05); }
+
+/* Page background spacing */
+.section-pad {
+  @apply py-10 md:py-14;
+}
+
+/* Optional: hiding focus outlines handled by .btn:focus ring */
+:focus-visible { outline: none; }
+
+/* Minimal header spacing safety (in case Header.jsx exists) */
+.main-safe-top {
+  @apply pt-4 md:pt-6;
 }
