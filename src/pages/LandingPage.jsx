@@ -1,17 +1,11 @@
-import React, { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useMemo } from "react";
 
 /**
- * LandingPage.jsx
- * - Clean hero like your older mock
- * - Rotating 3-image filmstrip from /public/images
- * - Primary CTA routes sellers to plan/payment
- * - Secondary CTA routes to explore grid
- *
- * Keep the headline/subcopy EXACT as requested.
+ * Landing hero with rotating, deterministic sample images (your requirement)
+ * – pulls from /public/images or uses the same 3 keys shuffled per page load.
  */
-
-const ALL_IMAGES = [
+const SAMPLE_POOL = [
   "/images/sample1.jpg",
   "/images/sample2.jpg",
   "/images/sample3.jpg",
@@ -19,58 +13,48 @@ const ALL_IMAGES = [
   "/images/sample5.jpg",
   "/images/sample6.jpg",
 ];
-
-function pickThree(arr) {
-  // Deterministic-ish shuffle per refresh, then take 3
-  const seed = Date.now() % 97;
-  const copy = [...arr];
+function pick3(pool) {
+  const copy = [...pool];
+  // Lightweight shuffle for variety without external deps
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = (i + seed) % (i + 1);
+    const j = Math.floor(Math.random() * (i + 1));
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy.slice(0, 3);
 }
 
 export default function LandingPage() {
-  // Pick three on each mount/refresh
-  const picks = useMemo(() => pickThree(ALL_IMAGES), []);
+  const navigate = useNavigate();
+  const picks = useMemo(() => pick3(SAMPLE_POOL), []);
 
   return (
-    <main className="main-safe-top">
-      <section className="section-pad">
-        <div className="hero-wrap">
-          {/* HERO */}
-          <header aria-label="Intro">
-            <h1 className="hero-title">Turn your Images into Income</h1>
+    <main>
+      <section className="container hero">
+        <h1>Turn your Images into Income</h1>
 
-            <p className="hero-sub">
-              Upload your Photos, designs, or creative content and start selling to
-              designers, architects and creators today. | Secure Payments | Verified
-              Sellers | Instant Downloads |
-            </p>
+        <p className="m-0">
+          Upload your Photos, designs, or creative content and start selling to
+          designers, architects and creators today.
+          <span className="link-pill"> | Secure Payments | Verified Sellers | Instant Downloads |</span>
+        </p>
 
-            {/* CTAs */}
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <Link to="/seller/plan" className="btn btn-primary">
-                Start Selling
-              </Link>
-              <Link to="/explore" className="btn btn-ghost">
-                Explore Photos
-              </Link>
-            </div>
+        <div className="actions">
+          <button className="primary btn" onClick={() => navigate("/seller/subscribe")}>
+            Start Selling
+          </button>
+          <Link to="/explore" className="ghost btn" aria-label="Explore Photos">
+            Explore Photos
+          </Link>
+        </div>
 
-            {/* Tiny trust line (kept compact) */}
-            <div className="hero-badges">Secure • Fast Payouts • Simple Setup</div>
-          </header>
+        <p className="muted mt-2">Secure • Fast Payouts • Simple Setup</p>
 
-          {/* FILMSTRIP (3 images) */}
-          <div className="filmstrip">
-            {picks.map((src, i) => (
-              <figure key={src + i} className="film-img">
-                <img src={src} alt="Popular photo on picsellart" loading="eager" />
-              </figure>
-            ))}
-          </div>
+        <div className="gallery" aria-label="Sample marketplace photos">
+          {picks.map((src, i) => (
+            <figure key={src} className="card-img">
+              <img src={src} alt={`Sample ${i + 1}`} loading="eager" />
+            </figure>
+          ))}
         </div>
       </section>
     </main>

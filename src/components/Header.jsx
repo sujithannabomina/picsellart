@@ -1,51 +1,32 @@
-import React from "react";
-import { Link, NavLink } from "react-router-dom";
-import "./Header.css";
+import { NavLink, Link, useLocation } from "react-router-dom";
 
 export default function Header() {
+  const { pathname } = useLocation();
+
   return (
-    <header className="psa-header">
-      <div className="psa-header-inner">
-        {/* Logo / Brand */}
-        <Link to="/" className="psa-brand" aria-label="Picsellart Home">
-          <img
-            src="/logo.svg"
-            alt="Picsellart"
-            className="psa-logo"
-            height="28"
-            width="28"
-          />
-          <span className="psa-brand-text">Picsellart</span>
+    <header className="site-header">
+      <div className="container navbar">
+        <Link to="/" className="brand" aria-label="Picsellart">
+          {/* uses /public/logo.png automatically */}
+          <img src="/logo.png" alt="Picsellart logo" />
+          <span>Picsellart</span>
         </Link>
 
-        {/* Primary Nav */}
-        <nav className="psa-nav">
-          <NavLink to="/explore" className="psa-nav-link">
-            Explore
-          </NavLink>
-          <NavLink to="/faq" className="psa-nav-link">
-            FAQ
-          </NavLink>
-          <NavLink to="/contact" className="psa-nav-link">
-            Contact
-          </NavLink>
-          <NavLink to="/license" className="psa-nav-link">
-            License
-          </NavLink>
-          <NavLink to="/refund" className="psa-nav-link">
-            Refunds
-          </NavLink>
+        <nav className="nav" aria-label="Primary">
+          <NavLink to="/explore" className={({isActive}) => isActive ? "active" : undefined}>Explore</NavLink>
+          <NavLink to="/faq" className={({isActive}) => isActive ? "active" : undefined}>FAQ</NavLink>
+          <NavLink to="/contact" className={({isActive}) => isActive ? "active" : undefined}>Contact</NavLink>
+          <NavLink to="/refund" className={({isActive}) => isActive ? "active" : undefined}>Refunds</NavLink>
         </nav>
 
-        {/* Auth + CTA */}
-        <div className="psa-actions">
-          <Link to="/buyer-login" className="btn btn-ghost">
-            Buyer Login
-          </Link>
-          <Link to="/seller-login" className="btn btn-ghost">
-            Seller Login
-          </Link>
-          <Link to="/seller-subscribe" className="btn btn-primary">
+        <div className="nav-cta">
+          <Link to="/buyer/login" className="ghost">Buyer Login</Link>
+          <Link to="/seller/login" className="ghost">Seller Login</Link>
+          <Link
+            to="/seller/subscribe"
+            className="primary"
+            aria-current={pathname.startsWith("/seller") ? "page" : undefined}
+          >
             Start Selling
           </Link>
         </div>
