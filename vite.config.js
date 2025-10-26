@@ -1,19 +1,16 @@
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-// Vite config for SPA + Vercel
 export default defineConfig({
   plugins: [react()],
+  server: { port: 5173 },
   build: {
-    outDir: 'dist',
     sourcemap: false,
-    // keep vendor chunking default – stable
+    outDir: "dist",
+    rollupOptions: {
+      // keep everything bundled for SPA; no externals required
+    }
   },
-  server: {
-    host: true,
-    port: 5173
-  },
-  preview: {
-    port: 4173
-  }
+  // Vercel serves /api/* separately; SPA fallback for others:
+  preview: { port: 4173 }
 });

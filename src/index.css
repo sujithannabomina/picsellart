@@ -2,7 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* your global styles can follow below */
-:root {
-  color-scheme: light dark;
-}
+/* Global tweaks */
+:root { color-scheme: light dark; }
+html, body, #root { height: 100%; }
