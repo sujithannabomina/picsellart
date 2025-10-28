@@ -1,27 +1,20 @@
 // src/pages/BuyerLogin.jsx
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 export default function BuyerLogin() {
-  const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const { user, signInBuyer } = useAuth();
   const navigate = useNavigate();
+  const loc = useLocation();
 
-  if (loading) return <div className="pageWrap"><p className="muted">Loading…</p></div>;
+  useEffect(() => {
+    (async () => {
+      if (!user) await signInBuyer();
+      // go back to Explore if came from buy, else stay on buyer dashboard
+      navigate('/buyer', { replace: true, state: { from: loc.state?.from || '/' } });
+    })();
+  }, [user]);
 
-  return (
-    <div className="pageWrap">
-      <h2 className="pageTitle">Buyer Login</h2>
-      {user ? (
-        <>
-          <p className="muted">Signed in as <b>{user.displayName}</b></p>
-          <div className="row">
-            <button className="btn" onClick={() => navigate("/explore")}>Go to Explore</button>
-            <button className="btn outline" onClick={signOut}>Sign out</button>
-          </div>
-        </>
-      ) : (
-        <button className="btn primary" onClick={signInWithGoogle}>Continue with Google</button>
-      )}
-    </div>
-  );
+  return <div className="max-w-3xl mx-auto px-4 py-10">Signing you in…</div>;
 }

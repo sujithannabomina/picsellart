@@ -1,22 +1,57 @@
-// Firebase core init (Web v9 modular)
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
+// src/lib/firebase.js
+// Single source of truth for Firebase (used by context and pages)
+import { initializeApp } from 'firebase/app';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
+import {
+  getFirestore,
+  serverTimestamp,
+  doc,
+  getDoc,
+  setDoc,
+} from 'firebase/firestore';
 
+// ---- Your existing config (unchanged) ----
 const firebaseConfig = {
-  apiKey: "AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ",
-  authDomain: "picsellart-619a7.firebaseapp.com",
-  projectId: "picsellart-619a7",
-  storageBucket: "picsellart-619a7.firebasestorage.app",
-  messagingSenderId: "347448234684",
-  appId: "1:347448234684:web:24f131272d382cc9f1b6b9",
-  measurementId: "G-3KNDHJ6JZY",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
+
+// Auth
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+export const google = new GoogleAuthProvider();
+
+// DB
 export const db = getFirestore(app);
-export const storage = getStorage(app);
-export default app;
+export const serverTs = serverTimestamp;
+
+// ---- helpers used by AuthContext ----
+export async function ensureUserDoc(uid, payload) {
+  const ref = doc(db, 'users', uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    await setDoc(ref, { ...payload, createdAt: serverTs() });
+  } else if (payload && payload.role) {
+    // Keep role updated if switching paths
+    await setDoc(ref, { role: payload.role }, { merge: true });
+  }
+  return ref;
+}
+
+export {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+};

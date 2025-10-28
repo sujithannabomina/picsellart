@@ -1,76 +1,78 @@
 // src/pages/PhotoDetails.jsx
-// Receives photo payload via router state or fetch; uses Razorpay to purchase.
-import React, { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { openRazorpay, toCustomer } from "../utils/loadRazorpay";
-import { useAuth } from "../context/AuthContext";
-
-function usePhotoPayload() {
-  const { state } = useLocation();
-  // Expect at least { id, title, previewUrl, price } via router state.
-  // If not present, you can later fetch by route param.
-  return state || {};
-}
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { loadRazorpay, createServerOrder, openCheckout } from '../utils/razorpay';
+import { useAuth } from '../context/AuthContext';
 
 export default function PhotoDetails() {
-  const { user } = useAuth?.() || { user: null };
-  const nav = useNavigate();
-  const photo = usePhotoPayload();
-  const [busy, setBusy] = useState(false);
-  const customer = toCustomer(user);
+  const { id } = useParams();
+  const [search] = useSearchParams();
+  const navigate = useNavigate();
+  const { user, signInBuyer } = useAuth();
+  const [photo, setPhoto] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const displayPrice = useMemo(() => {
-    const n = Number(photo?.price ?? 0);
-    return Number.isFinite(n) ? n.toFixed(2) : "0.00";
-  }, [photo?.price]);
-
-  async function buy() {
-    if (!user) return nav("/buyer/login");
-    if (!photo?.id) return alert("Missing photo information.");
-    setBusy(true);
-    try {
-      await openRazorpay({
-        mode: "photo",
-        userId: user.uid || user.id,
-        amount: photo.price,                 // in rupees (server will convert to paise if needed)
-        customer,
-        meta: { photoId: photo.id, title: photo.title || "" },
-      });
-      nav("/buyer/dashboard");
-    } catch (e) {
-      console.error(e);
-      alert("Could not start payment. Please try again.");
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    async function run() {
+      const snap = await getDoc(doc(db, 'photos', id));
+      setPhoto(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      setLoading(false);
     }
-  }
+    run();
+  }, [id]);
+
+  if (loading) return <div className="max-w-4xl mx-auto px-4 py-10">Loading…</div>;
+  if (!photo) return <div className="max-w-4xl mx-auto px-4 py-10">Not found</div>;
+
+  const handleBuy = async () => {
+    if (!user) await signInBuyer();
+    await loadRazorpay();
+    const { orderId, amount, currency, key } = await createServerOrder(
+      { type: 'photo', photoId: photo.id },
+      '/api/razorpay/createPhotoOrder'
+    );
+    openCheckout({
+      key,
+      amount,
+      currency,
+      name: 'Picsellart',
+      description: `Purchase: ${photo.title}`,
+      order_id: orderId,
+      prefill: {},
+      notes: { photoId: photo.id },
+      handler: function onSuccess() {
+        navigate(`/photo/${photo.id}?p=success`);
+      },
+    });
+  };
 
   return (
-    <main className="section container">
-      <div className="grid">
-        <div className="card" style={{ gridColumn: "span 7" }}>
-          {photo?.previewUrl ? (
-            <img src={photo.previewUrl} alt={photo.title || "Preview"} />
-          ) : (
-            <div style={{ padding: 24 }} className="muted">No preview available.</div>
-          )}
-        </div>
-
-        <div className="card" style={{ gridColumn: "span 5", padding: 18 }}>
-          <h2 style={{ marginTop: 0 }}>{photo.title || "Untitled photo"}</h2>
-          <p className="muted">{photo.description || "High-resolution licensed image."}</p>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 16 }}>
-            <strong style={{ fontSize: 24 }}>₹{displayPrice}</strong>
-            <span className="muted">one-time</span>
-          </div>
-          <button className="btn" style={{ marginTop: 16, width: "100%" }} onClick={buy} disabled={busy}>
-            {busy ? "Starting checkout…" : "Buy & download"}
-          </button>
-          <p className="muted" style={{ marginTop: 10 }}>
-            Watermarked preview is shown above. Original will be available in your dashboard after successful payment.
-          </p>
-        </div>
+    <div className="max-w-4xl mx-auto px-4 py-10">
+      <img
+        src={photo.watermarkUrl}
+        alt={photo.title}
+        className="w-full rounded-2xl object-cover"
+      />
+      <h1 className="mt-6 text-3xl font-bold">{photo.title || 'Untitled'}</h1>
+      {Array.isArray(photo.tags) && photo.tags.length > 0 && (
+        <div className="mt-2 text-slate-600">#{photo.tags.join(' #')}</div>
+      )}
+      <div className="mt-4 flex items-center gap-3">
+        <div className="text-xl font-semibold">₹{photo.price ?? 499}</div>
+        <button
+          onClick={handleBuy}
+          className="px-5 py-2 rounded-full bg-blue-600 text-white hover:bg-blue-700"
+        >
+          Buy & Download
+        </button>
       </div>
-    </main>
+      {search.get('p') === 'success' && (
+        <div className="mt-6 rounded-lg bg-green-50 text-green-700 p-3">
+          Payment successful! Your download is available in your Buyer dashboard.
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,27 +1,22 @@
 // src/pages/SellerLogin.jsx
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useEffect } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { db } from '../lib/firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
 export default function SellerLogin() {
-  const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const { user, signInSeller } = useAuth();
   const navigate = useNavigate();
 
-  if (loading) return <div className="pageWrap"><p className="muted">Loading…</p></div>;
+  useEffect(() => {
+    (async () => {
+      const u = user || (await signInSeller());
+      const snap = await getDoc(doc(db, 'sellers', u.uid));
+      const active = snap.exists() && snap.data()?.activePlan;
+      navigate(active ? '/seller/dashboard' : '/seller/subscribe', { replace: true });
+    })();
+  }, [user]);
 
-  return (
-    <div className="pageWrap">
-      <h2 className="pageTitle">Seller Login</h2>
-      {user ? (
-        <>
-          <p className="muted">Signed in as <b>{user.displayName}</b></p>
-          <div className="row">
-            <button className="btn primary" onClick={() => navigate("/seller/subscribe")}>Start Selling</button>
-            <button className="btn outline" onClick={signOut}>Sign out</button>
-          </div>
-        </>
-      ) : (
-        <button className="btn primary" onClick={signInWithGoogle}>Continue with Google</button>
-      )}
-    </div>
-  );
+  return <div className="max-w-3xl mx-auto px-4 py-10">Signing you in…</div>;
 }
