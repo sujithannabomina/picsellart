@@ -1,6 +1,5 @@
-// /src/pages/LandingPage.jsx
-import { Link, useNavigate } from "react-router-dom";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 const PUBLIC_IMAGES = [
   "/images/sample1.jpg",
@@ -11,47 +10,80 @@ const PUBLIC_IMAGES = [
   "/images/sample6.jpg",
 ];
 
-function pickThree(arr) {
-  // rotate on each refresh: random 3 distinct images
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, 3);
-}
-
 export default function LandingPage() {
-  const navigate = useNavigate();
-  const picks = useMemo(() => pickThree(PUBLIC_IMAGES), []);
+  // pick 3 random images on each visit/refresh
+  const picks = useMemo(() => {
+    const pool = [...PUBLIC_IMAGES];
+    const out = [];
+    while (out.length < 3 && pool.length) {
+      const i = Math.floor(Math.random() * pool.length);
+      out.push(pool.splice(i, 1)[0]);
+    }
+    return out;
+  }, []);
+
+  // pre-load for smoothness
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let loaded = 0;
+    picks.forEach((src) => {
+      const img = new Image();
+      img.onload = () => {
+        loaded += 1;
+        if (loaded >= picks.length) setReady(true);
+      };
+      img.src = src;
+    });
+  }, [picks]);
 
   return (
-    <main className="px-6 md:px-12 lg:px-20 py-12">
-      <section className="max-w-5xl">
-        <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight">
-          Turn your Images into Income
-        </h1>
+    <section className="mx-auto max-w-6xl px-4">
+      <div className="py-12 md:py-16 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+        <div>
+          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-slate-900">
+            Turn your Images into Income
+          </h1>
+          <p className="mt-4 text-slate-600 max-w-xl">
+            Upload your Photos, designs, or creative content and start selling to
+            designers, architects and creators today. | <b>Secure Payments</b> |
+            <b> Verified Sellers</b> | <b>Instant Downloads</b> |
+          </p>
 
-        <p className="mt-5 text-lg text-slate-700 max-w-3xl">
-          Upload your Photos, designs, or creative content and start selling to designers,
-          architects and creators today. | <b>Secure Payments</b> | <b>Verified Sellers</b> | <b>Instant Downloads</b> |
-        </p>
-
-        <div className="mt-6 flex gap-3">
-          <button onClick={() => navigate("/start-selling")} className="btn-primary">
-            Start Selling
-          </button>
-          <Link to="/explore" className="btn-outline">Explore Photos</Link>
+          <div className="mt-6 flex items-center gap-3">
+            <Link
+              to="/seller"
+              className="rounded-full bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
+            >
+              Start Selling
+            </Link>
+            <Link
+              to="/explore"
+              className="rounded-full border border-slate-300 px-5 py-2 hover:border-slate-400"
+            >
+              Explore Photos
+            </Link>
+          </div>
         </div>
-      </section>
 
-      <section className="mt-10 flex gap-6">
-        {picks.map((src) => (
-          <img
-            key={src}
-            src={src}
-            alt="sample"
-            className="h-56 w-44 md:h-64 md:w-56 lg:h-72 lg:w-64 rounded-xl object-cover shadow"
-            loading="eager"
-          />
-        ))}
-      </section>
-    </main>
+        <div className="flex items-center gap-6 justify-center md:justify-end">
+          {picks.map((src) => (
+            <div
+              key={src}
+              className="w-56 h-72 rounded-2xl overflow-hidden shadow-md bg-slate-100"
+            >
+              {/* fade in once loaded */}
+              <img
+                src={src}
+                alt="sample"
+                className={`w-full h-full object-cover transition-opacity duration-700 ${
+                  ready ? "opacity-100" : "opacity-0"
+                }`}
+                loading="eager"
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }
