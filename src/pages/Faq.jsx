@@ -1,28 +1,28 @@
-// /src/pages/Faq.jsx
+// src/pages/Faq.jsx
 export default function Faq() {
   return (
-    <main className="page container">
-      <h2>Frequently Asked Questions</h2>
+    <div className="pageWrap">
+      <h2 className="pageTitle">Frequently Asked Questions</h2>
 
       <details open>
         <summary>What is Picsellart?</summary>
-        <p>Picsellart is a marketplace for photos/designs. Sellers upload, buyers license & download instantly.</p>
+        <p>Picsellart is a marketplace where creators sell photos and visuals with instant, verified delivery.</p>
       </details>
 
       <details>
         <summary>How do I become a seller?</summary>
-        <p>Create an account, choose a plan, complete KYC, and upload your images. Payouts are settled to your bank.</p>
+        <p>Create an account, choose a plan, upload images, and start selling from your dashboard.</p>
       </details>
 
       <details>
         <summary>How are images delivered?</summary>
-        <p>Buyers receive a secure, watermarked preview; originals unlock immediately after successful payment.</p>
+        <p>After payment, buyers receive a license and a direct download link to the original file.</p>
       </details>
 
       <details>
         <summary>What is your refund policy?</summary>
-        <p>See the Refunds page for full rules, timelines, and eligibility.</p>
+        <p>See our <a href="/refunds">Refunds</a> page for full details and timelines.</p>
       </details>
-    </main>
+    </div>
   );
 }

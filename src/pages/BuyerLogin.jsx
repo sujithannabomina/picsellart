@@ -1,22 +1,27 @@
+// src/pages/BuyerLogin.jsx
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export default function BuyerLogin() {
-  const { user, loading, loginBuyer } = useAuth();
+  const { user, loading, signInWithGoogle, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  if (loading) return <div className="pageWrap"><p className="muted">Loading…</p></div>;
+
   return (
-    <section className="mx-auto max-w-6xl px-4 py-10">
-      <h2 className="text-2xl font-semibold mb-6">Buyer Login</h2>
-      {loading ? (
-        <p className="text-slate-500">Loading…</p>
-      ) : user ? (
-        <p className="text-green-700">You are logged in.</p>
+    <div className="pageWrap">
+      <h2 className="pageTitle">Buyer Login</h2>
+      {user ? (
+        <>
+          <p className="muted">Signed in as <b>{user.displayName}</b></p>
+          <div className="row">
+            <button className="btn" onClick={() => navigate("/explore")}>Go to Explore</button>
+            <button className="btn outline" onClick={signOut}>Sign out</button>
+          </div>
+        </>
       ) : (
-        <button
-          onClick={loginBuyer}
-          className="rounded-full bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-        >
-          Continue with Google
-        </button>
+        <button className="btn primary" onClick={signInWithGoogle}>Continue with Google</button>
       )}
-    </section>
+    </div>
   );
 }

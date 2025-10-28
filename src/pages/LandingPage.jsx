@@ -1,5 +1,6 @@
+// src/pages/LandingPage.jsx
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const PUBLIC_IMAGES = [
   "/images/sample1.jpg",
@@ -11,79 +12,51 @@ const PUBLIC_IMAGES = [
 ];
 
 export default function LandingPage() {
-  // pick 3 random images on each visit/refresh
-  const picks = useMemo(() => {
-    const pool = [...PUBLIC_IMAGES];
-    const out = [];
-    while (out.length < 3 && pool.length) {
-      const i = Math.floor(Math.random() * pool.length);
-      out.push(pool.splice(i, 1)[0]);
-    }
-    return out;
-  }, []);
+  const navigate = useNavigate();
+  const [current, setCurrent] = useState(0);
 
-  // pre-load for smoothness
-  const [ready, setReady] = useState(false);
+  const picks = useMemo(() => {
+    // rotate 3 images, different trio each refresh
+    const start = Math.floor(Math.random() * PUBLIC_IMAGES.length);
+    return Array.from({ length: 3 }, (_, i) => PUBLIC_IMAGES[(start + i) % PUBLIC_IMAGES.length]);
+  }, []); // change on each page load
+
   useEffect(() => {
-    let loaded = 0;
-    picks.forEach((src) => {
-      const img = new Image();
-      img.onload = () => {
-        loaded += 1;
-        if (loaded >= picks.length) setReady(true);
-      };
-      img.src = src;
-    });
-  }, [picks]);
+    const id = setInterval(() => {
+      setCurrent((c) => (c + 1) % picks.length);
+    }, 2800);
+    return () => clearInterval(id);
+  }, [picks.length]);
 
   return (
-    <section className="mx-auto max-w-6xl px-4">
-      <div className="py-12 md:py-16 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
-        <div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tight text-slate-900">
-            Turn your Images into Income
-          </h1>
-          <p className="mt-4 text-slate-600 max-w-xl">
-            Upload your Photos, designs, or creative content and start selling to
-            designers, architects and creators today. | <b>Secure Payments</b> |
-            <b> Verified Sellers</b> | <b>Instant Downloads</b> |
-          </p>
-
-          <div className="mt-6 flex items-center gap-3">
-            <Link
-              to="/seller"
-              className="rounded-full bg-blue-600 text-white px-5 py-2 shadow hover:bg-blue-700"
-            >
-              Start Selling
-            </Link>
-            <Link
-              to="/explore"
-              className="rounded-full border border-slate-300 px-5 py-2 hover:border-slate-400"
-            >
-              Explore Photos
-            </Link>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6 justify-center md:justify-end">
-          {picks.map((src) => (
-            <div
-              key={src}
-              className="w-56 h-72 rounded-2xl overflow-hidden shadow-md bg-slate-100"
-            >
-              {/* fade in once loaded */}
-              <img
-                src={src}
-                alt="sample"
-                className={`w-full h-full object-cover transition-opacity duration-700 ${
-                  ready ? "opacity-100" : "opacity-0"
-                }`}
-                loading="eager"
-              />
-            </div>
-          ))}
-        </div>
+    <div className="container">
+      {/* top action bar with 3 buttons exactly as requested */}
+      <div className="topActions">
+        <button className="btn outline" onClick={() => navigate("/buyer")}>Buyer Login</button>
+        <button className="btn outline" onClick={() => navigate("/seller")}>Seller Login</button>
+        <button className="btn primary" onClick={() => navigate("/explore")}>Explore</button>
       </div>
-    </section>
+
+      <h1 className="heroTitle">Turn your Images into Income</h1>
+
+      <p className="heroSub">
+        Upload your Photos, designs, or creative content and start selling to designers, architects and
+        creators today. <span className="dot">|</span> <b>Secure Payments</b> <span className="dot">|</span>{" "}
+        <b>Verified Sellers</b> <span className="dot">|</span> <b>Instant Downloads</b> <span className="dot">|</span>
+      </p>
+
+      <div className="ctaRow">
+        <Link to="/seller" className="btn primary">Start Selling</Link>
+        <Link to="/explore" className="btn ghost">Explore Photos</Link>
+      </div>
+
+      <div className="thumbRow">
+        {picks.map((src, i) => (
+          <div key={src} className={`thumb ${current === i ? "on" : ""}`}>
+            <img src={src} alt={`preview-${i}`} loading="eager" />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }

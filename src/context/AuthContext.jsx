@@ -1,15 +1,16 @@
+// src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { auth } from "../firebase"; // your existing firebase.js exports `auth`
-import {
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged,
-} from "firebase/auth";
+import { auth, provider } from "../firebase";
+import { onAuthStateChanged, signInWithPopup, signOut as fbSignOut } from "firebase/auth";
 
-const AuthCtx = createContext(null);
+const AuthContext = createContext({
+  user: null,
+  loading: true,
+  signInWithGoogle: async () => {},
+  signOut: async () => {},
+});
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,31 +22,20 @@ export function AuthProvider({ children }) {
     return () => unsub();
   }, []);
 
-  const loginBuyer = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
-
-  const loginSeller = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
-
-  const logout = () => signOut(auth);
-
   const value = useMemo(
-    () => ({ user, loading, loginBuyer, loginSeller, logout }),
+    () => ({
+      user,
+      loading,
+      signInWithGoogle: async () => {
+        const res = await signInWithPopup(auth, provider);
+        return res.user;
+      },
+      signOut: async () => fbSignOut(auth),
+    }),
     [user, loading]
   );
 
-  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
-}
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
 
-export function useAuth() {
-  const ctx = useContext(AuthCtx);
-  if (!ctx) {
-    // Give a clear error instead of crashing in production
-    throw new Error("useAuth must be used within <AuthProvider>");
-  }
-  return ctx;
-}
+export const useAuth = () => useContext(AuthContext);

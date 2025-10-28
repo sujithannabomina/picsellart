@@ -1,58 +1,26 @@
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-
-const active = "font-semibold text-slate-900";
-const idle = "text-slate-500 hover:text-slate-700";
+// src/components/Header.jsx
+import { Link, NavLink } from "react-router-dom";
 
 export default function Header() {
-  const { user, logout } = useAuth();
-  const nav = useNavigate();
-  const loc = useLocation();
-
   return (
-    <header className="sticky top-0 z-30 bg-white/80 backdrop-blur border-b border-slate-200">
-      <div className="mx-auto max-w-6xl px-4 py-3 flex items-center gap-4">
-        <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="Picsellart" className="h-6 w-6 rounded" />
-          <span className="text-lg font-semibold">Picsellart</span>
+    <header className="siteHeader">
+      <div className="wrap">
+        <Link to="/" className="brand">
+          <img src="/logo.png" alt="Picsellart" />
+          <span>Picsellart</span>
         </Link>
 
-        <nav className="ml-6 hidden md:flex items-center gap-4">
-          <NavLink to="/explore" className={({ isActive }) => (isActive ? active : idle)}>Explore</NavLink>
-          <NavLink to="/faq" className={({ isActive }) => (isActive ? active : idle)}>FAQ</NavLink>
-          <NavLink to="/contact" className={({ isActive }) => (isActive ? active : idle)}>Contact</NavLink>
-          <NavLink to="/refund" className={({ isActive }) => (isActive ? active : idle)}>Refunds</NavLink>
+        <nav className="nav">
+          <NavLink to="/explore">Explore</NavLink>
+          <NavLink to="/faq">FAQ</NavLink>
+          <NavLink to="/contact">Contact</NavLink>
+          <NavLink to="/refunds">Refunds</NavLink>
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Link
-            to="/buyer"
-            className="rounded-full border px-4 py-1.5 text-sm border-slate-300 hover:border-slate-400"
-          >
-            Buyer Login
-          </Link>
-          <Link
-            to="/seller"
-            className="rounded-full border px-4 py-1.5 text-sm border-slate-300 hover:border-slate-400"
-          >
-            Seller Login
-          </Link>
-          <button
-            onClick={() => nav("/explore")}
-            className="rounded-full bg-blue-600 text-white px-4 py-1.5 text-sm shadow hover:bg-blue-700"
-          >
-            Explore
-          </button>
-
-          {user && (
-            <button
-              onClick={logout}
-              title={user.email || user.displayName || "Logout"}
-              className="ml-2 text-xs text-slate-500 hover:text-slate-700"
-            >
-              Logout
-            </button>
-          )}
+        <div className="actions">
+          <Link to="/buyer" className="btn small outline">Buyer Login</Link>
+          <Link to="/seller" className="btn small outline">Seller Login</Link>
+          <Link to="/explore" className="btn small primary">Explore</Link>
         </div>
       </div>
     </header>
