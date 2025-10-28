@@ -1,13 +1,15 @@
 // src/pages/SellerSubscribe.jsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { db, serverTs } from "../firebase";              // your existing file
+import { db, serverTs } from "../firebase";
 import { doc, setDoc } from "firebase/firestore";
-import { loadRazorpay, openCheckout, createServerOrder } from "../utils/razorpay";
+import {
+  loadRazorpay,
+  openCheckout,
+  createServerOrder,
+} from "../utils/razorpay";
 
-// Set your subscription price (₹) — adjust as needed
 const SUBSCRIPTION_PRICE_INR = 499;
-// Convert ₹ to paise for Razorpay
 const toPaise = (inr) => Math.round(Number(inr) * 100);
 
 export default function SellerSubscribe() {
@@ -21,11 +23,12 @@ export default function SellerSubscribe() {
     try {
       await loadRazorpay();
 
-      // 1) Create an order on your serverless API
       const amountPaise = toPaise(SUBSCRIPTION_PRICE_INR);
+
+      // 1) Create order on server
       const { orderId, amount, currency } = await createServerOrder(amountPaise);
 
-      // 2) Open Razorpay checkout
+      // 2) Checkout
       await openCheckout({
         amount,
         orderId,
@@ -33,7 +36,7 @@ export default function SellerSubscribe() {
         description: "Seller plan – 180 days access",
         notes: { plan: "seller_basic", days: 180 },
         onSuccess: async (payment) => {
-          // 3) Persist subscription record (anonymous-safe)
+          // 3) Save subscription record
           const id = payment.razorpay_payment_id || orderId;
           await setDoc(doc(db, "subscriptions", id), {
             plan: "seller_basic",
@@ -45,12 +48,10 @@ export default function SellerSubscribe() {
             createdAt: serverTs(),
           });
 
-          // 4) Go to onboarding or dashboard
+          // 4) Redirect
           nav("/seller/onboarding", { replace: true });
         },
-        onDismiss: () => {
-          setBusy(false);
-        },
+        onDismiss: () => setBusy(false),
       });
     } catch (e) {
       console.error(e);
@@ -64,11 +65,11 @@ export default function SellerSubscribe() {
       <div className="container page">
         <h2>Become a Seller</h2>
         <p>
-          Subscribe to unlock uploads, price controls, dashboard, and fast payouts.
-          You’ll have access for <strong>180 days</strong>.
+          Subscribe to unlock uploads, pricing, dashboard, and payouts. Access
+          is enabled for <strong>180 days</strong>.
         </p>
 
-        <div className="mt-4" style={{display:"flex", gap:"14px", alignItems:"center"}}>
+        <div className="mt-4" style={{ display: "flex", gap: "14px", alignItems: "center" }}>
           <div className="badge">Plan</div>
           <strong>Seller Basic</strong>
           <div className="badge">Price</div>
@@ -77,7 +78,7 @@ export default function SellerSubscribe() {
           <strong>180 days</strong>
         </div>
 
-        {err && <p style={{color:"#e11d48"}} className="mt-4">{err}</p>}
+        {err && <p style={{ color: "#e11d48" }} className="mt-4">{err}</p>}
 
         <button
           className="primary btn mt-4"

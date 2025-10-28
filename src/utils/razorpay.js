@@ -1,9 +1,5 @@
 // src/utils/razorpay.js
-
-/**
- * Lightweight, one-time loader for the Razorpay script.
- * Exports: loadRazorpay(), openCheckout()
- */
+// Load Razorpay only once and expose a simple openCheckout + server order helper.
 
 let razorpayPromise;
 
@@ -28,8 +24,8 @@ export function loadRazorpay() {
 /**
  * Open Razorpay checkout
  * @param {Object} params
- * @param {number} params.amount Amount in INR *paise* (e.g., 49900 = ₹499.00)
- * @param {string} params.orderId  Order id returned from your API
+ * @param {number} params.amount Amount in paise (₹499 → 49900)
+ * @param {string} params.orderId  server-generated order id
  * @param {string} [params.currency='INR']
  * @param {string} [params.name='Picsellart']
  * @param {string} [params.description]
@@ -51,7 +47,8 @@ export async function openCheckout({
 }) {
   await loadRazorpay();
 
-  const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
+  const key =
+    import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
   if (!key) {
     throw new Error("Razorpay key missing (VITE_RAZORPAY_KEY_ID)");
   }
@@ -61,7 +58,7 @@ export async function openCheckout({
 
   const options = {
     key,
-    amount,          // paise
+    amount,
     currency,
     name,
     description,
@@ -70,7 +67,6 @@ export async function openCheckout({
     notes,
     theme: { color: "#2563ff" },
     handler: function (response) {
-      // response: { razorpay_payment_id, razorpay_order_id, razorpay_signature }
       onSuccess && onSuccess(response);
     },
     modal: {
@@ -87,7 +83,7 @@ export async function openCheckout({
   return rzp;
 }
 
-/** Helper to create an order on your API (optional but convenient) */
+/** Calls your Vercel Function to create an order and returns { orderId, amount, currency } */
 export async function createServerOrder(amountPaise) {
   const res = await fetch("/api/razorpay/create-order", {
     method: "POST",

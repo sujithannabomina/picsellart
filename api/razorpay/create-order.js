@@ -1,68 +1,56 @@
-// /api/razorpay/create-order.js
-import crypto from 'crypto';
+// api/razorpay/create-order.js
+// Vercel Serverless Function – creates a Razorpay order and returns { orderId, amount, currency }
+
+import Razorpay from "razorpay";
+
+// Ensure these are set in Vercel Project → Environment Variables
+const key_id = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID;
+const key_secret = process.env.RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY;
+
+// Optional: Node runtime
+export const config = {
+  runtime: "nodejs18.x",
+};
 
 export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
   try {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method Not Allowed' });
-      return;
+    if (!key_id || !key_secret) {
+      return res
+        .status(500)
+        .json({ error: "Missing Razorpay credentials on server" });
     }
 
-    const { RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET } = process.env;
-    if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
-      res.status(500).json({ error: 'Missing Razorpay credentials' });
-      return;
+    const { amount, currency = "INR" } = req.body || {};
+    const amountNum = Number(amount);
+    if (!amountNum || amountNum < 100) {
+      return res.status(400).json({ error: "Invalid amount (in paise)" });
     }
 
-    const body = await readBody(req);
-    const amount = Number(body?.amount ?? 0);
-    const currency = (body?.currency || 'INR').toUpperCase();
+    const razorpay = new Razorpay({ key_id, key_secret });
 
-    if (!amount || amount < 100) {
-      res.status(400).json({ error: 'Invalid amount (min ₹1.00 = 100 paise)' });
-      return;
-    }
-
-    // Create order via Razorpay REST
-    const order = await createRazorpayOrder({
-      amount,
+    const order = await razorpay.orders.create({
+      amount: amountNum, // paise
       currency,
-      receipt: body?.receipt || 'rcpt_' + Date.now(),
-      notes: body?.notes || {}
+      receipt: `sub_${Date.now()}`,
+      payment_capture: 1,
+      notes: { purpose: "seller_subscription" },
     });
 
-    res.status(200).json(order);
-  } catch (e) {
-    console.error('create-order error', e);
-    res.status(500).json({ error: 'Failed to create order' });
-  }
-}
-
-async function readBody(req) {
-  return new Promise((resolve) => {
-    let data = '';
-    req.on('data', (c) => (data += c));
-    req.on('end', () => {
-      try { resolve(JSON.parse(data || '{}')); }
-      catch { resolve({}); }
+    // Normalize to the shape our client expects
+    return res.status(200).json({
+      orderId: order.id,
+      amount: order.amount,
+      currency: order.currency,
     });
-  });
-}
-
-async function createRazorpayOrder({ amount, currency, receipt, notes }) {
-  const auth = Buffer.from(`${process.env.RAZORPAY_KEY_ID}:${process.env.RAZORPAY_KEY_SECRET}`).toString('base64');
-  const res = await fetch('https://api.razorpay.com/v1/orders', {
-    method: 'POST',
-    headers: {
-      Authorization: `Basic ${auth}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ amount, currency, receipt, notes })
-  });
-
-  if (!res.ok) {
-    const t = await res.text();
-    throw new Error(`Razorpay order failed: ${res.status} ${t}`);
+  } catch (err) {
+    console.error("create-order error:", err);
+    return res
+      .status(500)
+      .json({ error: "Failed to create order", details: err?.message });
   }
-  return res.json();
 }
