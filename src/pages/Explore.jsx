@@ -1,122 +1,133 @@
+// /src/pages/Explore.jsx
 import { useEffect, useMemo, useState } from "react";
+import { storage } from "../firebase";
+import { listAll, ref, getDownloadURL } from "firebase/storage";
+import { useAuth } from "../context/AuthContext";
+import { createServerOrder, openCheckout } from "../utils/razorpay";
 
-/**
- * Robust Explore loader:
- * 1) Tries Firestore client (if your /src/lib/firebase.js exists and is configured)
- * 2) Falls back to your serverless endpoint that returns a public sample
- * 3) Final fallback shows an empty grid with a helpful message
- */
+const STORAGE_FOLDER = "public/images"; // adjust if your sellers upload elsewhere
+const WATERMARK_TEXT = "Picsellart";
+
+async function applyWatermark(url) {
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.src = url;
+  await new Promise((res, rej) => {
+    img.onload = res;
+    img.onerror = rej;
+  });
+
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  const scale = 1;
+  canvas.width = img.width * scale;
+  canvas.height = img.height * scale;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  // diagonal watermark
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((-30 * Math.PI) / 180);
+  ctx.font = `${Math.max(24, canvas.width * 0.05)}px sans-serif`;
+  ctx.fillStyle = "rgba(255,255,255,0.28)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(WATERMARK_TEXT, 0, 0);
+  ctx.restore();
+
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
 export default function Explore() {
-  const [q, setQ] = useState("");
-  const [sort, setSort] = useState("newest");
+  const { user, loginBuyer } = useAuth();
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [photos, setPhotos] = useState([]);
-  const [error, setError] = useState("");
+  const [err, setErr] = useState("");
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setLoading(true);
-      setError("");
-
-      // Try Firestore (if present)
+    (async () => {
       try {
-        const { getFirestore, collection, query, orderBy, getDocs } = await import("firebase/firestore");
-        const { app } = await import("../lib/firebase.js"); // your existing file
-        const db = getFirestore(app);
-
-        const col = collection(db, "photos_public"); // your public collection
-        const qy = query(col, orderBy("createdAt", "desc"));
-        const snap = await getDocs(qy);
-
-        if (!cancelled) {
-          const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setPhotos(data);
-          setLoading(false);
-          return;
-        }
-      } catch (_ignore) {
-        // continue to API fallback
-      }
-
-      // API fallback (your existing function provides or creates sample)
-      try {
-        const res = await fetch("/api/getOrCreateSamplePhoto");
-        if (!res.ok) throw new Error(`API ${res.status}`);
-        const data = await res.json();
-        // normalize to [{id,title,url,tags}]
-        const normalized = Array.isArray(data) ? data : (data?.items || []);
-        setPhotos(normalized);
-      } catch (err) {
-        setError("Failed to load photos. Please try again.");
+        setLoading(true);
+        const folderRef = ref(storage, STORAGE_FOLDER);
+        const res = await listAll(folderRef);
+        const urls = await Promise.all(res.items.map((i) => getDownloadURL(i)));
+        // watermark previews in parallel (cap concurrency if needed)
+        const previews = await Promise.all(urls.map((u) => applyWatermark(u)));
+        const data = urls.map((originalUrl, i) => ({
+          id: res.items[i].name,
+          originalUrl,
+          previewUrl: previews[i],
+          title: res.items[i].name.replace(/\.[^.]+$/, ""),
+          price: 499, // INR – adjust or fetch from metadata
+        }));
+        setItems(data);
+      } catch (e) {
+        console.error(e);
+        setErr("Failed to load photos. Please try again.");
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
-    }
-
-    load();
-    return () => { cancelled = true; };
+    })();
   }, []);
 
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    let list = photos;
-    if (term) {
-      list = list.filter(p =>
-        (p.title || "").toLowerCase().includes(term) ||
-        (p.tags || []).join(" ").toLowerCase().includes(term)
-      );
+  const onBuy = async (item) => {
+    try {
+      // require login
+      let u = user;
+      if (!u) u = await loginBuyer();
+
+      // create order on server (attach whatever metadata you need)
+      const order = await createServerOrder({
+        amount: item.price * 100, // paise
+        currency: "INR",
+        photoId: item.id,
+        originalUrl: item.originalUrl,
+      });
+
+      await openCheckout({
+        keyId: import.meta.env.VITE_RAZORPAY_KEY_ID, // present on client
+        order,
+        user: u,
+        onSuccess: async (response) => {
+          // TODO: hit your verify endpoint, then start download
+          // e.g., window.location.href = `/api/photos/download?order=${response.razorpay_order_id}`;
+          alert("Payment successful! Your download will start shortly.");
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      alert("Unable to start checkout. Please try again.");
     }
-    if (sort === "popular") {
-      list = [...list].sort((a, b) => (b.downloads || 0) - (a.downloads || 0));
-    }
-    return list;
-  }, [photos, q, sort]);
+  };
+
+  const content = useMemo(() => {
+    if (loading) return <p className="text-slate-600">Loading photos…</p>;
+    if (err) return <p className="text-red-600">{err}</p>;
+    if (!items.length) return <p className="text-slate-500">No photos found.</p>;
+    return (
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+        {items.map((it) => (
+          <div key={it.id} className="rounded-xl overflow-hidden bg-white shadow-sm border">
+            <img src={it.previewUrl} alt={it.title} className="w-full h-56 object-cover" />
+            <div className="p-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-medium truncate">{it.title}</h3>
+                <span className="text-sm font-semibold">₹{it.price}</span>
+              </div>
+              <button onClick={() => onBuy(it)} className="btn-primary w-full mt-3">
+                Buy
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }, [items, loading, err]);
 
   return (
-    <main className="section">
-      <div className="container">
-        <h2 className="m-0">Explore</h2>
-
-        <div className="toolbar mt-4">
-          <input
-            className="input"
-            placeholder="Search title or tags..."
-            value={q}
-            onChange={e => setQ(e.target.value)}
-            aria-label="Search photos"
-          />
-          <select
-            className="select"
-            value={sort}
-            onChange={e => setSort(e.target.value)}
-            aria-label="Sort"
-          >
-            <option value="newest">Newest</option>
-            <option value="popular">Popular</option>
-          </select>
-        </div>
-
-        {loading && <p className="muted">Loading…</p>}
-        {error && <p style={{color:"#e11d48"}}>{error}</p>}
-
-        {!loading && !error && filtered.length === 0 && (
-          <p className="muted">No photos found. Try clearing filters.</p>
-        )}
-
-        <div className="grid mt-4" role="list">
-          {filtered.map(p => (
-            <article key={p.id || p.url} className="tile" role="listitem">
-              <img src={p.url || p.previewUrl || p.imageUrl} alt={p.title || "Photo"} loading="lazy" />
-              <div className="meta">
-                <span title={p.title || "Image"}>{p.title || "Untitled"}</span>
-                <span className="badge">{(p.tags && p.tags[0]) || "Photo"}</span>
-              </div>
-            </article>
-          ))}
-        </div>
-      </div>
-    </main>
+    <div className="max-w-6xl mx-auto px-6 md:px-10 py-10">
+      <h1 className="text-3xl font-bold mb-6">Explore</h1>
+      {content}
+    </div>
   );
 }

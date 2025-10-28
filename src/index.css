@@ -1,116 +1,99 @@
-/* Base reset & tokens */
-:root{
-  --bg:#0b1020;            /* deep navy for headings */
-  --fg:#0f172a;            /* slate for text */
-  --muted:#475569;         /* secondary text */
-  --brand:#2563ff;         /* primary button */
-  --brand-600:#1e4fe0;
-  --brand-50:#eff4ff;
-  --card:#f8fafc;          /* light card background */
-  --ring:0 0 0 4px rgba(37,99,255,.15);
+/* /src/index.css */
+
+/* Tailwind base (you already have tailwind/postcss configured) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App base look */
+:root {
+  color-scheme: light;
 }
 
-*{box-sizing:border-box}
-html,body,#root{height:100%}
-body{
-  margin:0;
-  color:#0f172a;
-  font:400 16px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji;
-  background:#fff;
+html, body, #root {
+  height: 100%;
 }
 
-/* Layout */
-.container{
-  max-width:1120px;
-  margin:0 auto;
-  padding:0 1.25rem;
+body {
+  @apply bg-white text-slate-900 antialiased;
+  font-feature-settings: "cv11", "ss01";
 }
-.section{padding:3.5rem 0}
 
-/* Header */
-.site-header{
-  position:sticky; top:0; z-index:50;
-  background:#fff; border-bottom:1px solid #eef2f7; backdrop-filter:saturate(1.2) blur(6px);
+/* Typography tweaks */
+h1, h2, h3 {
+  @apply tracking-tight;
 }
-.navbar{display:flex; align-items:center; gap:18px; height:68px}
-.brand{display:flex; align-items:center; gap:.6rem; font-weight:700}
-.brand img{width:26px; height:26px; border-radius:6px; box-shadow:0 0 0 1px #e5e7eb inset}
-.brand span{font-weight:800; letter-spacing:.2px}
 
-.nav{display:flex; gap:18px; margin-left:12px}
-.nav a{
-  padding:.45rem .7rem; border-radius:12px; text-decoration:none; color:#0f172a; font-weight:600;
+/* Buttons */
+.btn-primary {
+  @apply inline-flex items-center justify-center rounded-xl px-4 py-2
+         font-medium text-white bg-blue-600 hover:bg-blue-700
+         shadow-sm transition focus:outline-none focus:ring-2
+         focus:ring-blue-400/50;
 }
-.nav a.active{background:var(--brand-50); color:var(--brand)}
-.nav-cta{margin-left:auto; display:flex; gap:10px}
-.ghost{
-  border:1px solid #e5e7eb; background:#fff; color:#0f172a;
-  padding:.55rem .9rem; border-radius:999px; font-weight:600; cursor:pointer;
-}
-.primary{
-  border:0; background:var(--brand); color:#fff;
-  padding:.55rem 1rem; border-radius:999px; font-weight:700; cursor:pointer;
-}
-.primary:hover{background:var(--brand-600)}
-.ghost:hover{box-shadow:var(--ring)}
 
-/* Hero */
-.hero{padding:5rem 0 2rem}
-.hero h1{
-  margin:0 0 1rem; font-weight:900; line-height:1.1;
-  letter-spacing:.3px; color:var(--bg);
-  font-size:clamp(2.2rem, 3.6vw + 1rem, 3.3rem);
+.btn-outline {
+  @apply inline-flex items-center justify-center rounded-xl px-4 py-2
+         font-medium border border-slate-300 text-slate-800
+         hover:bg-slate-50 transition focus:outline-none focus:ring-2
+         focus:ring-slate-300/60;
 }
-.hero p{color:#0b1428; max-width:780px; margin:.5rem 0 1.25rem}
-.hero .muted{color:var(--muted); font-size:.95rem}
-.actions{display:flex; gap:.75rem; margin:1rem 0 1rem}
-.link-pill{
-  display:inline-flex; align-items:center; gap:.5rem;
-  text-decoration:none; color:var(--brand); font-weight:700;
-  border-bottom:2px solid transparent; padding-bottom:1px;
-}
-.link-pill:hover{border-color:var(--brand)}
 
-.gallery{display:flex; gap:18px; margin:1.5rem 0 0; flex-wrap:wrap}
-.card-img{
-  width:220px; height:260px; border-radius:16px; overflow:hidden;
-  background:#f3f4f6; border:1px solid #eef2f7;
-  box-shadow:0 6px 18px rgba(15,23,42,.06);
+.btn-ghost {
+  @apply inline-flex items-center justify-center rounded-xl px-3 py-2
+         font-medium text-slate-700 hover:bg-slate-100 transition;
 }
-.card-img img{width:100%; height:100%; object-fit:cover}
 
-/* Explore grid */
-.toolbar{display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:0 0 1rem}
-.input, .select{
-  padding:.6rem .8rem; border-radius:12px; border:1px solid #e5e7eb; background:#fff; min-width:240px;
+/* Small rounded “pill” (for header secondary actions) */
+.btn-pill {
+  @apply inline-flex items-center justify-center rounded-full px-4 py-2
+         text-slate-700 border border-slate-300 hover:bg-slate-50
+         transition;
 }
-.grid{
-  display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr));
-  gap:18px;
-}
-.tile{
-  border-radius:14px; overflow:hidden; background:#fff; border:1px solid #eef2f7;
-  box-shadow:0 6px 18px rgba(15,23,42,.06);
-}
-.tile img{width:100%; height:210px; object-fit:cover; display:block}
-.tile .meta{padding:.7rem .8rem; font-size:.9rem; color:#0f172a; display:flex; justify-content:space-between}
-.badge{padding:.25rem .6rem; border-radius:999px; border:1px solid #e5e7eb; font-size:.75rem; color:#334155}
 
-/* Static pages */
-.page h2{margin:0 0 .75rem; font-weight:800}
-.page p{margin:.3rem 0}
-.page ul{margin:.4rem 0 1rem 1.2rem}
-.page li{margin:.25rem 0}
-.form{
-  display:grid; gap:.7rem; max-width:840px;
+/* Utility cards */
+.card {
+  @apply rounded-xl border bg-white shadow-sm;
 }
-.textarea{min-height:140px; resize:vertical}
-.btn{display:inline-flex; align-items:center; gap:.5rem}
+.card-body {
+  @apply p-4;
+}
 
-/* Helpers */
-.m-0{margin:0}
-.mt-2{margin-top:.5rem}
-.mt-4{margin-top:1rem}
-.mt-6{margin-top:1.5rem}
-.hidden{display:none}
-.center{text-align:center}
+/* Link states in nav (just to ensure consistency if Tailwind classes are overridden) */
+header a {
+  @apply no-underline;
+}
+header a.active {
+  @apply bg-slate-100 text-slate-900;
+}
+
+/* Image styling commonly used on landing */
+.hero-img {
+  @apply rounded-xl object-cover shadow;
+}
+
+/* Forms */
+input[type="text"],
+input[type="email"],
+select,
+textarea {
+  @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2
+         text-slate-900 shadow-sm outline-none transition
+         focus:border-blue-500 focus:ring-2 focus:ring-blue-400/30;
+}
+
+/* Tables (if any later) */
+.table {
+  @apply w-full border-collapse;
+}
+.table th {
+  @apply border-b bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-700;
+}
+.table td {
+  @apply border-b px-3 py-2 text-sm text-slate-800;
+}
+
+/* Footer */
+footer {
+  @apply text-slate-500;
+}

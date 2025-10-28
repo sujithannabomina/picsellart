@@ -1,29 +1,45 @@
+// /src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { auth } from "../firebase";
+import { auth, googleProvider } from "../firebase";
+import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
-const Ctx = createContext(null);
+const AuthContext = createContext(null);
 
-export function AuthProvider({ children }) {
+export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [role, setRole] = useState(null); // "buyer" | "seller" | null
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const off = onAuthStateChanged(auth, (u) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u || null);
       setLoading(false);
     });
-    return () => off();
+    return () => unsub();
   }, []);
 
-  const loginWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+  const loginBuyer = async () => {
+    const res = await signInWithPopup(auth, googleProvider);
+    setRole("buyer");
+    return res.user;
   };
 
-  const logout = () => auth.signOut();
+  const loginSeller = async () => {
+    const res = await signInWithPopup(auth, googleProvider);
+    setRole("seller");
+    return res.user;
+  };
 
-  return <Ctx.Provider value={{ user, loading, loginWithGoogle, logout }}>{children}</Ctx.Provider>;
-}
+  const logout = async () => {
+    await signOut(auth);
+    setRole(null);
+  };
 
-export const useAuth = () => useContext(Ctx);
+  return (
+    <AuthContext.Provider value={{ user, role, loading, loginBuyer, loginSeller, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => useContext(AuthContext);

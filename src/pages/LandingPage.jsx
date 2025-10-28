@@ -1,11 +1,8 @@
+// /src/pages/LandingPage.jsx
 import { Link, useNavigate } from "react-router-dom";
 import { useMemo } from "react";
 
-/**
- * Landing hero with rotating, deterministic sample images (your requirement)
- * – pulls from /public/images or uses the same 3 keys shuffled per page load.
- */
-const SAMPLE_POOL = [
+const PUBLIC_IMAGES = [
   "/images/sample1.jpg",
   "/images/sample2.jpg",
   "/images/sample3.jpg",
@@ -13,49 +10,47 @@ const SAMPLE_POOL = [
   "/images/sample5.jpg",
   "/images/sample6.jpg",
 ];
-function pick3(pool) {
-  const copy = [...pool];
-  // Lightweight shuffle for variety without external deps
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy.slice(0, 3);
+
+function pickThree(arr) {
+  // rotate on each refresh: random 3 distinct images
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 3);
 }
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const picks = useMemo(() => pick3(SAMPLE_POOL), []);
+  const picks = useMemo(() => pickThree(PUBLIC_IMAGES), []);
 
   return (
-    <main>
-      <section className="container hero">
-        <h1>Turn your Images into Income</h1>
+    <main className="px-6 md:px-12 lg:px-20 py-12">
+      <section className="max-w-5xl">
+        <h1 className="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight">
+          Turn your Images into Income
+        </h1>
 
-        <p className="m-0">
-          Upload your Photos, designs, or creative content and start selling to
-          designers, architects and creators today.
-          <span className="link-pill"> | Secure Payments | Verified Sellers | Instant Downloads |</span>
+        <p className="mt-5 text-lg text-slate-700 max-w-3xl">
+          Upload your Photos, designs, or creative content and start selling to designers,
+          architects and creators today. | <b>Secure Payments</b> | <b>Verified Sellers</b> | <b>Instant Downloads</b> |
         </p>
 
-        <div className="actions">
-          <button className="primary btn" onClick={() => navigate("/seller/subscribe")}>
+        <div className="mt-6 flex gap-3">
+          <button onClick={() => navigate("/start-selling")} className="btn-primary">
             Start Selling
           </button>
-          <Link to="/explore" className="ghost btn" aria-label="Explore Photos">
-            Explore Photos
-          </Link>
+          <Link to="/explore" className="btn-outline">Explore Photos</Link>
         </div>
+      </section>
 
-        <p className="muted mt-2">Secure • Fast Payouts • Simple Setup</p>
-
-        <div className="gallery" aria-label="Sample marketplace photos">
-          {picks.map((src, i) => (
-            <figure key={src} className="card-img">
-              <img src={src} alt={`Sample ${i + 1}`} loading="eager" />
-            </figure>
-          ))}
-        </div>
+      <section className="mt-10 flex gap-6">
+        {picks.map((src) => (
+          <img
+            key={src}
+            src={src}
+            alt="sample"
+            className="h-56 w-44 md:h-64 md:w-56 lg:h-72 lg:w-64 rounded-xl object-cover shadow"
+            loading="eager"
+          />
+        ))}
       </section>
     </main>
   );
