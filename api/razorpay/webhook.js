@@ -1,47 +1,43 @@
-// /api/razorpay/webhook.js
-import crypto from 'crypto';
+// api/razorpay/webhook.js
+// Verifies Razorpay webhook signatures and acknowledges events.
 
-export const config = {
-  api: { bodyParser: false } // read raw body for signature verification
-};
+/** Use Node runtime, not nodejs18.x */
+module.exports.config = { runtime: "nodejs" };
 
-export default async function handler(req, res) {
+const crypto = require("crypto");
+
+module.exports = async function handler(req, res) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
+
   try {
-    if (req.method !== 'POST') {
-      res.status(405).json({ error: 'Method Not Allowed' });
-      return;
+    const webhookSecret =
+      process.env.RAZORPAY_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      return res.status(500).json({ error: "Missing webhook secret" });
     }
 
-    const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    if (!secret) {
-      res.status(500).json({ error: 'Missing RAZORPAY_WEBHOOK_SECRET' });
-      return;
-    }
-
-    const raw = await readRaw(req);
-    const signature = req.headers['x-razorpay-signature'];
-    const expected = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+    const signature = req.headers["x-razorpay-signature"];
+    const body = JSON.stringify(req.body || {});
+    const expected = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(body)
+      .digest("hex");
 
     if (signature !== expected) {
-      res.status(400).json({ error: 'Invalid signature' });
-      return;
+      return res.status(400).json({ error: "Invalid signature" });
     }
 
-    const event = JSON.parse(raw);
-    // TODO: update Firestore: mark order/payment captured, grant download, etc.
-    console.log('Razorpay webhook verified:', event?.event);
+    // TODO: handle events as needed (order.paid, payment.captured, etc.)
+    // Example:
+    // if (req.body?.event === "payment.captured") { ... }
 
-    res.status(200).json({ ok: true });
-  } catch (e) {
-    console.error('webhook error', e);
-    res.status(500).json({ error: 'Webhook processing failed' });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("webhook error:", err);
+    return res.status(500).json({ error: "Webhook failed", details: err?.message });
   }
-}
-
-function readRaw(req) {
-  return new Promise((resolve) => {
-    const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-  });
-}
+};
