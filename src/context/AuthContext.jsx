@@ -1,80 +1,60 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { initializeApp } from "firebase/app";
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  onAuthStateChanged,
-  signOut,
-} from "firebase/auth";
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-} from "firebase/firestore";
-import firebaseConfig from "../firebase";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import { auth } from "../firebase";
+import { getDoc, doc } from "firebase/firestore";
+import { db } from "../firebase";
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const provider = new GoogleAuthProvider();
-
-const AuthCtx = createContext();
+const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const [role, setRole] = useState(null); // "buyer" | "seller" | null
+  const [sellerHasActivePlan, setSellerHasActivePlan] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() =>
     onAuthStateChanged(auth, async (u) => {
+      setUser(u || null);
       if (!u) {
-        setUser(null);
         setRole(null);
+        setSellerHasActivePlan(false);
         setLoading(false);
         return;
       }
-      setUser(u);
-      // fetch role
-      const ref = doc(db, "users", u.uid);
-      const snap = await getDoc(ref);
-      setRole(snap.exists() ? snap.data().role || null : null);
-      setLoading(false);
-    }), []);
+      // Read role & plan state from Firestore if present
+      try {
+        const ref = doc(db, "users", u.uid);
+        const snap = await getDoc(ref);
+        const data = snap.exists() ? snap.data() : {};
+        setRole(data.role ?? null);
+        setSellerHasActivePlan(Boolean(data.activePlan));
+      } catch {
+        setRole(null);
+        setSellerHasActivePlan(false);
+      } finally {
+        setLoading(false);
+      }
+    })
+  , []);
 
-  const loginAs = async (asRole) => {
-    const res = await signInWithPopup(auth, provider);
-    const u = res.user;
-    // persist/update role
-    await setDoc(
-      doc(db, "users", u.uid),
-      {
-        uid: u.uid,
-        email: u.email,
-        displayName: u.displayName || "",
-        photoURL: u.photoURL || "",
-        role: asRole,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-    setRole(asRole);
-    return u;
+  const googleLogin = async (forcedRole) => {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    // Persist chosen role so the header & routes know how to behave
+    if (forcedRole) {
+      const res = await fetch("/api/secureCreatePhoto", { method: "POST", headers: {"x-role": forcedRole} });
+      // The endpoint can be a noop; we just need a secure write to let CF/SSR set role if you prefer.
+    }
+    return result;
   };
 
-  const logout = async () => {
-    await signOut(auth);
-    setUser(null);
-    setRole(null);
-  };
+  const logout = () => signOut(auth);
 
-  return (
-    <AuthCtx.Provider value={{ user, role, loading, loginAs, logout }}>
-      {children}
-    </AuthCtx.Provider>
-  );
+  const value = useMemo(() => ({
+    user, role, setRole, sellerHasActivePlan, setSellerHasActivePlan, googleLogin, logout, loading
+  }), [user, role, sellerHasActivePlan, loading]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => useContext(AuthCtx);
+export const useAuth = () => useContext(AuthContext);

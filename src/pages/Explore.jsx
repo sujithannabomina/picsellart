@@ -1,107 +1,114 @@
-import { useEffect, useState } from "react";
-import { listImages } from "../utils/storage";
-import { watermarkImage } from "../utils/watermark";
-import { useAuth } from "../context/AuthContext";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { listPublicImages } from "../utils/storage";
+import WatermarkedImage from "../components/WatermarkedImage";
+import { useAuth } from "../context/AuthContext";
 
-function CardSkeleton() {
-  return (
-    <div className="card sk">
-      <div className="ph" />
-      <div className="row"><div className="chip" /><div className="chip" /></div>
-    </div>
-  );
+function priceFor(name) {
+  // deterministic pseudo-random price from filename
+  const base = [...name].reduce((a, c) => a + c.charCodeAt(0), 0);
+  const rupees = 249 + (base % 9) * 250; // 249..2249
+  return rupees;
 }
 
 export default function Explore() {
-  const [items, setItems] = useState(null); // null = loading
-  const nav = useNavigate();
-  const { user, role, loginAs } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [photos, setPhotos] = useState([]);
+  const [q, setQ] = useState("");
+  const { user, role } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      const imgs = await listImages("public/images"); // your storage folder
-      // watermark in parallel for thumbs
-      const withWM = await Promise.all(
-        imgs.map(async (p) => ({
-          ...p,
-          thumb: await watermarkImage(p.url, "Picsellart"),
-        }))
-      );
-      setItems(withWM);
+      try {
+        const list = await listPublicImages(); // uses your Firebase Storage util (public/images)
+        if (mounted) setPhotos(list);
+      } finally {
+        if (mounted) setLoading(false);
+      }
     })();
+    return () => { mounted = false; };
   }, []);
 
-  const handleView = (it) => nav(`/photo/${encodeURIComponent(it.id)}`, { state: it });
+  const filtered = useMemo(() => {
+    if (!q) return photos;
+    const qq = q.toLowerCase();
+    return photos.filter(p => p.name.toLowerCase().includes(qq));
+  }, [q, photos]);
 
-  const handleBuy = async (it) => {
+  const onView = (p) => navigate(`/photo/${encodeURIComponent(p.name)}`);
+
+  const onBuy = (p) => {
+    // Require buyer login
     if (!user || role !== "buyer") {
-      await loginAs("buyer");
+      navigate("/buyer");
+      return;
     }
-    // Create order
-    const res = await fetch("/api/razorpay/create-order", {
+    // Create one-off photo order
+    fetch("/api/createPhotoOrder", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
-      body: JSON.stringify({ amount: it.price * 100, currency: "INR", notes: { photo: it.name }})
-    }).then(r=>r.json());
-
-    const rz = await import("../utils/razorpay");
-    await rz.openCheckout({
-      order_id: res.id,
-      amount: res.amount,
-      name: "Picsellart",
-      description: it.title,
-      notes: { photo: it.name }
+      body: JSON.stringify({ name: p.name, amount: priceFor(p.name)*100 })
+    })
+    .then(r => r.json())
+    .then(({ key, amount, orderId }) => {
+      const options = {
+        key, amount, currency: "INR",
+        order_id: orderId,
+        name: "Picsellart",
+        description: p.name,
+        handler: async (response) => {
+          await fetch("/api/verifyPhotoPayment", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ razorpay: response, name: p.name })
+          });
+          // redirect to a download URL page or email link
+          navigate(`/photo/${encodeURIComponent(p.name)}?p=ok`);
+        }
+      };
+      new window.Razorpay(options).open();
     });
-    // After success the webhook will mark paid; you can then fetch a signed URL
-    // nav(`/order/success?photo=${encodeURIComponent(it.id)}`);
   };
 
   return (
-    <div className="container">
-      <h1>Explore</h1>
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-3xl font-bold mb-4">Explore</h1>
 
-      {items === null && (
-        <div className="grid">
-          {Array.from({length:8}).map((_,i)=><CardSkeleton key={i}/>)}
-        </div>
-      )}
+      <div className="mb-4">
+        <input
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search photos..."
+          className="border rounded px-3 py-2 w-full md:w-96"
+        />
+      </div>
 
-      {items?.length === 0 && (
-        <p>No photos yet.</p>
-      )}
-
-      {items && items.length > 0 && (
-        <div className="grid">
-          {items.map((it) => (
-            <div className="card" key={it.id}>
-              <img src={it.thumb} alt={it.title} />
-              <div className="meta">
-                <div className="t">{it.title}</div>
-                <div className="p">₹{it.price}</div>
+      {loading ? (
+        <div className="opacity-60">Loading photos…</div>
+      ) : filtered.length === 0 ? (
+        <div className="opacity-60">No matching photos.</div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((p) => {
+            const price = priceFor(p.name);
+            return (
+              <div key={p.fullPath} className="rounded-2xl overflow-hidden border">
+                <WatermarkedImage src={p.downloadURL} alt={p.name} />
+                <div className="p-3">
+                  <div className="font-semibold truncate">{p.name}</div>
+                  <div className="text-sm opacity-70 mb-2">Tags: {p.tags?.join(", ") || "general"}</div>
+                  <div className="flex items-center gap-2">
+                    <button className="btn" onClick={() => onView(p)}>View</button>
+                    <button className="btn btn-primary" onClick={() => onBuy(p)}>Buy ₹{price}</button>
+                  </div>
+                </div>
               </div>
-              <div className="row">
-                <button className="pill" onClick={()=>handleView(it)}>View</button>
-                <button className="pill blue" onClick={()=>handleBuy(it)}>Buy</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
-
-/* minimal page CSS (you can move to your index.css)
-.container{max-width:1080px;margin:0 auto;padding:32px 16px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:22px}
-.card{border:1px solid #e5e7eb;border-radius:16px;padding:12px;background:#fff}
-.card img{width:100%;height:220px;object-fit:cover;border-radius:12px}
-.row{display:flex;gap:10px;align-items:center;justify-content:flex-start;margin-top:10px}
-.meta{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
-.t{font-weight:600}
-.p{font-weight:700}
-.sk .ph{height:220px;border-radius:12px;background:linear-gradient(90deg,#f3f4f6,#eef2f7,#f3f4f6);animation:sh 1.2s infinite}
-.sk .chip{width:80px;height:32px;border-radius:999px;background:#eef2f7}
-@keyframes sh{0%{background-position:0%}100%{background-position:100%}}
-*/

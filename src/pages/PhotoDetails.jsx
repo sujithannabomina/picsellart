@@ -1,31 +1,27 @@
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
-import { listImages } from "../utils/storage";
-import { watermarkImage } from "../utils/watermark";
+import { useParams } from "react-router-dom";
+import { getPublicImageByName } from "../utils/storage";
+import WatermarkedImage from "../components/WatermarkedImage";
 
 export default function PhotoDetails() {
-  const { state } = useLocation();
   const { id } = useParams();
-  const [photo, setPhoto] = useState(state || null);
+  const [photo, setPhoto] = useState(null);
 
   useEffect(() => {
-    if (state) return;
+    let mounted = true;
     (async () => {
-      const imgs = await listImages("public/images");
-      const it = imgs.find(x=>x.id===id);
-      if (!it) return setPhoto({notFound:true});
-      it.thumb = await watermarkImage(it.url, "Picsellart");
-      setPhoto(it);
+      const data = await getPublicImageByName(id);
+      if (mounted) setPhoto(data || null);
     })();
-  }, [id, state]);
+    return () => { mounted = false; };
+  }, [id]);
 
-  if (!photo) return null;
-  if (photo.notFound) return <div className="container"><h2>Not Found</h2></div>;
+  if (!photo) return <div className="p-6">Loading…</div>;
 
   return (
-    <div className="container">
-      <h1>{photo.title} — ₹{photo.price}</h1>
-      <img src={photo.thumb} alt={photo.title} style={{width:"100%",maxWidth:900,borderRadius:12}}/>
+    <div className="p-6 max-w-5xl mx-auto">
+      <h1 className="text-2xl font-bold mb-3">{photo.name}</h1>
+      <WatermarkedImage src={photo.downloadURL} alt={photo.name} />
     </div>
   );
 }

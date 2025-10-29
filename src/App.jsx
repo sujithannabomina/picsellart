@@ -1,34 +1,41 @@
-import { Routes, Route } from 'react-router-dom'
-import Header from './components/Header.jsx'
-import LandingPage from './pages/LandingPage.jsx'
-import Explore from './pages/Explore.jsx'
-import PhotoDetail from './pages/PhotoDetail.jsx'
-import BuyerLogin from './pages/BuyerLogin.jsx'
-import SellerLogin from './pages/SellerLogin.jsx'
-import SellerDashboard from './pages/SellerDashboard.jsx'
-import SellerSubscribe from './pages/SellerSubscribe.jsx'
-import FAQ from './pages/FAQ.jsx'
-import Contact from './pages/Contact.jsx'
-import Refunds from './pages/Refunds.jsx'
-import NotFound from './pages/NotFound.jsx'
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Header from "./components/Header";
+import Explore from "./pages/Explore";
+import BuyerLogin from "./pages/BuyerLogin";
+import SellerLogin from "./pages/SellerLogin";
+import SellerDashboard from "./pages/SellerDashboard";
+import SellerSubscribe from "./pages/SellerSubscribe";
+import PhotoDetails from "./pages/PhotoDetails";
+import Faq from "./pages/Faq";
+import Contact from "./pages/Contact";       // keep yours
+import Refunds from "./pages/Refunds";       // keep yours
+import NotFound from "./pages/NotFound";     // keep yours
+import { AuthProvider } from "./context/AuthContext";
 
 export default function App() {
   return (
-    <>
-      <Header />
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/explore" element={<Explore />} />
-        <Route path="/photo/:id" element={<PhotoDetail />} />
-        <Route path="/buyer" element={<BuyerLogin />} />
-        <Route path="/seller" element={<SellerLogin />} />
-        <Route path="/seller/subscribe" element={<SellerSubscribe />} />
-        <Route path="/seller/dashboard" element={<SellerDashboard />} />
-        <Route path="/faq" element={<FAQ />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/refunds" element={<Refunds />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </>
-  )
+    <BrowserRouter>
+      <AuthProvider>
+        <Header />
+        <Routes>
+          <Route path="/" element={<Navigate to="/explore" replace />} />
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/photo/:id" element={<PhotoDetails />} />
+
+          <Route path="/buyer" element={<BuyerLogin />} />
+          <Route path="/buyer/dashboard" element={<Navigate to="/explore" replace />} /> {/* simple buyer dash */}
+
+          <Route path="/seller" element={<SellerLogin />} />
+          <Route path="/seller/dashboard" element={<SellerDashboard />} />
+          <Route path="/seller/subscribe" element={<SellerSubscribe />} />
+
+          <Route path="/faq" element={<Faq />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/refunds" element={<Refunds />} />
+
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
 }

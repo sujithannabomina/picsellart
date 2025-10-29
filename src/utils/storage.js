@@ -1,34 +1,26 @@
-import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
-import { initializeApp } from "firebase/app";
-import firebaseConfig from "../firebase";
+import { getStorage, listAll, ref, getDownloadURL } from "firebase/storage";
+import { app } from "../firebase";
 
-const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
+const DIR = "public/images";
 
-/**
- * Lists images under given folder. Default: "public/images"
- * Returns [{id, url, name, title, price, tags}]
- */
-export async function listImages(folder = "public/images") {
+export async function listPublicImages() {
+  const r = ref(storage, DIR);
+  const ls = await listAll(r);
   const out = [];
-  const rootRef = ref(storage, folder);
-  const items = await listAll(rootRef);
-
-  let idx = 1;
-  for (const item of items.items) {
+  for (const item of ls.items) {
     const url = await getDownloadURL(item);
-    const name = item.name;
-    out.push({
-      id: name.replace(/\.\w+$/, ""),
-      url,
-      name,
-      title: name.replace(/\.\w+$/, "").replace(/[-_]/g, " "),
-      price: 249 + (idx % 10) * 50, // deterministic random-ish
-      tags: ["photo", "picsellart"],
-    });
-    idx++;
+    out.push({ name: item.name, fullPath: item.fullPath, downloadURL: url, tags: [] });
   }
-  // Stable sort by name so grid doesn't jump
-  out.sort((a,b)=>a.name.localeCompare(b.name));
   return out;
+}
+
+export async function getPublicImageByName(name) {
+  const r = ref(storage, `${DIR}/${name}`);
+  try {
+    const downloadURL = await getDownloadURL(r);
+    return { name, fullPath: r.fullPath, downloadURL, tags: [] };
+  } catch {
+    return null;
+  }
 }
