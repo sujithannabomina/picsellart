@@ -1,123 +1,107 @@
-// src/pages/Explore.jsx
-import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { useAuth } from '../context/AuthContext';
-import { loadRazorpay, createServerOrder, openCheckout } from '../utils/razorpay';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from "react";
+import { listImages } from "../utils/storage";
+import { watermarkImage } from "../utils/watermark";
+import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 function CardSkeleton() {
   return (
-    <div className="rounded-2xl border p-3">
-      <div className="h-56 w-full rounded-xl bg-gray-200 animate-pulse" />
-      <div className="mt-3 h-4 w-2/3 bg-gray-200 rounded animate-pulse" />
-      <div className="mt-2 h-4 w-1/3 bg-gray-200 rounded animate-pulse" />
-      <div className="mt-3 flex gap-2">
-        <div className="h-9 w-16 bg-gray-200 rounded-full animate-pulse" />
-        <div className="h-9 w-16 bg-gray-200 rounded-full animate-pulse" />
-      </div>
+    <div className="card sk">
+      <div className="ph" />
+      <div className="row"><div className="chip" /><div className="chip" /></div>
     </div>
   );
 }
 
 export default function Explore() {
-  const [photos, setPhotos] = useState(null); // null = loading, [] allowed
-  const { user, role, signInBuyer } = useAuth();
-  const navigate = useNavigate();
+  const [items, setItems] = useState(null); // null = loading
+  const nav = useNavigate();
+  const { user, role, loginAs } = useAuth();
 
   useEffect(() => {
-    const q = query(collection(db, 'photos'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        setPhotos(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-      },
-      () => setPhotos([]) // on error don't flash "no content"
-    );
-    return () => unsub();
+    (async () => {
+      const imgs = await listImages("public/images"); // your storage folder
+      // watermark in parallel for thumbs
+      const withWM = await Promise.all(
+        imgs.map(async (p) => ({
+          ...p,
+          thumb: await watermarkImage(p.url, "Picsellart"),
+        }))
+      );
+      setItems(withWM);
+    })();
   }, []);
 
-  const handleView = (id) => {
-    navigate(`/photo/${id}`);
-  };
+  const handleView = (it) => nav(`/photo/${encodeURIComponent(it.id)}`, { state: it });
 
-  const handleBuy = async (p) => {
-    // ensure buyer sign-in
-    if (!user) {
-      await signInBuyer();
+  const handleBuy = async (it) => {
+    if (!user || role !== "buyer") {
+      await loginAs("buyer");
     }
-    // server order for photo (use your existing endpoint)
-    await loadRazorpay();
-    const { orderId, amount, currency, key } = await createServerOrder(
-      { type: 'photo', photoId: p.id },
-      '/api/razorpay/createPhotoOrder'
-    );
-    openCheckout({
-      key,
-      amount,
-      currency,
-      name: 'Picsellart',
-      description: `Purchase: ${p.title}`,
-      order_id: orderId,
-      prefill: {},
-      notes: { photoId: p.id },
-      handler: function onSuccess() {
-        // After success, redirect to detail where download is unlocked
-        navigate(`/photo/${p.id}?p=success`);
-      },
+    // Create order
+    const res = await fetch("/api/razorpay/create-order", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ amount: it.price * 100, currency: "INR", notes: { photo: it.name }})
+    }).then(r=>r.json());
+
+    const rz = await import("../utils/razorpay");
+    await rz.openCheckout({
+      order_id: res.id,
+      amount: res.amount,
+      name: "Picsellart",
+      description: it.title,
+      notes: { photo: it.name }
     });
+    // After success the webhook will mark paid; you can then fetch a signed URL
+    // nav(`/order/success?photo=${encodeURIComponent(it.id)}`);
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10">
-      <h1 className="text-3xl font-extrabold tracking-tight text-slate-900">Explore</h1>
+    <div className="container">
+      <h1>Explore</h1>
 
-      {photos === null && (
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <CardSkeleton key={i} />
-          ))}
+      {items === null && (
+        <div className="grid">
+          {Array.from({length:8}).map((_,i)=><CardSkeleton key={i}/>)}
         </div>
       )}
 
-      {Array.isArray(photos) && photos.length > 0 && (
-        <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {photos.map((p) => (
-            <div key={p.id} className="rounded-2xl border p-3">
-              <img
-                src={p.watermarkUrl}
-                alt={p.title || 'photo'}
-                className="h-56 w-full object-cover rounded-xl"
-                loading="lazy"
-              />
-              <div className="mt-3 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{p.title || 'Untitled'}</div>
-                  <div className="text-sm text-slate-500">₹{p.price ?? 499}</div>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleView(p.id)}
-                    className="px-4 h-9 rounded-full border text-slate-700 hover:bg-gray-50"
-                  >
-                    View
-                  </button>
-                  <button
-                    onClick={() => handleBuy(p)}
-                    className="px-4 h-9 rounded-full bg-blue-600 text-white hover:bg-blue-700"
-                  >
-                    Buy
-                  </button>
-                </div>
+      {items?.length === 0 && (
+        <p>No photos yet.</p>
+      )}
+
+      {items && items.length > 0 && (
+        <div className="grid">
+          {items.map((it) => (
+            <div className="card" key={it.id}>
+              <img src={it.thumb} alt={it.title} />
+              <div className="meta">
+                <div className="t">{it.title}</div>
+                <div className="p">₹{it.price}</div>
+              </div>
+              <div className="row">
+                <button className="pill" onClick={()=>handleView(it)}>View</button>
+                <button className="pill blue" onClick={()=>handleBuy(it)}>Buy</button>
               </div>
             </div>
           ))}
         </div>
       )}
-
-      {Array.isArray(photos) && photos.length === 0 && (
-        <div className="mt-10 text-slate-500">No photos yet.</div>
-      )}
     </div>
   );
 }
+
+/* minimal page CSS (you can move to your index.css)
+.container{max-width:1080px;margin:0 auto;padding:32px 16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:22px}
+.card{border:1px solid #e5e7eb;border-radius:16px;padding:12px;background:#fff}
+.card img{width:100%;height:220px;object-fit:cover;border-radius:12px}
+.row{display:flex;gap:10px;align-items:center;justify-content:flex-start;margin-top:10px}
+.meta{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+.t{font-weight:600}
+.p{font-weight:700}
+.sk .ph{height:220px;border-radius:12px;background:linear-gradient(90deg,#f3f4f6,#eef2f7,#f3f4f6);animation:sh 1.2s infinite}
+.sk .chip{width:80px;height:32px;border-radius:999px;background:#eef2f7}
+@keyframes sh{0%{background-position:0%}100%{background-position:100%}}
+*/

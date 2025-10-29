@@ -1,22 +1,31 @@
-// src/pages/SellerLogin.jsx
-import { useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { db } from '../lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
+import { initializeApp } from "firebase/app";
+import firebaseConfig from "../firebase";
 
-export default function SellerLogin() {
-  const { user, signInSeller } = useAuth();
-  const navigate = useNavigate();
+const db = getFirestore(initializeApp(firebaseConfig));
+
+export default function SellerLogin(){
+  const { user, role, loginAs } = useAuth();
+  const nav = useNavigate();
 
   useEffect(() => {
     (async () => {
-      const u = user || (await signInSeller());
-      const snap = await getDoc(doc(db, 'sellers', u.uid));
-      const active = snap.exists() && snap.data()?.activePlan;
-      navigate(active ? '/seller/dashboard' : '/seller/subscribe', { replace: true });
+      if (!user || role !== "seller") {
+        await loginAs("seller");
+      }
+      // check plan
+      const ref = doc(db, "plans", user.uid);
+      const snap = await getDoc(ref);
+      if (!snap.exists() || snap.data().status !== "active") {
+        nav("/seller/subscribe", { replace: true });
+      } else {
+        nav("/seller/dashboard", { replace: true });
+      }
     })();
-  }, [user]);
+  }, [user, role, loginAs, nav]);
 
-  return <div className="max-w-3xl mx-auto px-4 py-10">Signing you in…</div>;
+  return <div className="container"><p>Signing you in…</p></div>;
 }

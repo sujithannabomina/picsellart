@@ -1,36 +1,34 @@
-// src/App.jsx
-import { Suspense, lazy } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
-import Header from "./components/Header";
-
-const LandingPage   = lazy(() => import("./pages/LandingPage"));
-const Explore       = lazy(() => import("./pages/Explore"));
-const BuyerLogin    = lazy(() => import("./pages/BuyerLogin"));
-const SellerLogin   = lazy(() => import("./pages/SellerLogin"));
-const Faq           = lazy(() => import("./pages/Faq"));      // <-- correct filename
-const Contact       = lazy(() => import("./pages/Contact"));
-const Refunds       = lazy(() => import("./pages/Refunds"));
+import { Routes, Route } from 'react-router-dom'
+import Header from './components/Header.jsx'
+import LandingPage from './pages/LandingPage.jsx'
+import Explore from './pages/Explore.jsx'
+import PhotoDetail from './pages/PhotoDetail.jsx'
+import BuyerLogin from './pages/BuyerLogin.jsx'
+import SellerLogin from './pages/SellerLogin.jsx'
+import SellerDashboard from './pages/SellerDashboard.jsx'
+import SellerSubscribe from './pages/SellerSubscribe.jsx'
+import FAQ from './pages/FAQ.jsx'
+import Contact from './pages/Contact.jsx'
+import Refunds from './pages/Refunds.jsx'
+import NotFound from './pages/NotFound.jsx'
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Header />
-        <Suspense fallback={<div className="pageWrap"><p className="muted">Loading…</p></div>}>
-          <Routes>
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/explore" element={<Explore />} />
-            <Route path="/buyer" element={<BuyerLogin />} />
-            <Route path="/seller" element={<SellerLogin />} />
-            <Route path="/faq" element={<Faq />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/refunds" element={<Refunds />} />
-            {/* simple 404 */}
-            <Route path="*" element={<div className="pageWrap"><h2>Not Found</h2></div>} />
-          </Routes>
-        </Suspense>
-      </AuthProvider>
-    </BrowserRouter>
-  );
+    <>
+      <Header />
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/explore" element={<Explore />} />
+        <Route path="/photo/:id" element={<PhotoDetail />} />
+        <Route path="/buyer" element={<BuyerLogin />} />
+        <Route path="/seller" element={<SellerLogin />} />
+        <Route path="/seller/subscribe" element={<SellerSubscribe />} />
+        <Route path="/seller/dashboard" element={<SellerDashboard />} />
+        <Route path="/faq" element={<FAQ />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/refunds" element={<Refunds />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
+  )
 }

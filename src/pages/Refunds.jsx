@@ -1,38 +1,35 @@
-// src/pages/Refunds.jsx
+import React from "react";
+
 export default function Refunds() {
   return (
-    <div className="pageWrap">
-      <h2 className="pageTitle">Refund & Resolution Policy</h2>
-
-      <p>
-        We want every purchase on Picsellart to be safe and satisfactory. This page explains when you’re eligible for a
-        refund, how to request one, and what happens next.
+    <div className="container">
+      <h1>Refunds & Cancellations</h1>
+      <p style={{color:"#475569"}}>
+        Because digital files are delivered instantly, completed purchases are
+        generally <b>non-refundable</b>. If you experience a payment error, receive
+        the wrong file, or the file is corrupt/unusable, contact us within
+        <b> 48 hours</b> via the Contact page. We’ll review the order and provide a
+        replacement or refund when appropriate.
       </p>
 
-      <h3>When refunds are approved</h3>
-      <ul>
-        <li>Duplicate charge for the same order.</li>
-        <li>File corruption where a working replacement can’t be provided promptly.</li>
-        <li>Wrong file delivered and we can’t supply the correct one.</li>
-        <li>Technical delivery failure after successful payment.</li>
+      <h3 style={{marginTop:20}}>When refunds may apply</h3>
+      <ul style={{lineHeight:1.8, color:"#334155"}}>
+        <li>Duplicate charges or accidental double purchase</li>
+        <li>Corrupted file and seller can’t provide a working replacement</li>
+        <li>Incorrect file delivered (different from the listing)</li>
       </ul>
 
-      <h3>Not eligible</h3>
-      <ul>
-        <li>Change of mind after successful download.</li>
-        <li>Use of the image after purchase is later disputed.</li>
-        <li>Orders older than 7 days.</li>
-        <li>Violations of license terms or suspected abuse.</li>
+      <h3 style={{marginTop:20}}>When refunds don’t apply</h3>
+      <ul style={{lineHeight:1.8, color:"#334155"}}>
+        <li>Change of mind after download</li>
+        <li>Misuse of the file or violation of license terms</li>
+        <li>Requests made well after the purchase date</li>
       </ul>
 
-      <h3>How to request a refund</h3>
-      <ol>
-        <li>Go to the <a href="/contact">Contact</a> page and choose “Refund”.</li>
-        <li>Include your order ID, purchase email, and a brief description.</li>
-        <li>Attach screenshots or error messages if relevant.</li>
-      </ol>
-
-      <p className="muted">Refunds are usually reviewed within 2–3 business days.</p>
+      <p style={{marginTop:16, color:"#475569"}}>
+        Tip: Include your order ID and the image name in your message for the
+        fastest resolution.
+      </p>
     </div>
   );
 }

@@ -1,84 +1,80 @@
-// src/context/AuthContext.jsx
-import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from "react";
+import { initializeApp } from "firebase/app";
 import {
-  auth,
-  google,
-  onAuthStateChanged,
+  getAuth,
+  GoogleAuthProvider,
   signInWithPopup,
+  onAuthStateChanged,
   signOut,
-  db,
-  serverTs,
-  ensureUserDoc,
-} from '../lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+} from "firebase/auth";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import firebaseConfig from "../firebase";
 
-const AuthCtx = createContext(null);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+const AuthCtx = createContext();
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); // 'buyer' | 'seller' | null
+  const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // read role from users/{uid}
-  async function loadRole(uid) {
-    const snap = await getDoc(doc(db, 'users', uid));
-    if (snap.exists()) {
-      const r = snap.data()?.role ?? null;
-      setRole(r);
-    } else {
-      setRole(null);
-    }
-  }
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+  useEffect(() =>
+    onAuthStateChanged(auth, async (u) => {
+      if (!u) {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
+        return;
+      }
       setUser(u);
-      if (u) await loadRole(u.uid);
+      // fetch role
+      const ref = doc(db, "users", u.uid);
+      const snap = await getDoc(ref);
+      setRole(snap.exists() ? snap.data().role || null : null);
       setLoading(false);
-    });
-    return () => unsub();
-  }, []);
+    }), []);
 
-  // Direct Google sign-ins
-  const signInBuyer = async () => {
-    const res = await signInWithPopup(auth, google);
-    await ensureUserDoc(res.user.uid, {
-      email: res.user.email,
-      displayName: res.user.displayName || '',
-      role: 'buyer',
-    });
-    setRole('buyer');
-    return res.user;
+  const loginAs = async (asRole) => {
+    const res = await signInWithPopup(auth, provider);
+    const u = res.user;
+    // persist/update role
+    await setDoc(
+      doc(db, "users", u.uid),
+      {
+        uid: u.uid,
+        email: u.email,
+        displayName: u.displayName || "",
+        photoURL: u.photoURL || "",
+        role: asRole,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    setRole(asRole);
+    return u;
   };
 
-  const signInSeller = async () => {
-    const res = await signInWithPopup(auth, google);
-    await ensureUserDoc(res.user.uid, {
-      email: res.user.email,
-      displayName: res.user.displayName || '',
-      role: 'seller',
-    });
-    setRole('seller');
-    // also ensure a seller doc placeholder (plan status)
-    const sRef = doc(db, 'sellers', res.user.uid);
-    const sSnap = await getDoc(sRef);
-    if (!sSnap.exists()) {
-      await setDoc(sRef, { activePlan: false, createdAt: serverTs() });
-    }
-    return res.user;
-  };
-
-  const signOutAll = async () => {
+  const logout = async () => {
     await signOut(auth);
+    setUser(null);
     setRole(null);
   };
 
-  const value = useMemo(
-    () => ({ user, role, loading, signInBuyer, signInSeller, signOutAll }),
-    [user, role, loading]
+  return (
+    <AuthCtx.Provider value={{ user, role, loading, loginAs, logout }}>
+      {children}
+    </AuthCtx.Provider>
   );
-
-  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
 export const useAuth = () => useContext(AuthCtx);

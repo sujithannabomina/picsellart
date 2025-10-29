@@ -1,20 +1,19 @@
-// src/pages/BuyerLogin.jsx
-import { useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-export default function BuyerLogin() {
-  const { user, signInBuyer } = useAuth();
-  const navigate = useNavigate();
-  const loc = useLocation();
+export default function BuyerLogin(){
+  const { user, role, loginAs } = useAuth();
+  const nav = useNavigate();
 
   useEffect(() => {
     (async () => {
-      if (!user) await signInBuyer();
-      // go back to Explore if came from buy, else stay on buyer dashboard
-      navigate('/buyer', { replace: true, state: { from: loc.state?.from || '/' } });
+      if (!user || role !== "buyer") {
+        await loginAs("buyer");
+      }
+      nav("/explore", { replace: true });
     })();
-  }, [user]);
+  }, [user, role, loginAs, nav]);
 
-  return <div className="max-w-3xl mx-auto px-4 py-10">Signing you in…</div>;
+  return <div className="container"><p>Signing you in…</p></div>;
 }

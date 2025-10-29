@@ -1,41 +1,34 @@
-// src/utils/storage.js
-import { getStorage, ref, list, getDownloadURL } from "firebase/storage";
-import { app } from "../firebase";
+import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
+import { initializeApp } from "firebase/app";
+import firebaseConfig from "../firebase";
 
+const app = initializeApp(firebaseConfig);
 const storage = getStorage(app);
 
 /**
- * List one page (maxResults) from a given folder.
- * Returns { items: [{name, url, path}], nextPageToken }
+ * Lists images under given folder. Default: "public/images"
+ * Returns [{id, url, name, title, price, tags}]
  */
-export async function listPage(folder, pageToken = undefined, maxResults = 24) {
-  const r = ref(storage, folder);
-  const res = await list(r, { maxResults, pageToken });
-  const items = await Promise.all(
-    res.items.map(async (i) => ({
-      name: i.name,
-      path: i.fullPath,
-      url: await getDownloadURL(i),
-    }))
-  );
-  return { items, nextPageToken: res.nextPageToken || null };
-}
+export async function listImages(folder = "public/images") {
+  const out = [];
+  const rootRef = ref(storage, folder);
+  const items = await listAll(rootRef);
 
-/**
- * Fetches one merged page from both "public/" and "Buyer/".
- * Keeps their next tokens separate so we can load more later.
- */
-export async function listMerged(first = false, tokens = { public: null, buyer: null }) {
-  const [pub, buy] = await Promise.all([
-    listPage("public", tokens.public),
-    listPage("Buyer", tokens.buyer),
-  ]);
-
-  // interleave-ish (simple concat also fine)
-  const items = [...pub.items, ...buy.items];
-
-  return {
-    items,
-    nextTokens: { public: pub.nextPageToken, buyer: buy.nextPageToken },
-  };
+  let idx = 1;
+  for (const item of items.items) {
+    const url = await getDownloadURL(item);
+    const name = item.name;
+    out.push({
+      id: name.replace(/\.\w+$/, ""),
+      url,
+      name,
+      title: name.replace(/\.\w+$/, "").replace(/[-_]/g, " "),
+      price: 249 + (idx % 10) * 50, // deterministic random-ish
+      tags: ["photo", "picsellart"],
+    });
+    idx++;
+  }
+  // Stable sort by name so grid doesn't jump
+  out.sort((a,b)=>a.name.localeCompare(b.name));
+  return out;
 }
