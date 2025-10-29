@@ -4,7 +4,8 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Use your existing env/config values
+// Production-ready Firebase bootstrap used across the app.
+// Values come from your Vite env (.env) and are injected at build time.
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -17,10 +18,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
+// Auth (Google), Firestore, and Storage singletons
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
-// Helpful default export for occasional imports
+// Export both default and named for compatibility with existing imports
+export { app };
 export default app;
