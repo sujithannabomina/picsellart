@@ -1,20 +1,26 @@
-// Firebase client (Auth + Storage). Firestore optional for later.
-import { initializeApp } from 'firebase/app'
-import { getAuth, GoogleAuthProvider } from 'firebase/auth'
-import { getStorage } from 'firebase/storage'
+// src/firebase.js
+import { initializeApp } from "firebase/app";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
-// Your project config (from your memory note)
+// Use your existing env/config values
 const firebaseConfig = {
-  apiKey: "AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ",
-  authDomain: "picsellart-619a7.firebaseapp.com",
-  projectId: "picsellart-619a7",
-  storageBucket: "picsellart-619a7.firebasestorage.app",
-  messagingSenderId: "347448234684",
-  appId: "1:347448234684:web:24f131272d382cc9f1b6b9",
-  measurementId: "G-3KNDHJ6JZY"
-}
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
+};
 
-const app = initializeApp(firebaseConfig)
-export const auth = getAuth(app)
-export const googleProvider = new GoogleAuthProvider()
-export const storage = getStorage(app)
+const app = initializeApp(firebaseConfig);
+
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+
+// Helpful default export for occasional imports
+export default app;
