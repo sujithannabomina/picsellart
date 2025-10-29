@@ -1,11 +1,13 @@
 // src/firebase.js
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { initializeApp, getApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Production-ready Firebase bootstrap used across the app.
-// Values come from your Vite env (.env) and are injected at build time.
+// IMPORTANT: Use exactly one firebase.js in the project.
+// Delete any duplicate like src/utils/firebase.js and make
+// all imports reference:  import { app, auth, db, storage } from "../firebase";
+
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -16,14 +18,13 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-const app = initializeApp(firebaseConfig);
+// Duplicate-safe init: reuse existing app if already initialized
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Auth (Google), Firestore, and Storage singletons
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-export const db = getFirestore(app);
-export const storage = getStorage(app);
+// Core SDK singletons (safe to export across app)
+const auth = getAuth(app);
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-// Export both default and named for compatibility with existing imports
-export { app };
+export { app, auth, db, storage };
 export default app;
