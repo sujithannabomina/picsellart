@@ -1,12 +1,15 @@
 // src/firebase.js
+// Single, duplicate-safe Firebase initialization + shared SDK singletons.
+// Exports googleProvider required by AuthContext.jsx.
+
 import { initializeApp, getApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// IMPORTANT: Use exactly one firebase.js in the project.
-// Delete any duplicate like src/utils/firebase.js and make
-// all imports reference:  import { app, auth, db, storage } from "../firebase";
+// IMPORTANT: Make sure all imports in your app use this path:
+//   import { app, auth, db, storage, googleProvider } from "../firebase";
+// Delete any duplicate files like src/utils/firebase.js.
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -18,13 +21,18 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// Duplicate-safe init: reuse existing app if already initialized
+// Duplicate-safe init (prevents "App named [DEFAULT] already exists" in SPA)
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// Core SDK singletons (safe to export across app)
+// Core SDK singletons
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-export { app, auth, db, storage };
+// OAuth providers used in the app
+const googleProvider = new GoogleAuthProvider();
+// Optional: force account selector each time for multi-account users
+googleProvider.setCustomParameters({ prompt: "select_account" });
+
+export { app, auth, db, storage, googleProvider };
 export default app;
