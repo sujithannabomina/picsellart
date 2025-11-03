@@ -1,26 +1,31 @@
-import { getStorage, listAll, ref, getDownloadURL } from "firebase/storage";
-import { app } from "../firebase";
+// src/utils/storage.js
+import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
+import { app } from "../firebase"; // ← single source
 
 const storage = getStorage(app);
-const DIR = "public/images";
 
+// List images in "public/images" folder and return [{name, path, url}]
 export async function listPublicImages() {
-  const r = ref(storage, DIR);
-  const ls = await listAll(r);
-  const out = [];
-  for (const item of ls.items) {
-    const url = await getDownloadURL(item);
-    out.push({ name: item.name, fullPath: item.fullPath, downloadURL: url, tags: [] });
-  }
+  const folderRef = ref(storage, "public/images");
+  const all = await listAll(folderRef);
+  const files = all.items || [];
+  const out = await Promise.all(
+    files.map(async (itemRef) => {
+      const url = await getDownloadURL(itemRef);
+      return {
+        name: itemRef.name,
+        path: itemRef.fullPath,
+        url,
+      };
+    })
+  );
+  // Optional: stable sort
+  out.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   return out;
 }
 
-export async function getPublicImageByName(name) {
-  const r = ref(storage, `${DIR}/${name}`);
-  try {
-    const downloadURL = await getDownloadURL(r);
-    return { name, fullPath: r.fullPath, downloadURL, tags: [] };
-  } catch {
-    return null;
-  }
+// Single file URL helper (used by detail pages)
+export async function getFileUrl(path) {
+  const fileRef = ref(storage, path);
+  return getDownloadURL(fileRef);
 }
