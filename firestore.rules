@@ -1,0 +1,92 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    /*******************************
+     * Public, read-only collections
+     *******************************/
+    // e.g., site-wide config, plans catalog you render on pricing page
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Public photo metadata used by Explore/Detail pages.
+    // Expect docs to have: visibility: "public" | "private"
+    match /photos/{photoId} {
+      allow read: if resource.data.visibility == "public";
+      allow create, update, delete: if false; // uploads/edits go via server (recommended)
+    }
+
+    // Aggregated stats you might show on homepage
+    match /stats/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    /*******************************
+     * User profile (per-user access)
+     *******************************/
+    match /users/{uid} {
+      // A user can read their own profile
+      allow read: if isOwner(uid);
+
+      // Restrict which fields a user can change from the client.
+      // Only allow these keys: displayName, photoURL, phone, country
+      allow update: if isOwner(uid)
+        && request.resource.data.keys().hasOnly(
+            ['displayName', 'photoURL', 'phone', 'country', 'updatedAt']
+          )
+        // Preserve server-owned fields from being changed client-side
+        && request.resource.data.diff(resource.data).changedKeys()
+             .hasOnly(['displayName','photoURL','phone','country','updatedAt']);
+
+      // Creation of the user doc is allowed for the owner (first sign-in),
+      // but must not set server-owned fields such as role/plan/limits.
+      allow create: if isOwner(uid)
+        && !('role' in request.resource.data)
+        && !('plan' in request.resource.data)
+        && !('planExpiresAt' in request.resource.data)
+        && !('uploadsUsed' in request.resource.data);
+
+      // Never allow client-side deletes
+      allow delete: if false;
+    }
+
+    /*****************************************
+     * Payments & subscriptions (server-only)
+     *****************************************/
+    // All writes for these go through Cloud Functions (Admin SDK bypasses rules).
+    match /payments/{id} {
+      // Owner can read their own payment record
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /orders/{id} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /subscriptions/{id} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    /*********************************
+     * Fallback: deny everything else
+     *********************************/
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
