@@ -16,13 +16,15 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// Prevent "App named [DEFAULT] already exists" on SPA reloads
+// Duplicate-safe init (prevents "App named [DEFAULT] already exists")
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+// Core SDK singletons
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+// OAuth providers used in the app
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 

@@ -1,109 +1,31 @@
 // src/utils/storage.js
-// Production-ready helpers for reading public images from Firebase Storage.
-// Single source of truth: imports the singleton Firebase app we defined.
+import { getDownloadURL, list, ref } from "firebase/storage";
+import { storage } from "../firebase"; // <-- unified import
 
-import { app } from "../firebase";
-import {
-  getStorage,
-  ref,
-  listAll,
-  getDownloadURL,
-} from "firebase/storage";
+// Public image root in Firebase Storage
+const PUBLIC_ROOT = "public/images";
 
-const storage = getStorage(app);
-const PUBLIC_FOLDER = "public/images";
-
-/**
- * Normalize names for safe, case-insensitive comparisons.
- */
-function normalizeName(name) {
-  return String(name || "").trim().toLowerCase();
-}
-
-/**
- * Return a signed download URL for a given storage path.
- * @param {string} path e.g. "public/images/sample1.jpg"
- */
-export async function getFileUrl(path) {
-  if (!path) throw new Error("getFileUrl: 'path' is required");
-  const fileRef = ref(storage, path);
-  return getDownloadURL(fileRef);
-}
-
-/**
- * List all files inside PUBLIC_FOLDER as a stable, sorted array:
- * [{ name, path, url }]
- */
-export async function listPublicImages() {
-  const folderRef = ref(storage, PUBLIC_FOLDER);
-  const all = await listAll(folderRef);
-
-  // Guard against empty folders
-  const items = Array.isArray(all.items) ? all.items : [];
-
-  const out = await Promise.all(
+// List images under public/images with basic pagination support
+export async function listPublicImages({ maxResults = 60, pageToken } = {}) {
+  const rootRef = ref(storage, PUBLIC_ROOT);
+  const { items, nextPageToken } = await list(rootRef, { maxResults, pageToken });
+  const files = await Promise.all(
     items.map(async (itemRef) => {
       const url = await getDownloadURL(itemRef);
       return {
-        name: itemRef.name,          // "sample1.jpg"
-        path: itemRef.fullPath,      // "public/images/sample1.jpg"
-        url,                         // signed URL for rendering
+        name: itemRef.name,
+        path: itemRef.fullPath,
+        url,
       };
     })
   );
-
-  // Stable sort by natural name (handles sample1, sample2, sample10 correctly)
-  out.sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-  );
-
-  return out;
+  return { files, nextPageToken: nextPageToken || null };
 }
 
-/**
- * Find a single public image by its file name (case-insensitive),
- * return { name, path, url }. Throws a clear error if not found.
- *
- * Example: getPublicImageByName("sample12.jpg")
- */
-export async function getPublicImageByName(fileName) {
-  if (!fileName) {
-    throw new Error("getPublicImageByName: 'fileName' is required");
-  }
-
-  const target = normalizeName(fileName);
-  const folderRef = ref(storage, PUBLIC_FOLDER);
-  const all = await listAll(folderRef);
-
-  const items = Array.isArray(all.items) ? all.items : [];
-  const match = items.find((it) => normalizeName(it.name) === target);
-
-  if (!match) {
-    // Provide helpful context for debugging
-    const available = items.map((it) => it.name).slice(0, 50).join(", ");
-    throw new Error(
-      `Image not found: "${fileName}" in ${PUBLIC_FOLDER}. ` +
-      `Available (first 50): ${available || "none"}`
-    );
-  }
-
-  const url = await getDownloadURL(match);
-  return {
-    name: match.name,
-    path: match.fullPath,
-    url,
-  };
-}
-
-/**
- * Optional utility: get image object by full storage path.
- * Kept here because pages sometimes pass a saved path rather than a name.
- * @param {string} path "public/images/sample1.jpg"
- */
-export async function getPublicImageByPath(path) {
-  return {
-    name: path.split("/").pop() || path,
-    path,
-    url: await getFileUrl(path),
-  };
+// Fetch a single public image by file name (e.g., "sample23.jpg")
+export async function getPublicImageByName(filename) {
+  if (!filename) throw new Error("filename is required");
+  const fileRef = ref(storage, `${PUBLIC_ROOT}/${filename}`);
+  const url = await getDownloadURL(fileRef);
+  return { name: filename, path: fileRef.fullPath, url };
 }

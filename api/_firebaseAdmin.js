@@ -1,23 +1,32 @@
-// /api/_firebaseAdmin.js
-import * as admin from "firebase-admin";
+// api/_firebaseAdmin.js
+let admin = null;
 
-let app;
-if (!admin.apps.length) {
-  const sa = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-  if (!sa) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT_JSON is missing");
+function getAdmin() {
+  if (admin) return admin;
+
+  const firebaseAdmin = require("firebase-admin");
+
+  if (!firebaseAdmin.apps.length) {
+    // Prefer GOOGLE_APPLICATION_CREDENTIALS on the platform (recommended)
+    // or a JSON string in FIREBASE_SERVICE_ACCOUNT.
+    const svcJson = process.env.FIREBASE_SERVICE_ACCOUNT
+      ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+      : undefined;
+
+    firebaseAdmin.initializeApp(
+      svcJson
+        ? { credential: firebaseAdmin.credential.cert(svcJson) }
+        : { credential: firebaseAdmin.credential.applicationDefault() }
+    );
   }
-  const serviceAccount = JSON.parse(sa);
 
-  app = admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET, // optional if you plan to use Storage from API
-  });
-} else {
-  app = admin.app();
+  admin = {
+    auth: firebaseAdmin.auth(),
+    db: firebaseAdmin.firestore(),
+    storage: firebaseAdmin.storage(),
+    app: firebaseAdmin.app(),
+  };
+  return admin;
 }
 
-export const adminApp = app;
-export const adminDb = admin.firestore();
-export const adminFieldValue = admin.firestore.FieldValue;
-export const adminTimestamp = admin.firestore.Timestamp;
+module.exports = { getAdmin };

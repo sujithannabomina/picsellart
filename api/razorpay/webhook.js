@@ -1,43 +1,60 @@
 // api/razorpay/webhook.js
-// Verifies Razorpay webhook signatures and acknowledges events.
+// For production we recommend the Razorpay Dashboard points to your
+// Firebase Function webhook. This file simply proxies (if FUNCTION_WEBHOOK_URL set)
+// so you can also send test webhooks to Vercel if needed.
 
-/** Use Node runtime, not nodejs18.x */
-module.exports.config = { runtime: "nodejs" };
+const https = require("https");
 
-const crypto = require("crypto");
+function proxyRaw(url, req) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      const payload = Buffer.concat(chunks);
+      const forward = https.request(
+        {
+          hostname: u.hostname,
+          path: u.pathname + (u.search || ""),
+          method: "POST",
+          port: 443,
+          headers: {
+            ...req.headers,
+            host: u.hostname,
+          },
+        },
+        (res) => {
+          let body = "";
+          res.on("data", (d) => (body += d));
+          res.on("end", () => resolve({ status: res.statusCode, body }));
+        }
+      );
+      forward.on("error", reject);
+      forward.write(payload);
+      forward.end();
+    });
+    req.on("error", reject);
+  });
+}
 
-module.exports = async function handler(req, res) {
+module.exports = async (req, res) => {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "Method Not Allowed" });
+    return res.status(405).send("Method Not Allowed");
   }
 
   try {
-    const webhookSecret =
-      process.env.RAZORPAY_WEBHOOK_SECRET || process.env.WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-      return res.status(500).json({ error: "Missing webhook secret" });
+    const fnUrl = process.env.FUNCTION_WEBHOOK_URL;
+    if (!fnUrl) {
+      // If you didn't set a proxy, respond 200 so Razorpay doesn't retry noisily.
+      console.warn("FUNCTION_WEBHOOK_URL not set. Returning 200 no-op.");
+      return res.status(200).json({ ok: true, note: "No-op webhook handler" });
     }
 
-    const signature = req.headers["x-razorpay-signature"];
-    const body = JSON.stringify(req.body || {});
-    const expected = crypto
-      .createHmac("sha256", webhookSecret)
-      .update(body)
-      .digest("hex");
-
-    if (signature !== expected) {
-      return res.status(400).json({ error: "Invalid signature" });
-    }
-
-    // TODO: handle events as needed (order.paid, payment.captured, etc.)
-    // Example:
-    // if (req.body?.event === "payment.captured") { ... }
-
-    return res.status(200).json({ ok: true });
+    const result = await proxyRaw(fnUrl, req);
+    return res.status(result.status || 200).send(result.body || "");
   } catch (err) {
-    console.error("webhook error:", err);
-    return res.status(500).json({ error: "Webhook failed", details: err?.message });
+    console.error("webhook proxy error:", err);
+    return res.status(500).send("Webhook error");
   }
 };
