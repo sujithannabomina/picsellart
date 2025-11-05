@@ -1,133 +1,165 @@
+// src/pages/Contact.jsx
 import React, { useState } from "react";
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { useAuth } from "../context/AuthContext";
-import firebaseConfig from "../firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase";                 // ✅ use the single, shared instance
+import { useAuth } from "../context/AuthContext"; // optional: attach user info
 
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+const Contact = () => {
+  const { user } = useAuth() || {};
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState({ type: "", msg: "" });
 
-const TOPICS = [
-  { value: "Suggestion", label: "Suggestion" },
-  { value: "Complaint", label: "Complaint" },
-  { value: "Request", label: "Request" },
-  { value: "Other", label: "Other" },
-];
-
-export default function Contact() {
-  const { user, role } = useAuth();
-  const [email, setEmail] = useState(user?.email || "");
-  const [topic, setTopic] = useState(TOPICS[0].value);
-  const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const [done, setDone] = useState(false);
-  const [err, setErr] = useState("");
-  // simple honeypot
-  const [website, setWebsite] = useState("");
+  const onChange = (e) => {
+    const { name, value } = e.target;
+    setForm((f) => ({ ...f, [name]: value }));
+    if (status.type) setStatus({ type: "", msg: "" });
+  };
 
   const validate = () => {
-    const okEmail = /^\S+@\S+\.\S+$/.test(email.trim());
-    if (!okEmail) return "Please enter a valid email.";
-    if (message.trim().length < 10) return "Please write a little more detail (min 10 characters).";
+    if (!form.name.trim()) return "Please enter your name.";
+    if (!form.email.trim()) return "Please enter your email.";
+    // simple email check
+    if (!/^\S+@\S+\.\S+$/.test(form.email)) return "Please enter a valid email.";
+    if (!form.subject.trim()) return "Please enter a subject.";
+    if (!form.message.trim()) return "Please enter a message.";
     return "";
   };
 
-  const submit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    setErr("");
-    if (website) { // bot
-      setDone(true);
+    const v = validate();
+    if (v) {
+      setStatus({ type: "error", msg: v });
       return;
     }
-    const v = validate();
-    if (v) { setErr(v); return; }
+
+    setSubmitting(true);
     try {
-      setSending(true);
-      await addDoc(collection(db, "contactMessages"), {
-        email: email.trim(),
-        topic,
-        message: message.trim(),
-        uid: user?.uid || null,
-        role: role || null,
+      const payload = {
+        ...form,
         createdAt: serverTimestamp(),
+        // attach user context when available
+        userUid: user?.uid || null,
+        userEmail: user?.email || null,
+        userDisplayName: user?.displayName || null,
+        // request ip/ua left to backend/edge if needed
+      };
+
+      await addDoc(collection(db, "contactMessages"), payload);
+
+      setStatus({
+        type: "success",
+        msg: "Thanks! Your message has been sent. We’ll get back to you shortly.",
       });
-      setDone(true);
-      setMessage("");
-    } catch (e) {
-      setErr(e.message || "Failed to send. Try again.");
+      setForm({ name: "", email: "", subject: "", message: "" });
+    } catch (err) {
+      console.error("Contact submit failed:", err);
+      setStatus({
+        type: "error",
+        msg:
+          "Could not send your message right now. Please try again in a moment.",
+      });
     } finally {
-      setSending(false);
+      setSubmitting(false);
     }
   };
 
   return (
-    <div className="container">
-      <h1>Contact</h1>
-      <p style={{color:"#475569", marginBottom:16}}>
-        Questions, feedback, or an issue with a purchase? Send us a message and we’ll respond by email.
-      </p>
+    <div className="max-w-2xl mx-auto px-4 py-10">
+      <h1 className="text-3xl font-semibold mb-6">Contact Us</h1>
 
-      {done ? (
-        <div className="notice ok">Thanks! Your message has been sent. We’ll reply to {email}.</div>
-      ) : (
-        <form className="contact-form" onSubmit={submit}>
-          <label className="lbl">
-            Your email
-            <input
-              type="email"
-              className="inp"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e)=>setEmail(e.target.value)}
-              required
-            />
-          </label>
-
-          <label className="lbl">
-            Topic
-            <select className="inp" value={topic} onChange={(e)=>setTopic(e.target.value)}>
-              {TOPICS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-          </label>
-
-          <label className="lbl">
-            Write your message…
-            <textarea
-              className="inp"
-              rows={6}
-              value={message}
-              onChange={(e)=>setMessage(e.target.value)}
-              placeholder="Please include order ID or photo name if relevant."
-              required
-            />
-          </label>
-
-          {/* honeypot (hidden from humans) */}
-          <input
-            style={{position:"absolute", left:"-9999px"}}
-            tabIndex={-1}
-            autoComplete="off"
-            value={website}
-            onChange={(e)=>setWebsite(e.target.value)}
-            placeholder="Leave this field empty"
-          />
-
-          {err && <div className="notice err">{err}</div>}
-          <button className="pill blue" type="submit" disabled={sending}>
-            {sending ? "Sending…" : "Send"}
-          </button>
-        </form>
+      {status.type === "success" && (
+        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-800">
+          {status.msg}
+        </div>
+      )}
+      {status.type === "error" && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">
+          {status.msg}
+        </div>
       )}
 
-      <style>{`
-        .contact-form{max-width:720px;display:flex;flex-direction:column;gap:14px}
-        .lbl{display:flex;flex-direction:column;gap:8px;font-weight:600}
-        .inp{border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px;font:inherit}
-        textarea.inp{resize:vertical}
-        .notice{padding:12px 14px;border-radius:10px;margin:8px 0}
-        .notice.ok{background:#ecfeff;border:1px solid #06b6d4;color:#0e7490}
-        .notice.err{background:#fef2f2;border:1px solid #fca5a5;color:#991b1b}
-      `}</style>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm mb-1" htmlFor="name">
+            Your Name
+          </label>
+          <input
+            id="name"
+            name="name"
+            value={form.name}
+            onChange={onChange}
+            className="w-full rounded-lg border px-3 py-2 outline-none focus:ring"
+            placeholder="Jane Doe"
+            autoComplete="name"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm mb-1" htmlFor="email">
+            Email
+          </label>
+          <input
+            id="email"
+            name="email"
+            value={form.email}
+            onChange={onChange}
+            className="w-full rounded-lg border px-3 py-2 outline-none focus:ring"
+            placeholder="jane@example.com"
+            autoComplete="email"
+            type="email"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm mb-1" htmlFor="subject">
+            Subject
+          </label>
+          <input
+            id="subject"
+            name="subject"
+            value={form.subject}
+            onChange={onChange}
+            className="w-full rounded-lg border px-3 py-2 outline-none focus:ring"
+            placeholder="I have a question about…"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm mb-1" htmlFor="message">
+            Message
+          </label>
+          <textarea
+            id="message"
+            name="message"
+            value={form.message}
+            onChange={onChange}
+            className="w-full min-h-[140px] rounded-lg border px-3 py-2 outline-none focus:ring"
+            placeholder="Write your message here…"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={submitting}
+          className="inline-flex items-center rounded-lg bg-black px-4 py-2 text-white disabled:opacity-60"
+        >
+          {submitting ? "Sending…" : "Send Message"}
+        </button>
+      </form>
+
+      <p className="mt-6 text-xs text-neutral-500">
+        We respect your privacy. Your message is stored securely and visible
+        only to site admins.
+      </p>
     </div>
   );
-}
+};
+
+export default Contact;
