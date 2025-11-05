@@ -1,148 +1,88 @@
-// src/utils/exploreData.js
+/**
+ * PicSellArt — Explore Data (Public Images Manifest)
+ *
+ * Why this file exists:
+ * - The browser can’t list folder contents at runtime. So we keep a small, explicit
+ *   manifest of the files that live in /public/images.
+ * - Explore and Landing pull from this manifest to show cards / rotate images.
+ *
+ * How to add more images later:
+ * 1) Drop files into: /public/images
+ * 2) Add the exact filenames to RAW_FILES below (keep the order you prefer).
+ *    Example: "sample7.jpg", "sunset_001.jpg"
+ *
+ * Tip: If your filenames follow a strict pattern (sample1.jpg..sample112.jpg),
+ * you can generate that list; a helper is included at the bottom (commented).
+ */
 
-import {
-  collection,
-  getDocs,
-  limit,
-  orderBy,
-  query,
-  startAfter,
-} from "firebase/firestore";
-import {
-  getDownloadURL,
-  list,
-  ref as storageRef,
-} from "firebase/storage";
-
-import { db, storage } from "./firebase";
-
-// --- Tunables ---
-const PAGE_SIZE = 18; // grid size per page
-const PUBLIC_PREFIX = "public"; // gs://<bucket>/public/<uid>/...
+const IMAGE_BASE_PATH = "/images";
 
 /**
- * Load one Explore "page".
- * Strategy:
- *  1) Try Firestore collection `publicImages` (ordered by createdAt desc)
- *  2) If nothing comes back and we have no cursor yet, fallback to listing Storage.
- *
- * @param {Object} opts
- *  - cursor: Firestore DocumentSnapshot to start after (optional)
- *  - search:  string for client-side filtering (optional)
- *  - storageCursor: {prefix, pageToken} internal cursor for Storage paging (optional)
+ * EXACT filenames present in /public/images.
+ * From your latest screenshots, the folder contains sample1..sample6.jpg.
+ * If you add more, append them here.
  */
-export async function loadExplorePage(opts = {}) {
-  const { cursor = null, search = "", storageCursor = null } = opts;
+const RAW_FILES = [
+  "sample1.jpg",
+  "sample2.jpg",
+  "sample3.jpg",
+  "sample4.jpg",
+  "sample5.jpg",
+  "sample6.jpg",
+];
 
-  // --------- 1) Firestore page ----------
-  try {
-    const coll = collection(db, "publicImages");
-    const baseQ = cursor
-      ? query(coll, orderBy("createdAt", "desc"), startAfter(cursor), limit(PAGE_SIZE))
-      : query(coll, orderBy("createdAt", "desc"), limit(PAGE_SIZE));
+/**
+ * MAIN export used by the app — simple filename list.
+ * Explore.jsx currently imports SAMPLE_IMAGES.
+ */
+export const SAMPLE_IMAGES = [...RAW_FILES];
 
-    const snap = await getDocs(baseQ);
-
-    // Map to uniform items
-    let items = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        title: data.title || d.id,
-        tags: data.tags || [],
-        // publicPath always points to the watermarked copy
-        publicPath: data.publicPath,
-        createdAt: data.createdAt?.toMillis?.() ?? Date.now(),
-        uid: data.uid || "",
-      };
-    });
-
-    // Client-side filter (simple & robust)
-    const q = search.trim().toLowerCase();
-    if (q) {
-      items = items.filter(
-        (it) =>
-          it.title?.toLowerCase().includes(q) ||
-          (Array.isArray(it.tags) && it.tags.join(" ").toLowerCase().includes(q))
-      );
-    }
-
-    // Get signed URLs in parallel
-    const resolved = await Promise.all(
-      items.map(async (it) => {
-        try {
-          const url = await getDownloadURL(storageRef(storage, it.publicPath));
-          return { ...it, url };
-        } catch {
-          return { ...it, url: null };
-        }
-      })
-    );
-
-    // If FS returns something usable, use it
-    if (resolved.some((x) => !!x.url)) {
-      const lastDoc = snap.docs.length ? snap.docs[snap.docs.length - 1] : null;
-      return {
-        source: "firestore",
-        items: resolved.filter((x) => x.url),
-        next: lastDoc || null,
-        storageNext: storageCursor || null,
-      };
-    }
-
-    // Else fall through to Storage.
-  } catch (e) {
-    // Firestore might be empty for some accounts; we fallback silently.
-    // console.warn("Firestore explore fallback:", e);
-  }
-
-  // --------- 2) Storage fallback (prefix = /public/) ----------
-  const prefix = storageCursor?.prefix || PUBLIC_PREFIX;
-  const pageToken = storageCursor?.pageToken || undefined;
-
-  // We list at /public level; this can be many items, so we page using list() with maxResults.
-  const listRef = storageRef(storage, prefix);
-  const listed = await list(listRef, { maxResults: PAGE_SIZE, pageToken });
-
-  // Turn storage items into cards. We keep a lightweight title from filename.
-  const items = await Promise.all(
-    listed.items.map(async (obj) => {
-      try {
-        const url = await getDownloadURL(obj);
-        const name = obj.name || "";
-        const title = (name.replace(/_wm\.jpg$/i, "") || "Photo").slice(0, 40);
-        return {
-          id: obj.fullPath,
-          title,
-          tags: [],
-          publicPath: obj.fullPath,
-          createdAt: Date.now(),
-          uid: "", // unknown from storage only
-          url,
-        };
-      } catch {
-        return null;
-      }
-    })
-  );
-
-  const cleanItems = items.filter(Boolean);
-
-  // Client-side filter on the fallback too
-  const q = search.trim().toLowerCase();
-  const filtered = q
-    ? cleanItems.filter((it) => it.title.toLowerCase().includes(q))
-    : cleanItems;
-
-  const storageNext =
-    listed.nextPageToken ? { prefix, pageToken: listed.nextPageToken } : null;
-
+/**
+ * Optional richer manifest (id, name, url, title, price, tags…)
+ * Safe for future use by cards, pricing ribbons, filters, etc.
+ * Not required by Explore.jsx right now, but exported for production growth.
+ */
+export const IMAGE_MANIFEST = RAW_FILES.map((file, idx) => {
+  const base = file.replace(/\.[^.]+$/, "");
   return {
-    source: "storage",
-    items: filtered,
-    next: null, // Firestore cursor only
-    storageNext,
+    id: idx + 1,
+    name: file,
+    url: `${IMAGE_BASE_PATH}/${file}`,
+    title: base,               // e.g., "sample1"
+    priceINR: 199 + (idx % 6) * 20, // harmless placeholder; adjust/remove if you show price
+    tags: ["public", "sample"],
   };
+});
+
+/**
+ * Helper to fetch a manifest item by filename (exact match).
+ */
+export function findImageByName(name) {
+  const safe = String(name || "");
+  return IMAGE_MANIFEST.find((it) => it.name === safe) || null;
 }
 
-export const EXPLORE_PAGE_SIZE = PAGE_SIZE;
+/**
+ * Helper for landing page rotations — pick N unique random images.
+ */
+export function pickRandomImages(n = 3) {
+  const copy = [...IMAGE_MANIFEST];
+  const out = [];
+  while (copy.length && out.length < n) {
+    const i = Math.floor(Math.random() * copy.length);
+    out.push(copy.splice(i, 1)[0]);
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Advanced: Generate a patterned list instead of typing filenames     */
+/* (Only use this if your files truly exist with that pattern)         */
+/*
+function rangeSamples(from = 1, to = 112) {
+  return Array.from({ length: to - from + 1 }, (_, i) => `sample${from + i}.jpg`);
+}
+// Example usage:
+// const RAW_FILES = rangeSamples(1, 112);
+*/
+/* ------------------------------------------------------------------ */
