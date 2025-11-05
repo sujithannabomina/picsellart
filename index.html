@@ -1,15 +1,62 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- Charset & rendering -->
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <meta name="description" content="Picsellart — Sell your photos. Buy original art with secure payments." />
-    <link rel="icon" href="/public/favicon.ico" />
-    <title>Picsellart</title>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- Mobile + layout -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#111111" />
+
+    <!-- SEO basics -->
+    <title>Picsellart — Buy & Sell Quality Photos</title>
+    <meta name="description" content="Picsellart is a marketplace to buy and sell quality photographs and designs with secure payments and creator dashboards." />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+
+    <!-- Open Graph / Social -->
+    <meta property="og:title" content="Picsellart — Buy & Sell Quality Photos" />
+    <meta property="og:description" content="Discover premium photos, support creators, and purchase securely." />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://picsellart.com/" />
+    <meta property="og:image" content="/social-share.jpg" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Picsellart — Buy & Sell Quality Photos" />
+    <meta name="twitter:description" content="Discover premium photos, support creators, and purchase securely." />
+    <meta name="twitter:image" content="/social-share.jpg" />
+
+    <!-- Routing base for SPA (important for deep links on Vercel/Hosting) -->
+    <base href="/" />
+
+    <!-- Icons (add these files in /public if not present; harmless if missing) -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Preconnects used commonly (kept generic & safe) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Example font (optional). If you don’t use Google Fonts, remove these two lines. -->
+    <!-- <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" /> -->
+
+    <!-- Vite injects CSS via JS chunk; no manual CSS link needed unless you have global CSS files in /public -->
   </head>
-  <body class="min-h-screen bg-white text-slate-900">
+  <body>
+    <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+
+    <!-- Vite entry point -->
     <script type="module" src="/src/main.jsx"></script>
+
+    <!--
+      Notes for production:
+      - Keep only this SINGLE index.html at the project root.
+      - Do NOT have /public/index.html (delete it to avoid double entry).
+      - Assets placed in /public (favicon.ico, site.webmanifest, social-share.jpg, etc.)
+        will be served at the site root (/), so the hrefs above are correct.
+      - SPA routing is handled by your React Router; Vercel auto-fallbacks to this file.
+    -->
   </body>
 </html>

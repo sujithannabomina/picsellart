@@ -1,5 +1,6 @@
-// src/firebase.js
+// /src/firebase.js
 // Single, duplicate-safe Firebase initialization + shared SDK singletons.
+// Also exports googleProvider required by AuthContext & logins.
 
 import { initializeApp, getApp, getApps } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
@@ -16,7 +17,7 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// Duplicate-safe init (prevents "App named [DEFAULT] already exists")
+// Duplicate-safe init (prevents "[DEFAULT] already exists")
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // Core SDK singletons
@@ -24,7 +25,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// OAuth providers used in the app
+// OAuth providers
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 

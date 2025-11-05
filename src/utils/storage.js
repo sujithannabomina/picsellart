@@ -1,31 +1,23 @@
-// src/utils/storage.js
-import { getDownloadURL, list, ref } from "firebase/storage";
-import { storage } from "../firebase"; // <-- unified import
+// /src/utils/storage.js
+// Helpers for public images in Firebase Storage
 
-// Public image root in Firebase Storage
-const PUBLIC_ROOT = "public/images";
+import { getDownloadURL, ref } from "firebase/storage";
+import { storage } from "../firebase";
 
-// List images under public/images with basic pagination support
-export async function listPublicImages({ maxResults = 60, pageToken } = {}) {
-  const rootRef = ref(storage, PUBLIC_ROOT);
-  const { items, nextPageToken } = await list(rootRef, { maxResults, pageToken });
-  const files = await Promise.all(
-    items.map(async (itemRef) => {
-      const url = await getDownloadURL(itemRef);
-      return {
-        name: itemRef.name,
-        path: itemRef.fullPath,
-        url,
-      };
-    })
-  );
-  return { files, nextPageToken: nextPageToken || null };
+/**
+ * Returns a download URL for "public/images/<name>"
+ * @param {string} name - e.g. "sample1.jpg"
+ */
+export async function getPublicImageByName(name) {
+  const r = ref(storage, `public/images/${name}`);
+  return getDownloadURL(r);
 }
 
-// Fetch a single public image by file name (e.g., "sample23.jpg")
-export async function getPublicImageByName(filename) {
-  if (!filename) throw new Error("filename is required");
-  const fileRef = ref(storage, `${PUBLIC_ROOT}/${filename}`);
-  const url = await getDownloadURL(fileRef);
-  return { name: filename, path: fileRef.fullPath, url };
+/**
+ * Generic: get a download URL for any storage path
+ * @param {string} path - e.g. "public/images/sample1.jpg"
+ */
+export async function getImageUrl(path) {
+  const r = ref(storage, path);
+  return getDownloadURL(r);
 }
