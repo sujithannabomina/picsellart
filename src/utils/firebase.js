@@ -1,10 +1,13 @@
 // src/utils/firebase.js
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import {
+  getAuth,
+  GoogleAuthProvider,
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Read from Vite env (already present in your .env)
+// Vite envs
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -15,10 +18,17 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
+// single app instance
 const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
+// services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
+// Google provider (named export expected by AuthContext)
+export const googleProvider = new GoogleAuthProvider();
+// Optional but nice: always ask user which account
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export default app;
