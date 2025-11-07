@@ -1,46 +1,62 @@
 // src/components/Header.jsx
 import { Link, useLocation } from "react-router-dom";
-import "./Header.css";
+import { useAuth } from "../context/AuthContext";
 
 export default function Header() {
+  const { user, signInAsBuyer, signInAsSeller, signOut } = useAuth();
   const { pathname } = useLocation();
 
-  const navLink = (to, label) => (
+  const link = (to, label) => (
     <Link
       to={to}
-      className={`px-3 py-1 rounded-md text-sm font-medium hover:underline ${
-        pathname === to ? "text-blue-700" : "text-slate-800"
-      }`}
-    >
-      {label}
-    </Link>
-  );
-
-  const pill = (to, label) => (
-    <Link
-      to={to}
-      className="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold
-                 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+      className={`hover:underline ${pathname === to ? "font-semibold" : ""}`}
     >
       {label}
     </Link>
   );
 
   return (
-    <header className="w-full border-b border-slate-200 mb-6">
-      <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
-        <Link to="/" className="text-lg font-bold text-slate-900">Picsellart</Link>
-
-        <nav className="flex items-center gap-4">
-          {navLink("/explore", "Explore")}
-          {navLink("/faq", "FAQ")}
-          {navLink("/contact", "Contact")}
-          {navLink("/refunds", "Refunds")}
+    <header className="border-b bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+        <nav className="flex flex-wrap items-center gap-4 text-slate-800">
+          {link("/", "Picsellart")}
+          {link("/explore", "Explore")}
+          {link("/faq", "FAQ")}
+          {link("/contact", "Contact")}
+          {link("/refunds", "Refunds")}
+          {user && link("/buyer/dashboard", "Buyer Dashboard")}
+          {user && link("/seller/dashboard", "Seller Dashboard")}
         </nav>
 
         <div className="flex items-center gap-2">
-          {pill("/buyer", "Buyer Login")}
-          {pill("/seller", "Seller Login")}
+          {!user ? (
+            <>
+              <button
+                className="px-3 py-1.5 text-sm rounded-md border"
+                onClick={signInAsBuyer}
+              >
+                Buyer Login
+              </button>
+              <button
+                className="px-3 py-1.5 text-sm rounded-md bg-indigo-600 text-white"
+                onClick={signInAsSeller}
+              >
+                Seller Login
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-sm text-slate-600 truncate max-w-[180px]">
+                {user.displayName || user.email}
+              </span>
+              <button
+                className="px-3 py-1.5 text-sm rounded-md border"
+                onClick={signOut}
+              >
+                Logout
+              </button>
+            </>
+          )}
         </div>
       </div>
     </header>

@@ -1,179 +1,221 @@
 // src/pages/Explore.jsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+
 import Header from "../components/Header";
-import { fetchAllExploreImages, filterAndPaginate } from "../utils/storage";
-import { DEFAULT_PAGE_SIZE, nextPage, prevPage, priceToINR } from "../utils/exploreData";
-import { openRazorpay } from "../utils/loadRazorpay";
+import WatermarkedImage from "../components/WatermarkedImage";
+
 import { useAuth } from "../context/AuthContext";
+import { openRazorpay } from "../utils/loadRazorpay";
+import { fetchAllExploreImages, filterAndPaginate } from "../utils/storage";
+import {
+  DEFAULT_PAGE_SIZE,
+  priceToINR,
+  nextPage,
+  prevPage,
+} from "../utils/exploreData";
+
+// Firestore (to record purchases for Buyer Dashboard)
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase";
 
 export default function Explore() {
-  const [all, setAll] = useState([]);
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const pageSize = DEFAULT_PAGE_SIZE;
-
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
+  const [allImages, setAllImages] = useState([]); // full dataset from Storage
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [error, setError] = useState("");
+
+  // Load from Firebase Storage (public/, Buyer/, and sellers/*/images/*)
   useEffect(() => {
+    let cancelled = false;
     (async () => {
-      setLoading(true);
-      const items = await fetchAllExploreImages();
-      setAll(items);
-      setLoading(false);
+      try {
+        setLoading(true);
+        setError("");
+        const rows = await fetchAllExploreImages(); // must return [{name,url,price,title,source,path}]
+        if (!cancelled) {
+          setAllImages(rows);
+          setLoading(false);
+        }
+      } catch (e) {
+        console.error(e);
+        if (!cancelled) {
+          setError("Failed to load images. Please try again.");
+          setLoading(false);
+        }
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const { items, total } = useMemo(
-    () => filterAndPaginate(all, { q, page, pageSize }),
-    [all, q, page, pageSize]
-  );
+  // Apply search + pagination
+  const { total, totalPages, items } = useMemo(() => {
+    return filterAndPaginate(allImages, { query, page, pageSize });
+  }, [allImages, query, page, pageSize]);
 
-  async function handleBuy(item) {
-    // Force Buyer login
+  const clearSearch = () => {
+    setQuery("");
+    setPage(1);
+  };
+
+  const handleBuy = async (item) => {
+    // If not logged in, send to buyer login page
     if (!user) {
       navigate("/buyer");
       return;
     }
-    // 1) Create order on your backend
-    const res = await fetch("/api/createPhotoOrder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: item.path, name: item.name, price: item.price }),
-    });
-    if (!res.ok) {
-      alert("Unable to create order");
-      return;
-    }
-    const order = await res.json(); // { id, key, amount, currency }
 
-    // 2) Open Razorpay and 3) verify -> receive secure download URL
-    await openRazorpay({
-      order,
-      prefill: {}, // you can use user.email if you store it in profile
-      onSuccess: async (payment) => {
-        const verify = await fetch("/api/verifyPayment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ payment, path: item.path }),
-        });
-        if (verify.ok) {
-          const { downloadUrl } = await verify.json();
-          window.location.href = downloadUrl;
-        } else {
-          alert("Payment verification failed");
-        }
-      },
-    });
-  }
+    try {
+      await openRazorpay({
+        amount: item.price, // in INR
+        user,
+        // ⤵️ Record purchase so it shows in Buyer Dashboard
+        onSuccess: async (resp) => {
+          try {
+            await addDoc(collection(db, "purchases"), {
+              buyerUid: user.uid,
+              buyerEmail: user.email || null,
+              name: item.name,
+              url: item.url,
+              title: item.title,
+              amount: item.price,
+              source: item.source || null, // public / Buyer / seller
+              paymentId: resp?.razorpay_payment_id || null,
+              createdAt: serverTimestamp(),
+            });
+          } catch (e) {
+            console.error("Failed to record purchase:", e);
+          }
+
+          // Temporary: direct download to the original file.
+          // For a locked-down flow, gate seller originals behind a signed URL returned by your server after webhook verification.
+          window.location.href = item.url;
+        },
+      });
+    } catch (e) {
+      console.error(e);
+      alert("Payment could not be started. Please try again.");
+    }
+  };
 
   return (
     <>
       <Header />
-      <div style={{ maxWidth: 1200, margin: "24px auto", padding: "0 16px" }}>
-        <h1 style={{ fontSize: 32, marginBottom: 4 }}>Street Photography</h1>
-        <p style={{ color: "#6b7280", marginBottom: 12 }}>
-          Curated images from our public gallery and verified sellers. Login as a buyer to purchase and download.
-        </p>
-
-        <div style={{ display: "flex", gap: 12, marginBottom: 16 }}>
-          <input
-            value={q}
-            onChange={(e) => { setPage(1); setQ(e.target.value); }}
-            placeholder="Search by name…"
-            style={{ flex: 1, padding: "10px 12px", borderRadius: 8, border: "1px solid #ddd" }}
-          />
-          <button className="btn ghost" onClick={() => { setQ(""); setPage(1); }}>Clear</button>
+      <main className="mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-4">
+          <h1 className="text-3xl font-bold text-slate-900">Street Photography</h1>
+          <p className="text-slate-600 mt-2">
+            Curated images from our public gallery and verified sellers. Login as a buyer to
+            purchase and download.
+          </p>
         </div>
 
-        {loading ? (
-          <p>Loading images…</p>
-        ) : (
-          <>
-            <p style={{ color: "#6b7280", marginBottom: 8 }}>
-              Showing {items.length} of {total}
-            </p>
+        {/* Search */}
+        <div className="flex items-center gap-2 max-w-2xl mb-6">
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search by name..."
+            className="flex-1 border rounded-md px-3 py-2"
+          />
+          <button onClick={clearSearch} className="px-3 py-2 border rounded-md">
+            Clear
+          </button>
+        </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
-                gap: 16,
-              }}
-            >
+        {loading && <p>Loading images…</p>}
+        {!loading && error && <p className="text-red-600">{error}</p>}
+
+        {!loading && !error && items.length === 0 && (
+          <p className="text-slate-600">No images found.</p>
+        )}
+
+        {!loading && !error && items.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {items.map((img) => (
                 <div
-                  key={img.id}
-                  style={{
-                    border: "1px solid #eee",
-                    borderRadius: 10,
-                    padding: 8,
-                    background: "#fff",
-                  }}
+                  key={`${img.source}:${img.path || img.name}`}
+                  className="border rounded-xl overflow-hidden bg-white"
                 >
-                  <div style={{ position: "relative", borderRadius: 8, overflow: "hidden" }}>
-                    <img
-                      src={img.url}
-                      alt={img.name}
-                      style={{ width: "100%", height: 200, objectFit: "cover" }}
-                    />
-                    {/* Visible text watermark on preview */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "grid",
-                        placeItems: "center",
-                        color: "rgba(255,255,255,0.85)",
-                        fontWeight: 800,
-                        letterSpacing: 4,
-                        textTransform: "uppercase",
-                        textShadow: "0 1px 2px rgba(0,0,0,0.7)",
-                        userSelect: "none",
-                        pointerEvents: "none",
-                        background:
-                          "linear-gradient(0deg, rgba(0,0,0,0.06), rgba(0,0,0,0.06))",
-                      }}
-                      aria-hidden
-                    >
-                      PICSELLART
-                    </div>
-                  </div>
+                  {/* Watermarked preview for Explore grid */}
+                  <WatermarkedImage
+                    src={img.url}
+                    alt={img.name}
+                    className="w-full aspect-[4/3] object-cover"
+                    watermarkText="picsellart"
+                  />
 
-                  <div style={{ paddingTop: 8 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 2 }}>{img.name}</div>
-                    <div style={{ color: "#111827", marginBottom: 8 }}>
-                      {priceToINR(img.price)}
+                  <div className="p-4">
+                    <div className="text-xs text-slate-500">{img.title || "Street Photography"}</div>
+                    <div className="font-semibold truncate">{img.name}</div>
+
+                    <div className="mt-2 flex items-center justify-between">
+                      <div className="text-slate-900 font-semibold">
+                        {priceToINR(img.price)}
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          className="px-3 py-1.5 rounded-md border"
+                          onClick={() => window.open(img.url, "_blank")}
+                          title="Open preview"
+                        >
+                          View
+                        </button>
+                        <button
+                          className="px-3 py-1.5 rounded-md bg-indigo-600 text-white"
+                          onClick={() => handleBuy(img)}
+                        >
+                          Buy & Download
+                        </button>
+                      </div>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button className="btn" onClick={() => handleBuy(img)}>
-                        {user ? "Buy & Download" : "Login to Buy"}
-                      </button>
-                      <a className="btn ghost" href={`/photo/${encodeURIComponent(img.name)}`}>
-                        View
-                      </a>
+
+                    <div className="mt-2 text-xs text-slate-500">
+                      Source: {img.source || "public"}
                     </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "center" }}>
-              <button className="btn ghost" onClick={() => setPage((p) => prevPage(p))}>
+            {/* Pagination */}
+            <div className="mt-8 flex items-center justify-between">
+              <button
+                className="px-3 py-2 border rounded-md disabled:opacity-40"
+                onClick={() => setPage((p) => prevPage(p))}
+                disabled={page <= 1}
+              >
                 Prev
               </button>
+
+              <div className="text-sm text-slate-600">
+                Page <span className="font-semibold">{page}</span> of{" "}
+                <span className="font-semibold">{totalPages}</span> &middot;{" "}
+                <span className="font-semibold">{total}</span> results
+              </div>
+
               <button
-                className="btn ghost"
-                onClick={() => setPage((p) => nextPage(p, total, pageSize))}
+                className="px-3 py-2 border rounded-md disabled:opacity-40"
+                onClick={() => setPage((p) => nextPage(p, totalPages))}
+                disabled={page >= totalPages}
               >
                 Next
               </button>
             </div>
           </>
         )}
-      </div>
+      </main>
     </>
   );
 }

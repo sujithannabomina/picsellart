@@ -1,31 +1,35 @@
+// src/pages/BuyerLogin.jsx
+import Header from "../components/Header";
+import { useAuth } from "../context/AuthContext";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 
 export default function BuyerLogin() {
-  const { user, setRole, googleLogin } = useAuth();
-  const navigate = useNavigate();
+  const { user, ready, signInBuyer } = useAuth();
+  const nav = useNavigate();
 
   useEffect(() => {
-    let cancelled = false;
+    if (ready && user) nav("/buyer/dashboard");
+  }, [ready, user, nav]);
 
-    const go = async () => {
-      try {
-        if (!user) {
-          await googleLogin("buyer");
-        }
-        if (!cancelled) {
-          setRole("buyer");
-          navigate("/explore", { replace: true });
-        }
-      } catch {
-        // stay on page; Vercel preview pop-up blocked? user can reload
-      }
-    };
+  const go = async () => {
+    await signInBuyer();
+    nav("/buyer/dashboard");
+  };
 
-    go();
-    return () => { cancelled = true; };
-  }, [user, setRole, googleLogin, navigate]);
-
-  return <div className="p-8">Signing you in…</div>;
+  return (
+    <>
+      <Header />
+      <main className="mx-auto max-w-3xl px-4 py-8">
+        <h1 className="text-3xl font-bold">Buyer Login</h1>
+        <p className="mt-2 text-slate-700">Login with Google to purchase and download.</p>
+        <button
+          onClick={go}
+          className="mt-6 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+        >
+          Continue with Google
+        </button>
+      </main>
+    </>
+  );
 }

@@ -1,14 +1,16 @@
-import { Navigate } from "react-router-dom";
+// src/components/ProtectedRoute.jsx
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-export default function ProtectedRoute({ children, mustBeSeller = false, mustHavePlan = false }) {
-  const { user, role, sellerHasActivePlan, loading } = useAuth();
+export default function ProtectedRoute({ children }) {
+  const { user, ready } = useAuth();
+  const loc = useLocation();
 
-  if (loading) return null; // or a small inline loader
-
-  if (!user) return <Navigate to={mustBeSeller ? "/seller" : "/buyer"} replace />;
-  if (mustBeSeller && role !== "seller") return <Navigate to="/seller" replace />;
-  if (mustBeSeller && mustHavePlan && !sellerHasActivePlan) return <Navigate to="/seller/subscribe" replace />;
-
+  if (!ready) return <main className="p-6">Loading…</main>;
+  if (!user) {
+    // If the path contains "seller" → send to /seller; else to /buyer.
+    const loginPath = loc.pathname.includes("/seller") ? "/seller" : "/buyer";
+    return <Navigate to={loginPath} replace />;
+  }
   return children;
 }

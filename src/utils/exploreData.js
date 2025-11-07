@@ -1,48 +1,51 @@
 // src/utils/exploreData.js
 
-/** Default number of items per page for Explore */
 export const DEFAULT_PAGE_SIZE = 24;
 
-/** Format a number (rupees) to INR without decimals (e.g., ₹199) */
-export function priceToINR(value) {
+export function priceToINR(amount) {
   try {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
       maximumFractionDigits: 0,
-    }).format(Number(value || 0));
+    }).format(amount);
   } catch {
-    // Fallback if Intl is unavailable
-    return `₹${Math.round(Number(value || 0))}`;
+    return `₹${amount}`;
   }
 }
 
-/** Clamp current page within valid bounds derived from total + pageSize */
-export function clampPage(total, page, pageSize = DEFAULT_PAGE_SIZE) {
-  const maxPage = Math.max(1, Math.ceil(Math.max(0, total) / Math.max(1, pageSize)));
-  const p = Math.min(Math.max(1, Number(page) || 1), maxPage);
-  return { page: p, maxPage };
+export function nextPage(page, total, pageSize = DEFAULT_PAGE_SIZE) {
+  const last = Math.max(1, Math.ceil(total / pageSize));
+  return Math.min(last, page + 1);
 }
 
-/** Move to the next page (does not exceed max) */
-export function nextPage(total, page, pageSize = DEFAULT_PAGE_SIZE) {
-  const { page: p, maxPage } = clampPage(total, page, pageSize);
-  return Math.min(p + 1, maxPage);
-}
-
-/** Move to the previous page (floors at 1) */
-export function prevPage(total, page, pageSize = DEFAULT_PAGE_SIZE) {
-  const { page: p } = clampPage(total, page, pageSize);
-  return Math.max(p - 1, 1);
+export function prevPage(page) {
+  return Math.max(1, page - 1);
 }
 
 /**
- * Optional convenience: compute slice bounds for current page.
- * Not required by Explore.jsx, but handy if needed elsewhere.
+ * Deterministic pseudo-random price (stable per filename)
+ * range: 149 – 249
  */
-export function pageSlice(total, page, pageSize = DEFAULT_PAGE_SIZE) {
-  const { page: p } = clampPage(total, page, pageSize);
-  const start = (p - 1) * pageSize;
-  const end = start + pageSize;
-  return { start, end };
+export function derivePriceFromName(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  const base = 149;
+  const span = 101; // 149..250 (exclusive upper)
+  return base + (hash % span);
+}
+
+/**
+ * Build unified ImageRecord object
+ */
+export function buildImageRecord({ url, path, name }) {
+  return {
+    url,
+    path,
+    name,
+    title: "Street Photography",
+    price: derivePriceFromName(name),
+  };
 }

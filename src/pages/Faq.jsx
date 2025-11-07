@@ -1,56 +1,46 @@
+// src/pages/Faq.jsx
+import Header from "../components/Header";
+
+const items = [
+  {
+    q: "What is Picsellart?",
+    a: "A marketplace to sell photos/designs with secure payments and instant, verified delivery.",
+  },
+  {
+    q: "How do I become a seller?",
+    a: "Sign in as a seller, choose a plan (coming soon), and upload images. We verify files automatically.",
+  },
+  {
+    q: "How are images delivered to buyers?",
+    a: "After successful payment, buyers receive a unique, verified download link.",
+  },
+  { q: "Do images have watermarks?", a: "Previews are watermarked; downloads are clean." },
+  {
+    q: "What’s your refund policy?",
+    a: "Digital goods are typically non-refundable. If a file is corrupt or wrong, contact us within 48 hours.",
+  },
+  {
+    q: "Can I use images commercially?",
+    a: "Unless otherwise stated, purchases grant standard commercial usage. Some assets may have specific license terms.",
+  },
+  { q: "How do I contact support?", a: "Use the Contact page—we reply within 24–48 hours." },
+];
+
 export default function Faq() {
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-4">Frequently Asked Questions</h1>
-
-      <details className="mb-3" open>
-        <summary className="font-semibold">What is Picsellart?</summary>
-        <p className="mt-2 opacity-80">
-          A marketplace where creators sell photos/designs with secure payments and instant, verified delivery.
-        </p>
-      </details>
-
-      <details className="mb-3">
-        <summary className="font-semibold">How do I become a seller?</summary>
-        <p className="mt-2 opacity-80">
-          Sign in with Google as a seller, choose a subscription plan, and start uploading. We verify files automatically.
-        </p>
-      </details>
-
-      <details className="mb-3">
-        <summary className="font-semibold">How are images delivered to buyers?</summary>
-        <p className="mt-2 opacity-80">
-          After successful payment, buyers receive a unique, verified download link. Hotlinking is blocked.
-        </p>
-      </details>
-
-      <details className="mb-3">
-        <summary className="font-semibold">Do images have watermarks?</summary>
-        <p className="mt-2 opacity-80">
-          Yes on Explore/preview. Purchased files are delivered without watermark.
-        </p>
-      </details>
-
-      <details className="mb-3">
-        <summary className="font-semibold">What’s your refund policy?</summary>
-        <p className="mt-2 opacity-80">
-          Digital goods are non-refundable once delivered, except for duplicate charges or failed file access.
-        </p>
-      </details>
-
-      <details className="mb-3">
-        <summary className="font-semibold">Can I use images commercially?</summary>
-        <p className="mt-2 opacity-80">
-          Yes, according to the license shown at checkout. Editorial-only files will be marked.
-        </p>
-      </details>
-
-      <details className="mb-3">
-        <summary className="font-semibold">How do I contact support?</summary>
-        <p className="mt-2 opacity-80">
-          Use the Contact page form; you’ll get a ticket ID by email.
-        </p>
-      </details>
-    </div>
+    <>
+      <Header />
+      <main className="mx-auto max-w-4xl px-4 py-8">
+        <h1 className="text-4xl font-extrabold text-slate-900">Frequently Asked Questions</h1>
+        <div className="mt-6 space-y-4">
+          {items.map((it) => (
+            <details key={it.q} className="border rounded-lg p-4">
+              <summary className="font-semibold cursor-pointer">{it.q}</summary>
+              <p className="mt-2 text-slate-700">{it.a}</p>
+            </details>
+          ))}
+        </div>
+      </main>
+    </>
   );
 }

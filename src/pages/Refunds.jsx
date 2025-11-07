@@ -1,78 +1,52 @@
 // src/pages/Refunds.jsx
 import Header from "../components/Header";
 
-const Section = ({ title, children }) => (
-  <section style={{ marginTop: 20 }}>
-    <h2 style={{ fontSize: 22, marginBottom: 8 }}>{title}</h2>
-    <div style={{ color: "#374151", lineHeight: 1.7 }}>{children}</div>
-  </section>
-);
-
 export default function Refunds() {
   return (
     <>
       <Header />
-      <div style={{ maxWidth: 900, margin: "24px auto", padding: "0 16px" }}>
-        <h1 style={{ fontSize: 32, marginBottom: 8 }}>Refunds & Returns Policy</h1>
-        <p style={{ color: "#6b7280" }}>
-          This policy explains when refunds are issued for purchases made on Picsellart and how to request one.
-          Please read it carefully before buying any digital file.
+      <main className="mx-auto max-w-4xl px-4 py-8">
+        <h1 className="text-4xl font-extrabold text-slate-900">Refunds & Cancellations</h1>
+        <p className="mt-2 text-slate-700">
+          Picsellart provides digital downloads. We aim to ensure every purchase is exactly as
+          described. Please read the policy carefully before buying.
         </p>
 
-        <Section title="What Purchases Are Eligible for a Refund?">
-          <ul style={{ paddingLeft: 18 }}>
-            <li><b>Corrupted or Unusable Files:</b> The delivered file is damaged, incomplete, or fails to open in standard software.</li>
-            <li><b>File Not as Described:</b> The actual content materially differs from the listing description or preview.</li>
-            <li><b>Duplicate Purchases:</b> The same file was purchased more than once by mistake.</li>
-          </ul>
-          <p style={{ marginTop: 8 }}>
-            For <b>digital downloads</b>, we generally cannot issue refunds after a successful download unless
-            one of the cases above applies.
-          </p>
-        </Section>
+        <section className="mt-6 space-y-4">
+          <div className="border rounded-lg p-4">
+            <h2 className="font-semibold">Eligibility</h2>
+            <ul className="list-disc ml-5 mt-2 text-slate-700">
+              <li>Refunds are not offered for “change of mind.”</li>
+              <li>
+                If your file is corrupt, incomplete, or not as described, contact us within{" "}
+                <strong>48 hours</strong>.
+              </li>
+              <li>We may replace the file, issue store credit, or refund, at our discretion.</li>
+            </ul>
+          </div>
 
-        <Section title="What Is Not Eligible?">
-          <ul style={{ paddingLeft: 18 }}>
-            <li>Change of mind after downloading.</li>
-            <li>Incorrect expectations not supported by the listing text or previews.</li>
-            <li>Commercial misuse or policy violations.</li>
-            <li>Requests filed more than <b>7 days</b> after purchase, unless required by law.</li>
-          </ul>
-        </Section>
+          <div className="border rounded-lg p-4">
+            <h2 className="font-semibold">How to request</h2>
+            <ol className="list-decimal ml-5 mt-2 text-slate-700">
+              <li>Provide your order ID and the affected file name.</li>
+              <li>Explain the issue with screenshots if possible.</li>
+              <li>We’ll review and respond within 2 business days.</li>
+            </ol>
+          </div>
 
-        <Section title="How to Request a Refund">
-          <ol style={{ paddingLeft: 18 }}>
-            <li>Open the <a href="/contact">Contact</a> page.</li>
-            <li>Include your <b>Order ID</b>, file name, purchase date, and a short description of the issue.</li>
-            <li>Attach a screenshot or error message if the file is corrupted or unusable.</li>
-          </ol>
-          <p style={{ marginTop: 8 }}>
-            Our support team typically responds within <b>24–48 hours</b>. If approved, your refund is processed
-            to the original payment method. We may revoke access to the file after a refund.
-          </p>
-        </Section>
+          <div className="border rounded-lg p-4">
+            <h2 className="font-semibold">Abuse & Fraud</h2>
+            <p className="mt-2 text-slate-700">
+              We monitor suspicious activity. Repeated refund abuse may result in account
+              suspension.
+            </p>
+          </div>
 
-        <Section title="Partial Refunds & Replacements">
-          <p>
-            In some cases, we may offer a replacement download link or a partial refund—for example, if only part
-            of a multi-file pack is affected. We’ll clarify the best resolution after reviewing your request.
+          <p className="mt-6 text-slate-600">
+            Questions? <a href="/contact" className="text-indigo-700 underline">Contact us</a>.
           </p>
-        </Section>
-
-        <Section title="Fraud & Abuse">
-          <p>
-            If we detect abuse (serial refunding, reselling, or unauthorized redistribution), we may decline the
-            request and limit account access as permitted by our Terms.
-          </p>
-        </Section>
-
-        <Section title="Need Help?">
-          <p>
-            We want you to be happy with your purchase. If you’re unsure whether a file meets your use-case, please
-            message us via <a href="/contact">Contact</a> before buying—we’ll guide you.
-          </p>
-        </Section>
-      </div>
+        </section>
+      </main>
     </>
   );
 }
