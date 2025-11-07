@@ -1,35 +1,78 @@
-import React from "react";
+// src/pages/Refunds.jsx
+import Header from "../components/Header";
+
+const Section = ({ title, children }) => (
+  <section style={{ marginTop: 20 }}>
+    <h2 style={{ fontSize: 22, marginBottom: 8 }}>{title}</h2>
+    <div style={{ color: "#374151", lineHeight: 1.7 }}>{children}</div>
+  </section>
+);
 
 export default function Refunds() {
   return (
-    <div className="container">
-      <h1>Refunds & Cancellations</h1>
-      <p style={{color:"#475569"}}>
-        Because digital files are delivered instantly, completed purchases are
-        generally <b>non-refundable</b>. If you experience a payment error, receive
-        the wrong file, or the file is corrupt/unusable, contact us within
-        <b> 48 hours</b> via the Contact page. We’ll review the order and provide a
-        replacement or refund when appropriate.
-      </p>
+    <>
+      <Header />
+      <div style={{ maxWidth: 900, margin: "24px auto", padding: "0 16px" }}>
+        <h1 style={{ fontSize: 32, marginBottom: 8 }}>Refunds & Returns Policy</h1>
+        <p style={{ color: "#6b7280" }}>
+          This policy explains when refunds are issued for purchases made on Picsellart and how to request one.
+          Please read it carefully before buying any digital file.
+        </p>
 
-      <h3 style={{marginTop:20}}>When refunds may apply</h3>
-      <ul style={{lineHeight:1.8, color:"#334155"}}>
-        <li>Duplicate charges or accidental double purchase</li>
-        <li>Corrupted file and seller can’t provide a working replacement</li>
-        <li>Incorrect file delivered (different from the listing)</li>
-      </ul>
+        <Section title="What Purchases Are Eligible for a Refund?">
+          <ul style={{ paddingLeft: 18 }}>
+            <li><b>Corrupted or Unusable Files:</b> The delivered file is damaged, incomplete, or fails to open in standard software.</li>
+            <li><b>File Not as Described:</b> The actual content materially differs from the listing description or preview.</li>
+            <li><b>Duplicate Purchases:</b> The same file was purchased more than once by mistake.</li>
+          </ul>
+          <p style={{ marginTop: 8 }}>
+            For <b>digital downloads</b>, we generally cannot issue refunds after a successful download unless
+            one of the cases above applies.
+          </p>
+        </Section>
 
-      <h3 style={{marginTop:20}}>When refunds don’t apply</h3>
-      <ul style={{lineHeight:1.8, color:"#334155"}}>
-        <li>Change of mind after download</li>
-        <li>Misuse of the file or violation of license terms</li>
-        <li>Requests made well after the purchase date</li>
-      </ul>
+        <Section title="What Is Not Eligible?">
+          <ul style={{ paddingLeft: 18 }}>
+            <li>Change of mind after downloading.</li>
+            <li>Incorrect expectations not supported by the listing text or previews.</li>
+            <li>Commercial misuse or policy violations.</li>
+            <li>Requests filed more than <b>7 days</b> after purchase, unless required by law.</li>
+          </ul>
+        </Section>
 
-      <p style={{marginTop:16, color:"#475569"}}>
-        Tip: Include your order ID and the image name in your message for the
-        fastest resolution.
-      </p>
-    </div>
+        <Section title="How to Request a Refund">
+          <ol style={{ paddingLeft: 18 }}>
+            <li>Open the <a href="/contact">Contact</a> page.</li>
+            <li>Include your <b>Order ID</b>, file name, purchase date, and a short description of the issue.</li>
+            <li>Attach a screenshot or error message if the file is corrupted or unusable.</li>
+          </ol>
+          <p style={{ marginTop: 8 }}>
+            Our support team typically responds within <b>24–48 hours</b>. If approved, your refund is processed
+            to the original payment method. We may revoke access to the file after a refund.
+          </p>
+        </Section>
+
+        <Section title="Partial Refunds & Replacements">
+          <p>
+            In some cases, we may offer a replacement download link or a partial refund—for example, if only part
+            of a multi-file pack is affected. We’ll clarify the best resolution after reviewing your request.
+          </p>
+        </Section>
+
+        <Section title="Fraud & Abuse">
+          <p>
+            If we detect abuse (serial refunding, reselling, or unauthorized redistribution), we may decline the
+            request and limit account access as permitted by our Terms.
+          </p>
+        </Section>
+
+        <Section title="Need Help?">
+          <p>
+            We want you to be happy with your purchase. If you’re unsure whether a file meets your use-case, please
+            message us via <a href="/contact">Contact</a> before buying—we’ll guide you.
+          </p>
+        </Section>
+      </div>
+    </>
   );
 }
