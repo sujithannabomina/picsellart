@@ -2,9 +2,10 @@
 import { storage } from "../firebase";
 import { listAll, ref, getDownloadURL, getMetadata } from "firebase/storage";
 
-/** ---------- helpers ---------- */
+/* --------------------------- helpers --------------------------- */
+
 function seededPriceFromName(name, min = 149, max = 249) {
-  // Deterministic "random" price from filename
+  // Deterministic "random" price based on filename
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
   const n = min + (h % (max - min + 1));
@@ -14,48 +15,49 @@ function seededPriceFromName(name, min = 149, max = 249) {
 async function toImageItem(itemRef) {
   const url = await getDownloadURL(itemRef);
 
-  // Prefer storage custom metadata -> price; else deterministic price from name
+  // Prefer custom metadata price; else derive from filename
   let price = seededPriceFromName(itemRef.name);
   try {
     const md = await getMetadata(itemRef);
-    if (md?.customMetadata?.price) {
-      const n = Number(md.customMetadata.price);
-      if (!Number.isNaN(n)) price = n;
-    }
+    const metaPrice = Number(md?.customMetadata?.price);
+    if (!Number.isNaN(metaPrice)) price = metaPrice;
   } catch {
-    /* ignore, keep seeded price */
+    /* keep derived price */
   }
 
   return {
-    id: itemRef.fullPath,
+    id: itemRef.fullPath,   // unique key
     name: itemRef.name,
     url,
     price,
-    path: itemRef.fullPath,
+    path: itemRef.fullPath, // needed by API for secure download
   };
 }
 
 async function listFlatFolder(path) {
   const r = ref(storage, path);
   const out = [];
-  const res = await listAll(r);
-  for (const item of res.items) out.push(await toImageItem(item));
+  try {
+    const res = await listAll(r);
+    for (const item of res.items) out.push(await toImageItem(item));
+  } catch {
+    // folder might not exist yet
+  }
   return out;
 }
 
-/** sellers/**/images (optional for auto-inclusion) */
+// sellers/*/images  (optional auto-inclusion of seller uploads)
 async function listAllSellerImages() {
-  const root = ref(storage, "sellers");
   const out = [];
   try {
-    const sellersRoot = await listAll(root);
+    const sellersRoot = await listAll(ref(storage, "sellers"));
     for (const sellerFolder of sellersRoot.prefixes) {
       const imagesRef = ref(storage, `${sellerFolder.fullPath}/images`);
       try {
         const res = await listAll(imagesRef);
         for (const item of res.items) out.push(await toImageItem(item));
       } catch {
-        /* no images subfolder yet */
+        /* seller has no images folder yet */
       }
     }
   } catch {
@@ -64,7 +66,7 @@ async function listAllSellerImages() {
   return out;
 }
 
-/** ---------- public API for Explore ---------- */
+/* --------------------------- public API --------------------------- */
 /**
  * Returns ALL explore images from Firebase Storage ONLY.
  * Sources:
@@ -80,7 +82,8 @@ export async function fetchAllExploreImages() {
   ]);
 
   const all = [...fromPublic, ...fromBuyer, ...fromSellers];
-  // De-dupe by fullPath if same file appears in multiple folders
+
+  // De-dupe by fullPath
   const seen = new Set();
   const uniq = [];
   for (const itm of all) {
@@ -88,7 +91,8 @@ export async function fetchAllExploreImages() {
     seen.add(itm.id);
     uniq.push(itm);
   }
-  // stable order
+
+  // Stable order for UX
   uniq.sort((a, b) => a.name.localeCompare(b.name));
   return uniq;
 }
