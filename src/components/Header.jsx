@@ -1,44 +1,47 @@
-import { Link, useNavigate } from "react-router-dom";
+// src/components/Header.jsx
+import { Link, useLocation } from "react-router-dom";
 import "./Header.css";
-import { useAuth } from "../context/AuthContext";
 
 export default function Header() {
-  const { user, role, logout } = useAuth();
-  const navigate = useNavigate();
+  const { pathname } = useLocation();
 
-  const onBuyerLogin = () => navigate("/buyer");          // page triggers popup immediately
-  const onSellerLogin = () => navigate("/seller");        // page triggers popup immediately
+  const navLink = (to, label) => (
+    <Link
+      to={to}
+      className={`px-3 py-1 rounded-md text-sm font-medium hover:underline ${
+        pathname === to ? "text-blue-700" : "text-slate-800"
+      }`}
+    >
+      {label}
+    </Link>
+  );
 
-  const onDashboard = () => {
-    if (role === "seller") navigate("/seller/dashboard");
-    else navigate("/buyer/dashboard");
-  };
+  const pill = (to, label) => (
+    <Link
+      to={to}
+      className="inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold
+                 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+    >
+      {label}
+    </Link>
+  );
 
   return (
-    <header className="px-4 md:px-8 py-3 flex items-center justify-between border-b">
-      <Link to="/" className="font-semibold text-lg">Picsellart</Link>
+    <header className="w-full border-b border-slate-200 mb-6">
+      <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between">
+        <Link to="/" className="text-lg font-bold text-slate-900">Picsellart</Link>
 
-      <nav className="flex items-center gap-4">
-        <Link to="/explore">Explore</Link>
-        <Link to="/faq">FAQ</Link>
-        <Link to="/contact">Contact</Link>
-        <Link to="/refunds">Refunds</Link>
-      </nav>
+        <nav className="flex items-center gap-4">
+          {navLink("/explore", "Explore")}
+          {navLink("/faq", "FAQ")}
+          {navLink("/contact", "Contact")}
+          {navLink("/refunds", "Refunds")}
+        </nav>
 
-      <div className="flex items-center gap-2">
-        {!user && (
-          <>
-            <button className="btn" onClick={onBuyerLogin}>Buyer Login</button>
-            <button className="btn" onClick={onSellerLogin}>Seller Login</button>
-          </>
-        )}
-
-        {user && (
-          <>
-            <button className="btn" onClick={onDashboard}>Dashboard</button>
-            <button className="btn btn-primary" onClick={() => logout()}>Logout</button>
-          </>
-        )}
+        <div className="flex items-center gap-2">
+          {pill("/buyer", "Buyer Login")}
+          {pill("/seller", "Seller Login")}
+        </div>
       </div>
     </header>
   );
