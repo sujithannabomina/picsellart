@@ -1,83 +1,110 @@
-// src/utils/storage.js
 import { storage } from "../firebase";
 import { ref, listAll, getDownloadURL } from "firebase/storage";
 import { buildImageRecord } from "./exploreData";
 
 /**
- * List all files under a single prefix (non-recursive)
+ * List all files directly under a given folder in Firebase Storage.
+ * @param {string} folder - e.g. "public" or "Buyer"
+ * @param {("curated"|"seller")} source
  */
-async function listPrefixOnce(prefix) {
-  const r = ref(storage, prefix);
-  const { items = [] } = await listAll(r);
-  const out = [];
-  for (const item of items) {
-    const url = await getDownloadURL(item);
-    const path = item.fullPath;
-    const name = item.name;
-    out.push(buildImageRecord({ url, path, name }));
-  }
-  return out;
+async function listFolder(folder, source) {
+  const folderRef = ref(storage, folder);
+  const result = await listAll(folderRef);
+
+  // We only care about files (result.items). If you later add subfolders,
+  // you can recurse into result.prefixes.
+  const records = await Promise.all(
+    result.items.map(async (itemRef) => {
+      const url = await getDownloadURL(itemRef);
+      return buildImageRecord({
+        path: itemRef.fullPath,
+        url,
+        source,
+      });
+    })
+  );
+
+  return records;
 }
 
 /**
- * List all sellers under sellers/ and aggregate images from sellers/{uid}/images
- * This walks two levels: sellers/ (prefixes) → images/ (items)
+ * Fetch all explore images from both:
+ *  - "public/"   (your curated explore images)
+ *  - "Buyer/"    (seller-uploaded images that should also appear)
  */
-async function listAllSellerImages() {
-  const root = ref(storage, "sellers");
-  const { prefixes: sellerDirs = [] } = await listAll(root);
-  const all = [];
-  for (const sellerDir of sellerDirs) {
-    const imagesDir = ref(storage, `${sellerDir.fullPath}/images`);
-    try {
-      const { items = [] } = await listAll(imagesDir);
-      for (const item of items) {
-        const url = await getDownloadURL(item);
-        const path = item.fullPath;
-        const name = item.name;
-        all.push(buildImageRecord({ url, path, name }));
-      }
-    } catch {
-      // seller may not have images/ yet
-    }
-  }
+export async function fetchAllExploreImages() {
+  const [publicImages, buyerImages] = await Promise.all([
+    listFolder("public", "curated"),
+    listFolder("Buyer", "seller"),
+  ]);
+
+  const all = [...publicImages, ...buyerImages];
+
+  // Stable sort by name so the grid order is predictable
+  all.sort((a, b) => a.name.localeCompare(b.name));
+
   return all;
 }
 
 /**
- * Fetch every image for Explore: public/, Buyer/, and all seller images.
- * Requires Storage rules to allow read.
+ * Filter + paginate a list of image records.
+ *
+ * @param {Array} allImages - full list
+ * @param {Object} opts
+ * @param {string} opts.searchTerm
+ * @param {number} opts.page
+ * @param {number} opts.pageSize
+ *
+ * @returns {{ items, totalItems, totalPages, page }}
  */
-export async function fetchAllExploreImages() {
-  const [pub, buyer, sellers] = await Promise.all([
-    listPrefixOnce("public"),
-    listPrefixOnce("Buyer"),
-    listAllSellerImages(),
-  ]);
-  // merge + sort by name for stable order
-  const merged = [...pub, ...buyer, ...sellers].sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
-  return merged;
+export function filterAndPaginate(allImages, opts = {}) {
+  const {
+    searchTerm = "",
+    page = 1,
+    pageSize = 18,
+  } = opts;
+
+  const q = searchTerm.trim().toLowerCase();
+  const filtered = q
+    ? allImages.filter((img) =>
+        img.name.toLowerCase().includes(q)
+      )
+    : allImages;
+
+  const totalItems = filtered.length;
+  const totalPages = totalItems === 0 ? 1 : Math.ceil(totalItems / pageSize);
+  const safePage = Math.min(Math.max(page, 1), totalPages);
+
+  const start = (safePage - 1) * pageSize;
+  const end = start + pageSize;
+  const items = filtered.slice(start, end);
+
+  return { items, totalItems, totalPages, page: safePage };
 }
 
 /**
- * Filter by name and paginate in-memory
+ * Find a single curated (public) image by its filename.
+ * Used by PhotoDetails page.
+ *
+ * @param {string} name - filename, e.g. "myphoto.jpg"
+ * @returns {Promise<object|null>}
  */
-export function filterAndPaginate(all, { q = "", page = 1, pageSize = 24 }) {
-  const needle = q.trim().toLowerCase();
-  const filtered = needle
-    ? all.filter((x) => x.name.toLowerCase().includes(needle))
-    : all;
-  const total = filtered.length;
-  const start = (page - 1) * pageSize;
-  const pageItems = filtered.slice(start, start + pageSize);
-  return { total, pageItems };
-}
+export async function getPublicImageByName(name) {
+  if (!name) return null;
 
-/**
- * Helper for Photo Details – find by exact filename
- */
-export function getByName(all, filename) {
-  return all.find((x) => x.name === filename) || null;
+  const folderRef = ref(storage, "public");
+  const result = await listAll(folderRef);
+
+  const matchRef = result.items.find((item) => item.name === name);
+  if (!matchRef) {
+    return null;
+  }
+
+  const url = await getDownloadURL(matchRef);
+
+  return buildImageRecord({
+    path: matchRef.fullPath,
+    url,
+    source: "curated",
+  });
 }

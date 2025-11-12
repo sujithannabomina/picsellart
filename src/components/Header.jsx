@@ -1,62 +1,42 @@
-// src/components/Header.jsx
-import { Link, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import React from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import "./Header.css";
 
 export default function Header() {
-  const { user, signInAsBuyer, signInAsSeller, signOut } = useAuth();
-  const { pathname } = useLocation();
-
-  const link = (to, label) => (
-    <Link
-      to={to}
-      className={`hover:underline ${pathname === to ? "font-semibold" : ""}`}
-    >
-      {label}
-    </Link>
-  );
+  const navigate = useNavigate();
 
   return (
-    <header className="border-b bg-white">
-      <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
-        <nav className="flex flex-wrap items-center gap-4 text-slate-800">
-          {link("/", "Picsellart")}
-          {link("/explore", "Explore")}
-          {link("/faq", "FAQ")}
-          {link("/contact", "Contact")}
-          {link("/refunds", "Refunds")}
-          {user && link("/buyer/dashboard", "Buyer Dashboard")}
-          {user && link("/seller/dashboard", "Seller Dashboard")}
+    <header className="site-header">
+      <div className="site-header-inner">
+        {/* Brand */}
+        <Link to="/" className="site-brand">
+          Picsell<span>art</span>
+        </Link>
+
+        {/* Primary nav */}
+        <nav className="nav-main">
+          <NavLink to="/explore">Explore</NavLink>
+          <NavLink to="/faq">FAQ</NavLink>
+          <NavLink to="/contact">Contact</NavLink>
+          <NavLink to="/refunds">Refunds</NavLink>
         </nav>
 
-        <div className="flex items-center gap-2">
-          {!user ? (
-            <>
-              <button
-                className="px-3 py-1.5 text-sm rounded-md border"
-                onClick={signInAsBuyer}
-              >
-                Buyer Login
-              </button>
-              <button
-                className="px-3 py-1.5 text-sm rounded-md bg-indigo-600 text-white"
-                onClick={signInAsSeller}
-              >
-                Seller Login
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="text-sm text-slate-600 truncate max-w-[180px]">
-                {user.displayName || user.email}
-              </span>
-              <button
-                className="px-3 py-1.5 text-sm rounded-md border"
-                onClick={signOut}
-              >
-                Logout
-              </button>
-            </>
-          )}
+        {/* Auth actions */}
+        <div className="nav-auth">
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => navigate("/buyer-login")}
+          >
+            Buyer Login
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => navigate("/seller-login")}
+          >
+            Seller Login
+          </button>
         </div>
       </div>
     </header>
