@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 import Home from "./pages/Home";
 import Explore from "./pages/Explore";
-import FAQ from "./pages/FAQ";
+import FAQ from "./pages/Faq";
 import Contact from "./pages/Contact";
 import Refunds from "./pages/Refunds";
 import BuyerDashboard from "./pages/BuyerDashboard";
@@ -37,3 +37,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+
