@@ -1,240 +1,128 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import Header from "../components/Header";
-import { fetchAllExploreImages, filterAndPaginate } from "../utils/storage";
-import {
-  DEFAULT_PAGE_SIZE,
-  nextPage,
-  prevPage,
-  priceToINR,
-} from "../utils/exploreData";
-import { openRazorpay } from "../utils/loadRazorpay";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import WatermarkedImage from "../components/WatermarkedImage";
+import { fetchAllExploreImages } from "../utils/storage";
+import { priceForName, priceToPaise } from "../utils/exploreData";
+import { openRazorpay } from "../utils/loadRazorpay";
+import { db } from "../firebase";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 export default function Explore() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
+  const { user, role, ensureBuyer } = useAuth();
+  const [items, setItems] = useState([]);
+  const [q, setQ] = useState("");
+  const [loading, setLoading] = useState(true);
 
-  const [allImages, setAllImages] = useState([]);
-  const [status, setStatus] = useState("idle"); // "idle" | "loading" | "ready" | "error"
-  const [error, setError] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [page, setPage] = useState(1);
-
-  // Fetch all images on mount
   useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        setStatus("loading");
-        setError("");
-
-        const images = await fetchAllExploreImages();
-
-        if (!cancelled) {
-          setAllImages(images);
-          setStatus("ready");
-        }
-      } catch (err) {
-        console.error("Failed to load explore images", err);
-        if (!cancelled) {
-          setError("Unable to load images right now. Please try again later.");
-          setStatus("error");
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
+    (async () => {
+      setLoading(true);
+      const imgs = await fetchAllExploreImages(); // public/ + Buyer/
+      setItems(imgs);
+      setLoading(false);
+    })();
   }, []);
 
-  // Derive current page items
-  const { items, totalItems, totalPages, page: safePage } = useMemo(
-    () =>
-      filterAndPaginate(allImages, {
-        searchTerm,
-        page,
-        pageSize: DEFAULT_PAGE_SIZE,
-      }),
-    [allImages, searchTerm, page]
-  );
+  const filtered = useMemo(() => {
+    if (!q) return items;
+    const s = q.toLowerCase();
+    return items.filter((x) => x.name.toLowerCase().includes(s));
+  }, [q, items]);
 
-  // Keep local state in sync with clamped page from filterAndPaginate
-  useEffect(() => {
-    if (safePage !== page) {
-      setPage(safePage);
-    }
-  }, [safePage, page]);
+  async function handleBuy(img) {
+    // must be a logged-in buyer
+    await ensureBuyer();
 
-  const handleClearSearch = () => {
-    setSearchTerm("");
-    setPage(1);
-  };
+    const rupees = priceForName(img.name); // e.g., 399
+    const amountPaise = priceToPaise(rupees); // 39900
 
-  const handleNextPage = () => {
-    setPage((current) => nextPage(current, totalPages));
-  };
+    const meta = { filename: img.name, path: img.path, rupees };
 
-  const handlePrevPage = () => {
-    setPage((current) => prevPage(current, totalPages));
-  };
-
-  const handleBuy = async (image) => {
-    // Require buyer login
-    if (!user) {
-      navigate("/buyer-login");
-      return;
-    }
-
-    try {
-      const amountPaise = image.price * 100;
-
-      await openRazorpay({
-        amount: amountPaise,
-        currency: "INR",
-        imageName: image.name,
-        buyer: {
-          uid: user.uid,
-          email: user.email,
-        },
-      });
-
-      // Note: your existing openRazorpay should handle:
-      //  - calling Firebase Functions to create & verify order
-      //  - recording purchase in Firestore
-      //  - redirect / toast on success
-    } catch (err) {
-      console.error("Payment failed or cancelled", err);
-      // Optional: show toast or message
-    }
-  };
-
-  const renderBody = () => {
-    if (status === "loading") {
-      return <p>Loading images…</p>;
-    }
-
-    if (status === "error") {
-      return <p className="text-danger">{error}</p>;
-    }
-
-    if (!items || items.length === 0) {
-      return (
-        <p className="explore-empty">
-          No images found. Try a different search term.
-        </p>
-      );
-    }
-
-    return (
-      <>
-        <div className="explore-grid">
-          {items.map((img) => (
-            <article key={img.id} className="card">
-              <div className="card-image-wrapper">
-                <WatermarkedImage
-                  src={img.downloadURL}
-                  alt={img.title}
-                  className="card-image"
-                />
-              </div>
-              <div className="card-body">
-                <h3 className="card-title">{img.title}</h3>
-                <div className="card-meta">
-                  <span className="text-muted truncate">{img.name}</span>
-                  <span className="price-tag">{priceToINR(img.price)}</span>
-                </div>
-              </div>
-              <div className="card-actions">
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => navigate(`/photo/${encodeURIComponent(img.name)}`)}
-                >
-                  Preview
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => handleBuy(img)}
-                >
-                  Buy &amp; Download
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="explore-toolbar mt-4">
-            <span className="text-muted" style={{ fontSize: "0.85rem" }}>
-              Showing {items.length} of {totalItems} images
-            </span>
-            <div style={{ marginLeft: "auto", display: "flex", gap: "0.5rem" }}>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={handlePrevPage}
-                disabled={safePage <= 1}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={handleNextPage}
-                disabled={safePage >= totalPages}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-      </>
-    );
-  };
+    await openRazorpay({
+      amount: amountPaise,
+      description: `Picsellart • ${img.name}`,
+      notes: meta,
+      onSuccess: async (rzp) => {
+        // record purchase for buyer
+        if (user) {
+          await addDoc(collection(db, "purchases"), {
+            uid: user.uid,
+            filename: img.name,
+            path: img.path,
+            rupees,
+            rzp_payment_id: rzp.razorpay_payment_id,
+            createdAt: serverTimestamp(),
+          });
+        }
+        // direct download
+        const a = document.createElement("a");
+        a.href = img.urlOriginal; // original file (no watermark)
+        a.download = img.name;
+        a.rel = "noopener";
+        a.click();
+      },
+    });
+  }
 
   return (
-    <>
-      <Header />
-      <main className="page-container">
-        <section className="explore-header">
-          <h1 className="page-heading">Street Photography</h1>
-          <p className="page-subtitle">
-            Curated images from our public gallery and verified sellers. Login
-            as a buyer to purchase and download.
-          </p>
+    <section>
+      <h2 className="text-3xl font-extrabold text-slate-900 mb-2">
+        Street Photography
+      </h2>
+      <p className="text-slate-600 mb-5">
+        Curated images from our public gallery and verified sellers. Login as a
+        buyer to purchase and download.
+      </p>
 
-          <div className="explore-toolbar">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search by name…"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
-            />
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={handleClearSearch}
-              disabled={!searchTerm}
-            >
-              Clear
-            </button>
-          </div>
-        </section>
+      <div className="flex gap-2 items-center mb-6">
+        <input
+          placeholder="Search by name..."
+          className="px-4 py-2 rounded-full bg-white ring-1 ring-slate-300 flex-1"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+        />
+        <button className="px-3 py-2 rounded-lg bg-slate-200" onClick={() => setQ("")}>
+          Clear
+        </button>
+      </div>
 
-        {renderBody()}
-      </main>
-    </>
+      {loading && <p>Loading images…</p>}
+
+      {!loading && (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {filtered.map((img) => {
+            const rupees = priceForName(img.name);
+            return (
+              <div key={img.url} className="rounded-xl overflow-hidden bg-white ring-1 ring-slate-200 shadow">
+                <div className="relative">
+                  {/* Watermarked preview */}
+                  <img
+                    src={img.urlWatermarked}
+                    alt={img.name}
+                    className="w-full h-[280px] object-cover"
+                    loading="lazy"
+                  />
+                  <span className="absolute inset-x-0 top-3 mx-auto text-xs tracking-wide px-2 py-1 rounded bg-black/35 text-white">
+                    PICSELLART
+                  </span>
+                </div>
+
+                <div className="px-4 py-3">
+                  <div className="text-sm text-slate-700">Street Photography</div>
+                  <div className="text-xs text-slate-500">{img.name}</div>
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="font-semibold text-indigo-700">₹{rupees}</div>
+                    <button
+                      className="text-sm px-3 py-1.5 rounded-full bg-slate-900 text-white"
+                      onClick={() => handleBuy(img)}
+                    >
+                      Buy & Download
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

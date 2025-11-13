@@ -1,39 +1,65 @@
-// src/context/AuthContext.jsx
 import { createContext, useContext, useEffect, useState } from "react";
-import { auth, googleProvider } from "../firebase";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { auth, db } from "../firebase";
+import {
+  GoogleAuthProvider,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from "firebase/auth";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
-const AuthContext = createContext(null);
+const Ctx = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [ready, setReady] = useState(false);
+  const [role, setRole] = useState(null); // 'buyer' | 'seller' | null
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
-      setReady(true);
+    return onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      if (u) {
+        const r = await getDoc(doc(db, "roles", u.uid));
+        setRole(r.exists() ? r.data().role : null);
+      } else {
+        setRole(null);
+      }
+      setLoading(false);
     });
-    return () => unsub();
   }, []);
 
-  const signInBuyer = async () => {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  };
+  async function loginBuyer() {
+    const u = await signInWithPopup(auth, new GoogleAuthProvider());
+    await setDoc(doc(db, "roles", u.user.uid), { role: "buyer" }, { merge: true });
+    setRole("buyer");
+    return u;
+  }
 
-  const signInSeller = async () => {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  };
+  async function loginSeller() {
+    const u = await signInWithPopup(auth, new GoogleAuthProvider());
+    await setDoc(doc(db, "roles", u.user.uid), { role: "seller" }, { merge: true });
+    setRole("seller");
+    return u;
+  }
 
-  const logOut = () => signOut(auth);
+  async function ensureBuyer() {
+    if (!user) await loginBuyer();
+    if (role !== "buyer") {
+      await setDoc(doc(db, "roles", auth.currentUser.uid), { role: "buyer" }, { merge: true });
+      setRole("buyer");
+    }
+  }
+
+  async function logout() {
+    await signOut(auth);
+  }
 
   return (
-    <AuthContext.Provider value={{ user, ready, signInBuyer, signInSeller, logOut }}>
+    <Ctx.Provider value={{ user, role, loading, loginBuyer, loginSeller, ensureBuyer, logout }}>
       {children}
-    </AuthContext.Provider>
+    </Ctx.Provider>
   );
 }
-
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  return useContext(Ctx);
+}

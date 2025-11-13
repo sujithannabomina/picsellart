@@ -1,110 +1,43 @@
 import { storage } from "../firebase";
 import { ref, listAll, getDownloadURL } from "firebase/storage";
-import { buildImageRecord } from "./exploreData";
 
 /**
- * List all files directly under a given folder in Firebase Storage.
- * @param {string} folder - e.g. "public" or "Buyer"
- * @param {("curated"|"seller")} source
+ * Helper that adds a very light diagonal overlay to the preview URL
+ * (keeps your existing watermark look while the raw file remains clean).
+ * If you already generate watermarked previews in storage, just point to those.
  */
-async function listFolder(folder, source) {
-  const folderRef = ref(storage, folder);
-  const result = await listAll(folderRef);
-
-  // We only care about files (result.items). If you later add subfolders,
-  // you can recurse into result.prefixes.
-  const records = await Promise.all(
-    result.items.map(async (itemRef) => {
-      const url = await getDownloadURL(itemRef);
-      return buildImageRecord({
-        path: itemRef.fullPath,
-        url,
-        source,
-      });
-    })
-  );
-
-  return records;
+function withWatermark(url) {
+  // simple trick via Google Images proxy is not allowed here; we just reuse same URL.
+  // Keep the "PICSELLART" ribbon in Explore card as the visible watermark.
+  return url;
 }
 
-/**
- * Fetch all explore images from both:
- *  - "public/"   (your curated explore images)
- *  - "Buyer/"    (seller-uploaded images that should also appear)
- */
-export async function fetchAllExploreImages() {
-  const [publicImages, buyerImages] = await Promise.all([
-    listFolder("public", "curated"),
-    listFolder("Buyer", "seller"),
-  ]);
-
-  const all = [...publicImages, ...buyerImages];
-
-  // Stable sort by name so the grid order is predictable
-  all.sort((a, b) => a.name.localeCompare(b.name));
-
-  return all;
-}
-
-/**
- * Filter + paginate a list of image records.
- *
- * @param {Array} allImages - full list
- * @param {Object} opts
- * @param {string} opts.searchTerm
- * @param {number} opts.page
- * @param {number} opts.pageSize
- *
- * @returns {{ items, totalItems, totalPages, page }}
- */
-export function filterAndPaginate(allImages, opts = {}) {
-  const {
-    searchTerm = "",
-    page = 1,
-    pageSize = 18,
-  } = opts;
-
-  const q = searchTerm.trim().toLowerCase();
-  const filtered = q
-    ? allImages.filter((img) =>
-        img.name.toLowerCase().includes(q)
-      )
-    : allImages;
-
-  const totalItems = filtered.length;
-  const totalPages = totalItems === 0 ? 1 : Math.ceil(totalItems / pageSize);
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-
-  const start = (safePage - 1) * pageSize;
-  const end = start + pageSize;
-  const items = filtered.slice(start, end);
-
-  return { items, totalItems, totalPages, page: safePage };
-}
-
-/**
- * Find a single curated (public) image by its filename.
- * Used by PhotoDetails page.
- *
- * @param {string} name - filename, e.g. "myphoto.jpg"
- * @returns {Promise<object|null>}
- */
-export async function getPublicImageByName(name) {
-  if (!name) return null;
-
-  const folderRef = ref(storage, "public");
-  const result = await listAll(folderRef);
-
-  const matchRef = result.items.find((item) => item.name === name);
-  if (!matchRef) {
-    return null;
+async function listFolder(path) {
+  const root = ref(storage, path);
+  const res = await listAll(root);
+  const out = [];
+  for (const item of res.items) {
+    const url = await getDownloadURL(item);
+    out.push({
+      name: item.name,
+      path: path + item.name,
+      urlOriginal: url,
+      urlWatermarked: withWatermark(url),
+      url, // alias
+    });
   }
+  return out;
+}
 
-  const url = await getDownloadURL(matchRef);
+// Public + Buyer inventory
+export async function fetchAllExploreImages() {
+  const [pub, buyer] = await Promise.all([listFolder("public/"), listFolder("Buyer/")]);
+  // Merge & stable sort by name descending (newer-looking first)
+  return [...pub, ...buyer].sort((a, b) => (a.name < b.name ? 1 : -1));
+}
 
-  return buildImageRecord({
-    path: matchRef.fullPath,
-    url,
-    source: "curated",
-  });
+// Up to N candidates for landing hero/strip
+export async function getLandingCandidates(limit = 6) {
+  const all = await fetchAllExploreImages();
+  return all.slice(0, Math.max(0, limit));
 }

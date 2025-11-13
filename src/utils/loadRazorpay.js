@@ -1,52 +1,35 @@
-// src/utils/loadRazorpay.js
-
-function loadScript(src) {
+function loadScript() {
   return new Promise((resolve, reject) => {
+    if (window.Razorpay) return resolve();
     const s = document.createElement("script");
-    s.src = src;
-    s.onload = resolve;
+    s.src = "https://checkout.razorpay.com/v1/checkout.js";
+    s.onload = () => resolve();
     s.onerror = reject;
     document.body.appendChild(s);
   });
 }
 
 /**
- * Production-ready front-end Checkout invocation.
- * NOTE: For live capture + receipts, you should create orders on your server.
- * This client-side flow still opens Checkout and completes payment with key.
- * Put your key in Vercel env as VITE_RAZORPAY_KEY
+ * openRazorpay({ amount, description, notes, onSuccess })
  */
-export async function openRazorpay({ amount, name, description, onSuccess, onCancel }) {
-  const key = import.meta.env.VITE_RAZORPAY_KEY;
-  if (!key) {
-    alert("Payment key missing. Please set VITE_RAZORPAY_KEY in environment.");
-    return;
-  }
-  if (!window.Razorpay) {
-    await loadScript("https://checkout.razorpay.com/v1/checkout.js");
-  }
+export async function openRazorpay({ amount, description, notes, onSuccess }) {
+  await loadScript();
 
   const options = {
-    key,
-    amount: amount * 100, // paise
+    key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+    amount, // in paise
     currency: "INR",
     name: "Picsellart",
     description,
-    image: "/favicon.ico",
+    notes,
+    // Keep login inside your app — no phone prefill
     handler: function (response) {
-      try {
-        onSuccess?.(response);
-      } catch {}
+      onSuccess?.(response);
     },
     modal: {
-      ondismiss: function () {
-        try {
-          onCancel?.();
-        } catch {}
-      },
+      ondismiss: function () {},
     },
-    notes: { product: name },
-    theme: { color: "#4f46e5" },
+    theme: { color: "#7c5cff" },
   };
 
   const rzp = new window.Razorpay(options);

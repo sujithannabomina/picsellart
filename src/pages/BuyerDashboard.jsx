@@ -1,67 +1,85 @@
-// src/pages/BuyerDashboard.jsx
-import Header from "../components/Header";
-import { useAuth } from "../context/AuthContext";
 import { useEffect, useState } from "react";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
+import { listPurchases } from "../utils/purchases";
+import { RequireBuyer } from "../routes/guards";
 
-export default function BuyerDashboard() {
+function BuyerDashboardInner() {
   const { user } = useAuth();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancel = false;
     (async () => {
-      try {
-        const q = query(
-          collection(db, "purchases"),
-          where("buyerUid", "==", user.uid),
-          orderBy("createdAt", "desc")
-        );
-        const snap = await getDocs(q);
-        if (!cancel) {
-          setRows(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-          setLoading(false);
-        }
-      } catch (e) {
-        console.error(e);
-        if (!cancel) setLoading(false);
-      }
+      if (!user) return;
+      setLoading(true);
+      const data = await listPurchases(user.uid);
+      setRows(data);
+      setLoading(false);
     })();
-    return () => (cancel = true);
-  }, [user.uid]);
+  }, [user]);
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-4">Buyer Dashboard</h1>
-        {loading ? (
-          <p>Loading…</p>
-        ) : rows.length === 0 ? (
-          <p className="text-slate-600">No purchases yet.</p>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {rows.map((p) => (
-              <div key={p.id} className="border rounded-xl overflow-hidden bg-white">
-                <img src={p.url} alt={p.name} className="w-full aspect-[4/3] object-cover" />
-                <div className="p-3">
-                  <div className="text-sm text-slate-500">{p.title}</div>
-                  <div className="font-semibold">{p.name}</div>
-                  <div className="text-sm mt-1">Paid: ₹{p.amount}</div>
-                  <a
-                    href={p.url}
-                    className="mt-2 inline-flex px-3 py-1.5 rounded-md bg-indigo-600 text-white text-sm"
-                  >
-                    Download
-                  </a>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </main>
-    </>
+    <div className="space-y-6">
+      <header className="flex items-end justify-between">
+        <div>
+          <h1 className="text-3xl font-extrabold">Buyer Dashboard</h1>
+          <p className="text-slate-600">Your licensed downloads and receipts.</p>
+        </div>
+      </header>
+
+      {loading && <div className="card p-6">Loading your purchases…</div>}
+
+      {!loading && rows.length === 0 && (
+        <div className="card p-6">
+          <div className="font-semibold">No purchases yet</div>
+          <div className="text-slate-600">Go to Explore to buy your first image.</div>
+        </div>
+      )}
+
+      {!loading && rows.length > 0 && (
+        <div className="card overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-left bg-slate-50">
+              <tr>
+                <th className="px-4 py-3">File</th>
+                <th className="px-4 py-3">Price</th>
+                <th className="px-4 py-3">Payment ID</th>
+                <th className="px-4 py-3">Date</th>
+                <th className="px-4 py-3">Download</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t">
+                  <td className="px-4 py-3">{r.filename}</td>
+                  <td className="px-4 py-3">₹{r.rupees}</td>
+                  <td className="px-4 py-3">{r.rzp_payment_id?.slice(0, 14)}…</td>
+                  <td className="px-4 py-3">
+                    {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {/* Use storage path set in Explore success handler */}
+                    <a
+                      href={r.path ? `https://firebasestorage.googleapis.com/v0/b/${import.meta.env.VITE_FIREBASE_BUCKET}/o/${encodeURIComponent(r.path)}?alt=media` : "#"}
+                      className="px-3 py-1 rounded-full bg-slate-900 text-white"
+                    >
+                      Download
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function BuyerDashboard() {
+  return (
+    <RequireBuyer>
+      <BuyerDashboardInner />
+    </RequireBuyer>
   );
 }

@@ -1,28 +1,39 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Header from "./components/Header";
-import LandingPage from "./pages/LandingPage";
+import Layout from "./components/Layout";
+import Home from "./pages/Home";
 import Explore from "./pages/Explore";
-import Faq from "./pages/Faq";
+import FAQ from "./pages/FAQ";
 import Contact from "./pages/Contact";
 import Refunds from "./pages/Refunds";
-import SellerLogin from "./pages/SellerLogin";
-import BuyerLogin from "./pages/BuyerLogin";
+import BuyerDashboard from "./pages/BuyerDashboard";
+import SellerDashboard from "./pages/SellerDashboard";
+import SellerGateway from "./pages/SellerGateway";
+import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import { AuthProvider } from "./context/AuthContext";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Header />
-      <Routes>
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/explore" element={<Explore />} />
-        <Route path="/faq" element={<Faq />} />
-        <Route path="/contact" element={<Contact />} />
-        <Route path="/refunds" element={<Refunds />} />
-        <Route path="/seller-login" element={<SellerLogin />} />
-        <Route path="/buyer-login" element={<BuyerLogin />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/explore" element={<Explore />} />
+            <Route path="/faq" element={<FAQ />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/refunds" element={<Refunds />} />
+
+            {/* dashboards / flows */}
+            <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
+            <Route path="/seller-gateway" element={<SellerGateway />} />
+            <Route path="/seller-dashboard" element={<SellerDashboard />} />
+            <Route path="/profile" element={<Profile />} />
+
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Layout>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

@@ -1,166 +1,149 @@
-// src/pages/SellerDashboard.jsx
-import Header from "../components/Header";
-import { useAuth } from "../context/AuthContext";
 import { useEffect, useState } from "react";
-import {
-  ref,
-  listAll,
-  getDownloadURL,
-  uploadBytesResumable,
-  deleteObject,
-} from "firebase/storage";
-import { storage, db } from "../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { DEFAULT_SELLER_LIMITS } from "../utils/plans";
-import { priceForName } from "../utils/exploreData";
+import { RequireSeller } from "../routes/guards";
+import { useAuth } from "../context/AuthContext";
+import { getActivePlan, uploadSellerFile, validateUpload } from "../utils/seller";
+import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
 
-export default function SellerDashboard() {
+function SellerDashboardInner() {
   const { user } = useAuth();
-  const [items, setItems] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [file, setFile] = useState(null);
+  const [plan, setPlan] = useState(null);
   const [price, setPrice] = useState("");
+  const [file, setFile] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [uploads, setUploads] = useState([]);
 
-  const MAX_PRICE = DEFAULT_SELLER_LIMITS.maxPrice; // could read plan from Firestore later
+  async function refreshPlan() {
+    if (!user) return;
+    const p = await getActivePlan(user.uid);
+    setPlan(p);
+  }
 
-  const rootRef = ref(storage, `sellers/${user.uid}/images`);
-
-  const refresh = async () => {
-    const res = await listAll(rootRef);
-    const rows = await Promise.all(
-      res.items.map(async (it) => ({
-        name: it.name,
-        path: it.fullPath,
-        url: await getDownloadURL(it),
-      }))
+  async function refreshUploads() {
+    if (!user) return;
+    const qy = query(
+      collection(db, "seller_uploads"),
+      where("uid", "==", user.uid),
+      orderBy("createdAt", "desc")
     );
-    setItems(rows.sort((a, b) => a.name.localeCompare(b.name)));
-  };
+    const snap = await getDocs(qy);
+    setUploads(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  }
 
   useEffect(() => {
-    refresh().catch(console.error);
+    refreshPlan();
+    refreshUploads();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.uid]);
+  }, [user]);
 
-  const onUpload = async (e) => {
+  async function handleUpload(e) {
     e.preventDefault();
-    if (!file) return;
-    const cleanName = file.name.replace(/\s+/g, "_");
-    const p = Number(price || priceForName(cleanName));
-    if (Number.isNaN(p) || p < 1 || p > MAX_PRICE) {
-      alert(`Enter a valid price (1–${MAX_PRICE}).`);
-      return;
-    }
-
-    setBusy(true);
+    if (!user || !file) return;
     try {
-      const destRef = ref(storage, `sellers/${user.uid}/images/${cleanName}`);
-      const task = uploadBytesResumable(destRef, file);
-      await new Promise((resolve, reject) => {
-        task.on("state_changed", null, reject, resolve);
-      });
-      const url = await getDownloadURL(destRef);
-
-      // Optional: record metadata for search/analytics
-      await addDoc(collection(db, "seller_images"), {
-        ownerUid: user.uid,
-        name: cleanName,
-        url,
-        storagePath: destRef.fullPath,
-        price: p,
-        title: "Street Photography",
-        createdAt: serverTimestamp(),
-      });
-
+      setBusy(true);
+      validateUpload(plan, price);
+      await uploadSellerFile({ uid: user.uid, file, price: Number(price) });
       setFile(null);
       setPrice("");
-      await refresh();
-      alert("Upload complete.");
+      await Promise.all([refreshPlan(), refreshUploads()]);
     } catch (err) {
-      console.error(err);
-      alert("Upload failed.");
+      alert(err.message || String(err));
     } finally {
       setBusy(false);
     }
-  };
-
-  const onDelete = async (path) => {
-    if (!confirm("Delete this image?")) return;
-    try {
-      await deleteObject(ref(storage, path));
-      await refresh();
-    } catch (e) {
-      console.error(e);
-      alert("Delete failed.");
-    }
-  };
+  }
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="text-3xl font-bold text-slate-900 mb-4">Seller Dashboard</h1>
+    <div className="space-y-6">
+      <header className="flex items-end justify-between">
+        <div>
+          <h1 className="text-3xl font-extrabold">Seller Dashboard</h1>
+          <p className="text-slate-600">Manage uploads and view your inventory.</p>
+        </div>
+        <div className="card px-5 py-3">
+          <div className="text-sm">Plan: <b>{plan?.planId || "—"}</b></div>
+          <div className="text-sm">Uploads left: <b>{plan?.uploads ?? "—"}</b></div>
+          <div className="text-sm">Max price: <b>₹{plan?.maxPrice ?? "—"}</b></div>
+        </div>
+      </header>
 
-        <form onSubmit={onUpload} className="grid sm:grid-cols-[1fr_auto_auto] gap-3 items-end max-w-3xl">
-          <div>
-            <label className="text-sm text-slate-600">Select Image</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="block w-full border rounded-md px-3 py-2"
-              required
-            />
-          </div>
-          <div>
-            <label className="text-sm text-slate-600">Price (₹, ≤ {MAX_PRICE})</label>
-            <input
-              type="number"
-              min="1"
-              max={MAX_PRICE}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder="e.g. 199"
-              className="block w-32 border rounded-md px-3 py-2"
-            />
-          </div>
+      <form onSubmit={handleUpload} className="card p-5 grid gap-3 md:grid-cols-3 items-end">
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium mb-1">Select image</label>
+          <input
+            type="file"
+            accept="image/*"
+            required
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full
+                       file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700
+                       hover:file:bg-indigo-100"
+          />
+          <p className="text-xs text-slate-500 mt-1">Uploaded files appear in Explore (public gallery).</p>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Price (₹)</label>
+          <input
+            type="number"
+            min="1"
+            required
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-300"
+          />
+        </div>
+
+        <div className="md:col-span-3">
           <button
-            disabled={busy || !file}
-            className="px-4 py-2 rounded-md bg-indigo-600 text-white disabled:opacity-50"
+            type="submit"
+            disabled={busy}
+            className="px-5 py-2.5 rounded-full bg-indigo-600 text-white font-semibold disabled:opacity-60"
           >
-            {busy ? "Uploading…" : "Upload"}
+            {busy ? "Uploading…" : "Upload to Gallery"}
           </button>
-        </form>
+        </div>
+      </form>
 
-        <h2 className="mt-8 text-xl font-semibold">Your Images</h2>
-        {items.length === 0 ? (
-          <p className="text-slate-600 mt-2">No images uploaded yet.</p>
-        ) : (
-          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {items.map((it) => (
-              <div key={it.path} className="border rounded-xl overflow-hidden bg-white">
-                <img src={it.url} alt={it.name} className="w-full aspect-[4/3] object-cover" />
-                <div className="p-3 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm text-slate-500">Street Photography</div>
-                    <div className="font-semibold">{it.name}</div>
-                  </div>
-                  <button
-                    className="px-3 py-1.5 rounded-md border"
-                    onClick={() => onDelete(it.path)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
+      <div className="card overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="text-left bg-slate-50">
+            <tr>
+              <th className="px-4 py-3">Preview</th>
+              <th className="px-4 py-3">File</th>
+              <th className="px-4 py-3">Price</th>
+              <th className="px-4 py-3">Path</th>
+              <th className="px-4 py-3">Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {uploads.map((u) => (
+              <tr key={u.id} className="border-t align-middle">
+                <td className="px-4 py-3">
+                  <img src={u.url} alt="" className="w-14 h-14 object-cover rounded-md" />
+                </td>
+                <td className="px-4 py-3">{u.filename}</td>
+                <td className="px-4 py-3">₹{u.price}</td>
+                <td className="px-4 py-3 text-xs">{u.path}</td>
+                <td className="px-4 py-3">
+                  {u.createdAt?.toDate ? u.createdAt.toDate().toLocaleString() : "—"}
+                </td>
+              </tr>
             ))}
-          </div>
-        )}
+            {uploads.length === 0 && (
+              <tr><td className="px-4 py-5" colSpan={5}>No uploads yet.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
-        <p className="mt-6 text-sm text-slate-500">
-          Explore auto-updates from your uploads. Files appear under <code>sellers/{user.uid}/images/</code>.
-        </p>
-      </main>
-    </>
+export default function SellerDashboard() {
+  return (
+    <RequireSeller>
+      <SellerDashboardInner />
+    </RequireSeller>
   );
 }
