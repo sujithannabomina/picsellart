@@ -1,13 +1,25 @@
-import { Link } from "react-router-dom";
+// src/pages/NotFound.jsx
+import React from "react";
+import { useNavigate } from "react-router-dom";
 
-export default function NotFound() {
+const NotFound = () => {
+  const navigate = useNavigate();
+
   return (
-    <section className="text-center py-16">
-      <h1 className="text-5xl font-extrabold mb-3">Not Found</h1>
-      <p className="text-slate-600 mb-6">The page you’re looking for doesn’t exist.</p>
-      <Link to="/" className="px-5 py-2.5 rounded-full bg-slate-900 text-white font-semibold">
+    <div className="flex flex-col items-center justify-center py-20 text-center">
+      <h1 className="text-4xl font-extrabold text-slate-900 mb-3">Not Found</h1>
+      <p className="text-slate-600 mb-6 max-w-md">
+        The page you’re looking for doesn’t exist, or may have moved. Use the
+        navigation above or return to the homepage.
+      </p>
+      <button
+        onClick={() => navigate("/")}
+        className="rounded-full bg-slate-900 px-6 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 shadow-md hover:shadow-lg transition duration-150"
+      >
         Go Home
-      </Link>
-    </section>
+      </button>
+    </div>
   );
-}
+};
+
+export default NotFound;

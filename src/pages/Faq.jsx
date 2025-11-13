@@ -1,24 +1,64 @@
-export default function FAQ() {
-  const QA = [
-    ["What is Picsellart?", "A curated marketplace for high-quality, license-ready images."],
-    ["How do I become a seller?", "Sign in as Seller, purchase a plan, then upload from your dashboard."],
-    ["How are images delivered?", "After payment, buyers get an instant download of the original file."],
-    ["Do images have watermarks?", "Previews show a light watermark. Purchased files are clean."],
-    ["Commercial usage?", "See each asset’s license. Generally permitted for commercial projects."],
-    ["Support?", "Use the Contact page — we reply in 24–48 hours."],
-  ];
+import React, { useState } from "react";
+
+const FAQ_ITEMS = [
+  {
+    q: "What is Picsellart?",
+    a: "Picsellart is a curated marketplace where photographers and creators sell high-quality digital images to designers, agencies, and brands.",
+  },
+  {
+    q: "How do I become a seller?",
+    a: "Sign in through Seller Login with your Google account, choose a plan, and upload your approved images within your plan limits.",
+  },
+  {
+    q: "How are images delivered to buyers?",
+    a: "After successful payment, buyers receive an instant download link on the site and a secure download link over email.",
+  },
+  {
+    q: "Do images have watermarks?",
+    a: "Preview images in Explore are watermarked. Purchased downloads are delivered without the visible watermark.",
+  },
+  {
+    q: "What is your refund policy?",
+    a: "Because files are digital downloads, refunds are only considered for corrupted or non-matching files. See the Refunds page for full details.",
+  },
+  {
+    q: "Can I use images commercially?",
+    a: "Yes, unless a listing explicitly states otherwise. Each purchase includes a standard commercial license for one brand.",
+  },
+];
+
+export default function Faq() {
+  const [openIndex, setOpenIndex] = useState(0);
 
   return (
-    <section className="max-w-3xl mx-auto">
-      <h1 className="text-4xl font-extrabold mb-6">Frequently Asked Questions</h1>
-      <div className="space-y-3">
-        {QA.map(([q, a]) => (
-          <details key={q} className="card px-5 py-4">
-            <summary className="font-semibold cursor-pointer">{q}</summary>
-            <p className="text-slate-600 mt-2">{a}</p>
-          </details>
-        ))}
+    <div className="page-shell">
+      <div className="card">
+        <h1 className="page-title">Frequently Asked Questions</h1>
+        <p className="page-subtitle">
+          Answers to common questions about buying and selling on Picsellart.
+        </p>
+
+        <div className="faq-accordion">
+          {FAQ_ITEMS.map((item, index) => {
+            const isOpen = index === openIndex;
+            return (
+              <div
+                key={item.q}
+                className="faq-item"
+                onClick={() => setOpenIndex(isOpen ? -1 : index)}
+              >
+                <div className="faq-question">
+                  <span>{item.q}</span>
+                  <span style={{ fontSize: "1.1rem", color: "#9ca3af" }}>
+                    {isOpen ? "–" : "+"}
+                  </span>
+                </div>
+                {isOpen && <div className="faq-answer">{item.a}</div>}
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </section>
+    </div>
   );
 }

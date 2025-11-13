@@ -1,62 +1,100 @@
-import { db, storage } from "../firebase";
+// Firestore helpers for seller profile + limits
 import {
-  doc, getDoc, updateDoc, setDoc, serverTimestamp,
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db } from "../firebase";
+import { DEFAULT_SELLER_LIMITS, getPlanById } from "./plans";
 
 /**
- * Returns active plan or null.
+ * Ensure seller profile exists and return it.
+ * Stored at: sellers/{uid}
  */
-export async function getActivePlan(uid) {
-  const d = await getDoc(doc(db, "plans", uid));
-  if (!d.exists()) return null;
-  const p = d.data();
-  return p.active ? p : null;
+export async function ensureSellerProfile(uid, overrides = {}) {
+  const ref = doc(db, "sellers", uid);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) {
+    const baseProfile = {
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      planId: DEFAULT_SELLER_LIMITS.planId,
+      uploadsUsed: 0,
+      maxUploads: DEFAULT_SELLER_LIMITS.maxUploads,
+      maxPricePerImage: DEFAULT_SELLER_LIMITS.maxPricePerImage,
+      expiresAt: null,
+      ...overrides,
+    };
+    await setDoc(ref, baseProfile);
+    return { id: ref.id, ...baseProfile };
+  }
+
+  return { id: ref.id, ...snap.data() };
 }
 
 /**
- * Validates price and remaining uploads.
- * Throws an Error with friendly message if invalid.
+ * Update seller plan after successful payment.
  */
-export function validateUpload(plan, price) {
-  if (!plan?.active) throw new Error("No active plan. Please purchase a plan.");
-  if (plan.uploads <= 0) throw new Error("Upload limit reached for current plan.");
-  if (Number(price) > Number(plan.maxPrice)) {
-    throw new Error(`Price exceeds cap ₹${plan.maxPrice} for your plan.`);
-  }
-}
+export async function applyPlanToSeller(uid, planId) {
+  const plan = getPlanById(planId) || getPlanById(DEFAULT_SELLER_LIMITS.planId);
+  const ref = doc(db, "sellers", uid);
 
-/**
- * Uploads file to public/ (so Explore can see it),
- * decrements plan.uploads, and records a seller_uploads document.
- * Returns { url, path, docId }.
- */
-export async function uploadSellerFile({ uid, file, price }) {
-  const safeName = `${uid}-${Date.now()}-${file.name}`;
-  const path = `public/${safeName}`;
-  const r = ref(storage, path);
-  await uploadBytes(r, file);
-  const url = await getDownloadURL(r);
+  const expiresAt =
+    plan?.durationDays != null
+      ? new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000)
+      : null;
 
-  // decrement quota
-  const planRef = doc(db, "plans", uid);
-  const planSnap = await getDoc(planRef);
-  if (planSnap.exists()) {
-    const cur = planSnap.data();
-    const left = Math.max(0, (cur.uploads || 0) - 1);
-    await updateDoc(planRef, { uploads: left });
-  }
-
-  // record file
-  const upRef = doc(db, "seller_uploads", `${uid}-${Date.now()}`);
-  await setDoc(upRef, {
-    uid,
-    filename: file.name,
-    price: Number(price),
-    path,
-    url,
-    createdAt: serverTimestamp(),
+  await updateDoc(ref, {
+    planId: plan.id,
+    maxUploads: plan.maxUploads,
+    maxPricePerImage: plan.maxPricePerImage,
+    uploadsUsed: 0,
+    expiresAt,
+    updatedAt: serverTimestamp(),
   });
 
-  return { url, path, docId: upRef.id };
+  const snap = await getDoc(ref);
+  return { id: ref.id, ...snap.data() };
+}
+
+/**
+ * Get current limits for seller (used by SellerDashboard).
+ */
+export async function getSellerLimits(uid) {
+  const profile = await ensureSellerProfile(uid);
+  return {
+    planId: profile.planId || DEFAULT_SELLER_LIMITS.planId,
+    maxUploads: profile.maxUploads ?? DEFAULT_SELLER_LIMITS.maxUploads,
+    maxPricePerImage:
+      profile.maxPricePerImage ?? DEFAULT_SELLER_LIMITS.maxPricePerImage,
+    uploadsUsed: profile.uploadsUsed ?? 0,
+    expiresAt: profile.expiresAt ?? null,
+  };
+}
+
+/**
+ * Record a successful image upload.
+ * Call after Firestore record for image is written.
+ */
+export async function recordSellerUpload(uid, incrementBy = 1) {
+  const ref = doc(db, "sellers", uid);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) {
+    await ensureSellerProfile(uid);
+    return recordSellerUpload(uid, incrementBy);
+  }
+
+  const current = snap.data();
+  const uploadsUsed = (current.uploadsUsed || 0) + incrementBy;
+
+  await updateDoc(ref, {
+    uploadsUsed,
+    updatedAt: serverTimestamp(),
+  });
+
+  return uploadsUsed;
 }

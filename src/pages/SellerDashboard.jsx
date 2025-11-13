@@ -1,149 +1,152 @@
-import { useEffect, useState } from "react";
-import { RequireSeller } from "../routes/guards";
-import { useAuth } from "../context/AuthContext";
-import { getActivePlan, uploadSellerFile, validateUpload } from "../utils/seller";
-import { collection, query, where, orderBy, getDocs } from "firebase/firestore";
-import { db } from "../firebase";
+// src/pages/SellerDashboard.jsx
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth, db } from "../firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { DEFAULT_SELLER_LIMITS } from "../utils/plans";
 
-function SellerDashboardInner() {
-  const { user } = useAuth();
-  const [plan, setPlan] = useState(null);
-  const [price, setPrice] = useState("");
-  const [file, setFile] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [uploads, setUploads] = useState([]);
+const SELLERS_COLLECTION = "sellers";
 
-  async function refreshPlan() {
-    if (!user) return;
-    const p = await getActivePlan(user.uid);
-    setPlan(p);
-  }
+const SellerDashboard = () => {
+  const navigate = useNavigate();
+  const [seller, setSeller] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  async function refreshUploads() {
-    if (!user) return;
-    const qy = query(
-      collection(db, "seller_uploads"),
-      where("uid", "==", user.uid),
-      orderBy("createdAt", "desc")
-    );
-    const snap = await getDocs(qy);
-    setUploads(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }
-
+  // watch auth
   useEffect(() => {
-    refreshPlan();
-    refreshUploads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setSeller(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
 
-  async function handleUpload(e) {
-    e.preventDefault();
-    if (!user || !file) return;
-    try {
-      setBusy(true);
-      validateUpload(plan, price);
-      await uploadSellerFile({ uid: user.uid, file, price: Number(price) });
-      setFile(null);
-      setPrice("");
-      await Promise.all([refreshPlan(), refreshUploads()]);
-    } catch (err) {
-      alert(err.message || String(err));
-    } finally {
-      setBusy(false);
-    }
+      setSeller(user);
+      try {
+        const ref = doc(db, SELLERS_COLLECTION, user.uid);
+        const snap = await getDoc(ref);
+
+        if (!snap.exists()) {
+          // first-time seller profile with default limits
+          const initial = {
+            email: user.email || "",
+            planId: DEFAULT_SELLER_LIMITS.id || "starter",
+            planName: DEFAULT_SELLER_LIMITS.name || "Starter",
+            uploadsLimit: DEFAULT_SELLER_LIMITS.uploadsLimit || 25,
+            maxPrice: DEFAULT_SELLER_LIMITS.maxPrice || 199,
+            uploadsUsed: 0,
+            createdAt: new Date(),
+          };
+          await setDoc(ref, initial, { merge: true });
+          setProfile(initial);
+        } else {
+          setProfile(snap.data());
+        }
+      } catch (err) {
+        console.error("Error loading seller profile", err);
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  if (!seller && !loading) {
+    return (
+      <div className="max-w-5xl mx-auto py-10">
+        <h1 className="text-3xl font-bold text-slate-900 mb-4">
+          Seller Dashboard
+        </h1>
+        <p className="text-slate-600 mb-6">
+          Please log in as a seller to manage your photos and earnings.
+        </p>
+        <button
+          onClick={() => navigate("/seller-login")}
+          className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
+        >
+          Go to Seller Login
+        </button>
+      </div>
+    );
   }
+
+  if (loading || !profile) {
+    return (
+      <div className="max-w-5xl mx-auto py-10">
+        <p className="text-slate-600">Loading your seller dashboard…</p>
+      </div>
+    );
+  }
+
+  const remaining = Math.max(
+    0,
+    (profile.uploadsLimit || 0) - (profile.uploadsUsed || 0)
+  );
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-end justify-between">
+    <div className="max-w-5xl mx-auto py-10">
+      <h1 className="text-3xl font-bold text-slate-900 mb-2">
+        Seller Dashboard
+      </h1>
+      <p className="text-slate-600 mb-8">
+        Logged in as <span className="font-semibold">{seller?.email}</span>
+      </p>
+
+      {/* Plan summary */}
+      <div className="grid gap-6 md:grid-cols-3 mb-10">
+        <div className="p-5 rounded-2xl bg-white shadow-sm">
+          <p className="text-sm text-slate-500 mb-1">Current Plan</p>
+          <p className="text-xl font-bold text-slate-900">
+            {profile.planName || "Starter"}
+          </p>
+          <p className="text-xs text-slate-500 mt-2">
+            Plan ID: {profile.planId}
+          </p>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-white shadow-sm">
+          <p className="text-sm text-slate-500 mb-1">Uploads</p>
+          <p className="text-xl font-bold text-slate-900">
+            {profile.uploadsUsed || 0} / {profile.uploadsLimit || 0}
+          </p>
+          <p className="text-xs text-slate-500 mt-2">
+            {remaining} uploads remaining
+          </p>
+        </div>
+
+        <div className="p-5 rounded-2xl bg-white shadow-sm">
+          <p className="text-sm text-slate-500 mb-1">Max price / image</p>
+          <p className="text-xl font-bold text-slate-900">
+            ₹{profile.maxPrice || 199}
+          </p>
+          <p className="text-xs text-slate-500 mt-2">
+            Upgrade plan to increase this limit.
+          </p>
+        </div>
+      </div>
+
+      {/* Placeholder action section (hooks into your existing upload flow) */}
+      <div className="p-6 rounded-2xl bg-slate-900 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold">Seller Dashboard</h1>
-          <p className="text-slate-600">Manage uploads and view your inventory.</p>
+          <h2 className="text-xl font-semibold">Upload new photos</h2>
+          <p className="text-sm text-slate-200 mt-1">
+            Use your seller upload page to add new images. They will
+            automatically appear in Explore (once approved / uploaded).
+          </p>
         </div>
-        <div className="card px-5 py-3">
-          <div className="text-sm">Plan: <b>{plan?.planId || "—"}</b></div>
-          <div className="text-sm">Uploads left: <b>{plan?.uploads ?? "—"}</b></div>
-          <div className="text-sm">Max price: <b>₹{plan?.maxPrice ?? "—"}</b></div>
-        </div>
-      </header>
-
-      <form onSubmit={handleUpload} className="card p-5 grid gap-3 md:grid-cols-3 items-end">
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium mb-1">Select image</label>
-          <input
-            type="file"
-            accept="image/*"
-            required
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full
-                       file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700
-                       hover:file:bg-indigo-100"
-          />
-          <p className="text-xs text-slate-500 mt-1">Uploaded files appear in Explore (public gallery).</p>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-1">Price (₹)</label>
-          <input
-            type="number"
-            min="1"
-            required
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg ring-1 ring-slate-300"
-          />
-        </div>
-
-        <div className="md:col-span-3">
-          <button
-            type="submit"
-            disabled={busy}
-            className="px-5 py-2.5 rounded-full bg-indigo-600 text-white font-semibold disabled:opacity-60"
-          >
-            {busy ? "Uploading…" : "Upload to Gallery"}
-          </button>
-        </div>
-      </form>
-
-      <div className="card overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead className="text-left bg-slate-50">
-            <tr>
-              <th className="px-4 py-3">Preview</th>
-              <th className="px-4 py-3">File</th>
-              <th className="px-4 py-3">Price</th>
-              <th className="px-4 py-3">Path</th>
-              <th className="px-4 py-3">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {uploads.map((u) => (
-              <tr key={u.id} className="border-t align-middle">
-                <td className="px-4 py-3">
-                  <img src={u.url} alt="" className="w-14 h-14 object-cover rounded-md" />
-                </td>
-                <td className="px-4 py-3">{u.filename}</td>
-                <td className="px-4 py-3">₹{u.price}</td>
-                <td className="px-4 py-3 text-xs">{u.path}</td>
-                <td className="px-4 py-3">
-                  {u.createdAt?.toDate ? u.createdAt.toDate().toLocaleString() : "—"}
-                </td>
-              </tr>
-            ))}
-            {uploads.length === 0 && (
-              <tr><td className="px-4 py-5" colSpan={5}>No uploads yet.</td></tr>
-            )}
-          </tbody>
-        </table>
+        <button
+          onClick={() => navigate("/seller-start")}
+          className="px-5 py-2 rounded-xl bg-white text-slate-900 font-semibold hover:bg-slate-100 text-sm"
+        >
+          Go to Uploads
+        </button>
       </div>
     </div>
   );
-}
+};
 
-export default function SellerDashboard() {
-  return (
-    <RequireSeller>
-      <SellerDashboardInner />
-    </RequireSeller>
-  );
-}
+export default SellerDashboard;

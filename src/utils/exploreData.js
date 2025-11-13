@@ -1,13 +1,25 @@
-// Deterministic, sane price bands from filename.
-export function priceForName(name) {
-  // sample101.jpg -> 101; create stable price buckets
-  const digits = (name.match(/\d+/)?.[0] ?? "399");
-  const n = parseInt(digits, 10) || 399;
-  const bucket = n % 5;
-  return [399, 499, 599, 749, 999][bucket];
+// src/utils/exploreData.js
+
+/**
+ * Build an image record for Explore page.
+ * This creates a stable object structure for each image.
+ */
+export function buildImageRecord({ name, url }) {
+  return {
+    id: name,               // unique per storage item
+    name,
+    url,
+    title: name.replace(/\.[^/.]+$/, ""), // remove ext
+  };
 }
 
-export function priceToPaise(rupees) {
-  // Razorpay expects paise
-  return Math.round(Number(rupees) * 100);
+/**
+ * Get a default price for an image based on its name.
+ * You can adjust this logic.
+ */
+export function priceForName(name) {
+  const numMatch = name.match(/\d+/);
+  if (!numMatch) return 99;
+  const num = Number(numMatch[0]);
+  return 49 + (num % 150); // 49 → 199
 }

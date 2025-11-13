@@ -1,85 +1,118 @@
-import { useEffect, useState } from "react";
-import { useAuth } from "../context/AuthContext";
-import { listPurchases } from "../utils/purchases";
-import { RequireBuyer } from "../routes/guards";
+// src/pages/BuyerDashboard.jsx
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../firebase";
+import { getPurchasesForBuyer } from "../utils/purchases";
 
-function BuyerDashboardInner() {
-  const { user } = useAuth();
-  const [rows, setRows] = useState([]);
+const BuyerDashboard = () => {
+  const navigate = useNavigate();
+  const [buyer, setBuyer] = useState(null);
+  const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Watch auth
   useEffect(() => {
-    (async () => {
-      if (!user) return;
-      setLoading(true);
-      const data = await listPurchases(user.uid);
-      setRows(data);
-      setLoading(false);
-    })();
-  }, [user]);
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setBuyer(null);
+        setPurchases([]);
+        setLoading(false);
+        return;
+      }
+
+      setBuyer(user);
+      try {
+        const data = await getPurchasesForBuyer(user.uid);
+        setPurchases(data);
+      } catch (err) {
+        console.error("Error loading purchases", err);
+      } finally {
+        setLoading(false);
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  if (!buyer && !loading) {
+    return (
+      <div className="max-w-5xl mx-auto py-10">
+        <h1 className="text-3xl font-bold text-slate-900 mb-4">
+          Buyer Dashboard
+        </h1>
+        <p className="text-slate-600 mb-6">
+          Please log in as a buyer to view your downloads.
+        </p>
+        <button
+          onClick={() => navigate("/buyer-login")}
+          className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
+        >
+          Go to Buyer Login
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <header className="flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold">Buyer Dashboard</h1>
-          <p className="text-slate-600">Your licensed downloads and receipts.</p>
-        </div>
-      </header>
-
-      {loading && <div className="card p-6">Loading your purchases…</div>}
-
-      {!loading && rows.length === 0 && (
-        <div className="card p-6">
-          <div className="font-semibold">No purchases yet</div>
-          <div className="text-slate-600">Go to Explore to buy your first image.</div>
-        </div>
+    <div className="max-w-5xl mx-auto py-10">
+      <h1 className="text-3xl font-bold text-slate-900 mb-2">
+        Buyer Dashboard
+      </h1>
+      {buyer && (
+        <p className="text-slate-600 mb-8">
+          Logged in as <span className="font-semibold">{buyer.email}</span>
+        </p>
       )}
 
-      {!loading && rows.length > 0 && (
-        <div className="card overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="text-left bg-slate-50">
-              <tr>
-                <th className="px-4 py-3">File</th>
-                <th className="px-4 py-3">Price</th>
-                <th className="px-4 py-3">Payment ID</th>
-                <th className="px-4 py-3">Date</th>
-                <th className="px-4 py-3">Download</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-t">
-                  <td className="px-4 py-3">{r.filename}</td>
-                  <td className="px-4 py-3">₹{r.rupees}</td>
-                  <td className="px-4 py-3">{r.rzp_payment_id?.slice(0, 14)}…</td>
-                  <td className="px-4 py-3">
-                    {r.createdAt?.toDate ? r.createdAt.toDate().toLocaleString() : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {/* Use storage path set in Explore success handler */}
-                    <a
-                      href={r.path ? `https://firebasestorage.googleapis.com/v0/b/${import.meta.env.VITE_FIREBASE_BUCKET}/o/${encodeURIComponent(r.path)}?alt=media` : "#"}
-                      className="px-3 py-1 rounded-full bg-slate-900 text-white"
-                    >
-                      Download
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {loading ? (
+        <p className="text-slate-600">Loading your purchases…</p>
+      ) : purchases.length === 0 ? (
+        <p className="text-slate-600">
+          You haven’t purchased any images yet. Explore photos to get started!
+        </p>
+      ) : (
+        <div className="grid gap-5">
+          {purchases.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm"
+            >
+              <img
+                src={p.imageUrl}
+                alt={p.imageName}
+                className="w-20 h-20 object-cover rounded-xl"
+              />
+              <div className="flex-1">
+                <p className="font-semibold text-slate-900 truncate">
+                  {p.imageName}
+                </p>
+                <p className="text-sm text-slate-500">
+                  Purchased on{" "}
+                  {p.createdAt?.toDate
+                    ? p.createdAt.toDate().toLocaleString()
+                    : p.createdAt instanceof Date
+                    ? p.createdAt.toLocaleString()
+                    : ""}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="font-bold text-indigo-600 mb-2">
+                  ₹{(p.amount || 0) / 100}
+                </p>
+                <button
+                  onClick={() => window.open(p.imageUrl, "_blank")}
+                  className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+                >
+                  Download
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
-}
+};
 
-export default function BuyerDashboard() {
-  return (
-    <RequireBuyer>
-      <BuyerDashboardInner />
-    </RequireBuyer>
-  );
-}
+export default BuyerDashboard;

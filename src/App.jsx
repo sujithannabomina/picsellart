@@ -1,40 +1,50 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+// src/App.jsx
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
-import Home from "./pages/Home";
+
+// Pages
+import LandingPage from "./pages/LandingPage";
 import Explore from "./pages/Explore";
-import FAQ from "./pages/Faq";
-import Contact from "./pages/Contact";
-import Refunds from "./pages/Refunds";
+import BuyerLogin from "./pages/BuyerLogin";
+import SellerLogin from "./pages/SellerLogin";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
-import SellerGateway from "./pages/SellerGateway";
-import Profile from "./pages/Profile";
+import Contact from "./pages/Contact";
+import Faq from "./pages/Faq";
+import Refunds from "./pages/Refunds";
 import NotFound from "./pages/NotFound";
-import { AuthProvider } from "./context/AuthContext";
 
-export default function App() {
+function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Layout>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/explore" element={<Explore />} />
-            <Route path="/faq" element={<FAQ />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/refunds" element={<Refunds />} />
+    <Router>
+      <Layout>
+        <Routes>
+          {/* Home / Landing */}
+          <Route path="/" element={<LandingPage />} />
 
-            {/* dashboards / flows */}
-            <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
-            <Route path="/seller-gateway" element={<SellerGateway />} />
-            <Route path="/seller-dashboard" element={<SellerDashboard />} />
-            <Route path="/profile" element={<Profile />} />
+          {/* Public gallery */}
+          <Route path="/explore" element={<Explore />} />
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Layout>
-      </BrowserRouter>
-    </AuthProvider>
+          {/* Buyer auth & dashboard */}
+          <Route path="/buyer-login" element={<BuyerLogin />} />
+          <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
+
+          {/* Seller auth & dashboard */}
+          <Route path="/seller-login" element={<SellerLogin />} />
+          <Route path="/seller-dashboard" element={<SellerDashboard />} />
+
+          {/* Static pages */}
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/faq" element={<Faq />} />
+          <Route path="/refunds" element={<Refunds />} />
+
+          {/* 404 */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Layout>
+    </Router>
   );
 }
 
+export default App;

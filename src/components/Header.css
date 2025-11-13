@@ -1,103 +1,158 @@
-.site-header {
+/* src/components/Header.css */
+
+.ps-header {
   position: sticky;
   top: 0;
   z-index: 40;
-  background: #0b1220;
-  background: linear-gradient(180deg, #0b1220 0%, #0b1220e6 85%, #0b122000 100%);
-  backdrop-filter: saturate(150%) blur(6px);
+  background: #f1f5f9; /* slate-100 */
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25); /* slate-400/25 */
+  backdrop-filter: blur(12px);
 }
-.site-header-inner {
-  max-width: 1200px;
+
+.ps-header-inner {
+  max-width: 72rem; /* 1152px */
   margin: 0 auto;
-  padding: 14px 20px;
+  padding: 0.85rem 1rem;
   display: flex;
   align-items: center;
-  gap: 16px;
+  justify-content: space-between;
+  gap: 1.5rem;
 }
 
-.brand {
-  all: unset;
-  cursor: pointer;
+/* Logo */
+.ps-logo {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-}
-.brand-left {
-  font-weight: 800;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
-  font-size: 22px;
-  color: #e5e7eb;
-  letter-spacing: .2px;
-}
-.brand-right {
-  font-weight: 800;
-  font-size: 22px;
-  color: #7c5cff;
+  align-items: center;
+  gap: 0.25rem;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
 }
 
-.main-nav {
-  margin-left: 10px;
-  display: flex;
-  gap: 14px;
-}
-.navlink {
-  color: #c7d2fe;
-  padding: 8px 10px;
-  border-radius: 10px;
-  text-decoration: none;
-}
-.navlink.active {
-  background: #2a2e46;
-  color: #ffffff;
+.ps-logo-main {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  font-size: 1.25rem;
+  color: #0f172a; /* slate-900 */
 }
 
-.actions {
-  margin-left: auto;
+.ps-logo-accent {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: #6366f1; /* indigo-500 */
+}
+
+/* Nav links */
+.ps-nav {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 1rem;
+  flex: 1;
+  justify-content: center;
 }
 
-.btn {
-  border: 0;
-  padding: 10px 14px;
-  border-radius: 999px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.btn.ghost {
-  background: #eef2ff;
-  color: #111827;
-}
-.btn.primary {
-  background: #7c5cff;
-  color: white;
-  box-shadow: 0 10px 28px rgba(124, 92, 255, .35);
-}
-
-.role-menu {
+.ps-nav-link {
   position: relative;
+  font-size: 0.95rem;
+  color: #64748b; /* slate-500 */
+  text-decoration: none;
+  padding: 0.25rem 0.4rem;
+  transition: color 0.18s ease;
 }
-.role-menu .menu {
+
+.ps-nav-link::after {
+  content: "";
   position: absolute;
-  right: 0;
-  top: calc(100% + 8px);
-  background: #0f172a;
-  border: 1px solid #1f2a4a;
-  border-radius: 12px;
-  padding: 6px;
-  min-width: 180px;
-  display: grid;
-  gap: 4px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.35);
+  left: 0;
+  bottom: -0.2rem;
+  width: 0%;
+  height: 2px;
+  background: linear-gradient(90deg, #6366f1, #a855f7);
+  transition: width 0.18s ease;
 }
-.role-menu .menu > button {
-  all: unset;
+
+.ps-nav-link:hover {
+  color: #0f172a; /* slate-900 */
+}
+
+.ps-nav-link:hover::after {
+  width: 100%;
+}
+
+.ps-nav-link-active {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.ps-nav-link-active::after {
+  width: 100%;
+}
+
+/* Auth buttons */
+.ps-auth-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ps-auth-btn {
+  font-size: 0.9rem;
+  border-radius: 999px;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid transparent;
+  text-decoration: none;
   cursor: pointer;
-  color: #e5e7eb;
-  padding: 10px 12px;
-  border-radius: 10px;
+  transition: all 0.18s ease;
+  white-space: nowrap;
 }
-.role-menu .menu > button:hover {
-  background: #1a2240;
+
+.ps-auth-btn-outline {
+  background: white;
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
+.ps-auth-btn-outline:hover {
+  border-color: #6366f1;
+  color: #111827;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
+}
+
+.ps-auth-btn-primary {
+  background: radial-gradient(circle at 10% 0%, #818cf8 0, #4f46e5 45%, #a855f7 100%);
+  color: white;
+  box-shadow: 0 12px 40px rgba(79, 70, 229, 0.5);
+}
+
+.ps-auth-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 16px 45px rgba(79, 70, 229, 0.7);
+}
+
+.ps-auth-btn-active {
+  outline: 2px solid rgba(129, 140, 248, 0.5);
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .ps-header-inner {
+    padding-inline: 0.75rem;
+    gap: 0.75rem;
+  }
+
+  .ps-nav {
+    display: none; /* simple: hide center nav on very small screens */
+  }
+
+  .ps-auth-actions {
+    gap: 0.4rem;
+  }
+
+  .ps-auth-btn {
+    padding-inline: 0.9rem;
+  }
 }

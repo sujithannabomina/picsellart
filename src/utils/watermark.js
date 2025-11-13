@@ -1,37 +1,29 @@
-// /src/utils/watermark.js
-// Very fast client-side watermarking on a canvas. Returns a data URL.
+/**
+ * Simple helper to generate a watermark overlay style.
+ * We already draw a diagonal "PICSELLART" in Explore cards,
+ * but this util is kept for re-use if needed.
+ */
 
-export async function watermark(imgUrl, text = "Picsellart") {
-  const img = await new Promise((res, rej) => {
-    const i = new Image();
-    i.crossOrigin = "anonymous";
-    i.onload = () => res(i);
-    i.onerror = rej;
-    i.src = imgUrl;
-  });
-
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  canvas.width = img.naturalWidth;
-  canvas.height = img.naturalHeight;
-
-  ctx.drawImage(img, 0, 0);
-
-  // Watermark strip
-  const pad = Math.max(16, Math.floor(canvas.width * 0.01));
-  const fontSize = Math.max(14, Math.floor(canvas.width * 0.025));
-  ctx.font = `bold ${fontSize}px sans-serif`;
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  const textMetrics = ctx.measureText(text);
-  const stripH = fontSize * 2;
-  ctx.fillRect(0, canvas.height - stripH, canvas.width, stripH);
-
-  ctx.fillStyle = "rgba(255,255,255,0.92)";
-  ctx.textBaseline = "middle";
-  ctx.fillText(text, pad, canvas.height - stripH / 2);
-
-  return canvas.toDataURL("image/jpeg", 0.85);
+export function getWatermarkStyle({
+  text = "PICSELLART",
+  opacity = 0.12,
+  rotate = -32,
+} = {}) {
+  return {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    pointerEvents: "none",
+    zIndex: 2,
+    fontSize: "1.1rem",
+    fontWeight: 700,
+    letterSpacing: "0.28em",
+    textTransform: "uppercase",
+    color: "rgba(15,23,42," + opacity + ")",
+    transform: `rotate(${rotate}deg)`,
+  };
 }
 
-// Optional default export for older imports
-export default watermark;
+export const WATERMARK_TEXT = "PICSELLART";

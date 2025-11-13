@@ -1,5 +1,5 @@
-// src/firebase.js
-import { initializeApp, getApps, getApp } from "firebase/app";
+// Central Firebase config + exports
+import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -14,13 +14,12 @@ const firebaseConfig = {
   measurementId: "G-3KNDHJ6JZY",
 };
 
-const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
 
-const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 
-export { app, auth, db, storage, googleProvider };
-export default firebaseConfig;
+export default app;
