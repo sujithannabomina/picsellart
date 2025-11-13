@@ -1,150 +1,102 @@
-/* src/components/Header.css
- *
- * Styles for the global site header + generic buttons.
- * This will clean up the cramped links and ugly default buttons
- * you currently see at the top of every page.
- */
-
-/* Header shell */
-.site-header {
+/* Root header shell */
+.ps-header {
   position: sticky;
   top: 0;
-  z-index: 50;
-  background-color: #ffffff;
-  border-bottom: 1px solid #e5e7eb; /* gray-200 */
+  z-index: 40;
+  background: #ffffffcc;
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(2,6,23,0.06);
 }
 
-/* Inner container */
-.site-header-inner {
+/* Content row */
+.ps-header-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0.75rem 1.5rem;
-  display: flex;
+  padding: 12px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
   align-items: center;
-  gap: 1.5rem;
+  gap: 16px;
 }
 
 /* Brand */
-.site-brand {
-  font-weight: 800;
-  font-size: 1.25rem;
-  letter-spacing: 0.04em;
-  color: #111827; /* gray-900 */
+.ps-brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   text-decoration: none;
-  white-space: nowrap;
+}
+.ps-brand-left {
+  font-weight: 700;
+  font-size: 22px;
+  color: #0f172a; /* slate-900 */
+  letter-spacing: 0.2px;
+}
+.ps-brand-right {
+  font-weight: 700;
+  font-size: 22px;
+  color: #5b3df6; /* violet primary */
+  letter-spacing: 0.2px;
 }
 
-.site-brand span {
-  color: #2563eb; /* blue-600 */
+/* Nav */
+.ps-nav {
+  display: none;
+  gap: 12px;
 }
-
-/* Main nav links */
-.nav-main {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-  font-size: 0.95rem;
+@media (min-width: 768px) {
+  .ps-nav { display: inline-flex; }
 }
-
-.nav-main a {
+.ps-nav-link {
+  color: #334155; /* slate-600 */
   text-decoration: none;
-  color: #4b5563; /* gray-600 */
-  padding: 0.25rem 0.75rem;
-  border-radius: 999px;
-  transition: background-color 0.15s ease, color 0.15s ease;
+  font-weight: 500;
+  padding: 8px 10px;
+  border-radius: 10px;
+  transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+.ps-nav-link:hover {
+  background: rgba(99,102,241,0.08);
+  color: #1f2937; /* gray-800 */
+}
+.ps-nav-link.active {
+  color: #0f172a;
+  background: rgba(99,102,241,0.12);
+  box-shadow: inset 0 0 0 1px rgba(99,102,241,0.35);
 }
 
-/* hover state */
-.nav-main a:hover {
-  background-color: #eef2ff; /* indigo-50 */
-  color: #111827;
+/* Actions */
+.ps-actions {
+  justify-self: end;
+  display: inline-flex;
+  gap: 10px;
 }
 
-/* NavLink "active" class from react-router */
-.nav-main a.active {
-  background-color: #e0ecff;
-  color: #1d4ed8; /* blue-700 */
-}
-
-/* Auth buttons (buyer/seller login) */
-.nav-auth {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin-left: auto;
-}
-
-/* Generic button styles used across the site */
-.btn {
+/* Buttons */
+.ps-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.4rem 0.9rem;
-  border-radius: 999px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  border: 1px solid transparent;
-  background-color: transparent;
-  color: inherit;
-  cursor: pointer;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 14px;
   text-decoration: none;
-  transition:
-    background-color 0.15s ease,
-    color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: box-shadow 120ms ease, transform 120ms ease, background 120ms ease;
+  border: 1px solid rgba(2,6,23,0.08);
 }
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: default;
+.ps-btn.primary {
+  color: #fff;
+  background: linear-gradient(180deg, #7c5cff, #5b3df6);
+  border: none;
+  box-shadow: 0 8px 22px rgba(91,61,246,0.35);
 }
-
-/* Primary (blue) button */
-.btn-primary {
-  background-color: #2563eb; /* blue-600 */
-  border-color: #2563eb;
-  color: #ffffff;
-  box-shadow: 0 4px 10px rgba(37, 99, 235, 0.2);
+.ps-btn.primary:hover { transform: translateY(-1px); }
+.ps-btn.ghost {
+  background: #fff;
+  color: #1f2937;
 }
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #1d4ed8; /* blue-700 */
-  border-color: #1d4ed8;
-  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.3);
-}
-
-/* Outline button */
-.btn-outline {
-  border-color: #d1d5db; /* gray-300 */
-  color: #111827;
-  background-color: #ffffff;
-}
-
-.btn-outline:hover:not(:disabled) {
-  background-color: #f3f4f6; /* gray-100 */
-}
-
-/* Small screens: stack the layout nicely */
-@media (max-width: 768px) {
-  .site-header-inner {
-    flex-wrap: wrap;
-    row-gap: 0.75rem;
-  }
-
-  .nav-main {
-    order: 3;
-    flex-basis: 100%;
-    justify-content: flex-start;
-    flex-wrap: wrap;
-  }
-
-  .nav-auth {
-    order: 2;
-    margin-left: 0;
-    width: 100%;
-    justify-content: flex-start;
-  }
+.ps-btn.ghost:hover {
+  background: rgba(15,23,42,0.04);
 }

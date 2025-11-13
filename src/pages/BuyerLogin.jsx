@@ -1,35 +1,40 @@
-// src/pages/BuyerLogin.jsx
-import Header from "../components/Header";
-import { useAuth } from "../context/AuthContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { getAuth, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { app } from "../firebase";
 
 export default function BuyerLogin() {
-  const { user, ready, signInBuyer } = useAuth();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const nav = useNavigate();
 
   useEffect(() => {
-    if (ready && user) nav("/buyer/dashboard");
-  }, [ready, user, nav]);
-
-  const go = async () => {
-    await signInBuyer();
-    nav("/buyer/dashboard");
-  };
+    const run = async () => {
+      try {
+        setBusy(true);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+        const res = await signInWithPopup(auth, provider);
+        if (res?.user) {
+          localStorage.setItem("role", "buyer");
+          nav("/buyer-dashboard", { replace: true });
+        } else {
+          setError("Sign-in failed. Please try again.");
+        }
+      } catch (e) {
+        setError(e?.message || "Sign-in failed. Please try again.");
+      } finally {
+        setBusy(false);
+      }
+    };
+    run();
+  }, [nav]);
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <h1 className="text-3xl font-bold">Buyer Login</h1>
-        <p className="mt-2 text-slate-700">Login with Google to purchase and download.</p>
-        <button
-          onClick={go}
-          className="mt-6 px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
-        >
-          Continue with Google
-        </button>
-      </main>
-    </>
+    <div style={{maxWidth: 720, margin: "40px auto", padding: "0 16px"}}>
+      <h1>Buyer Login</h1>
+      {busy && <p>Authenticating…</p>}
+      {error && <p style={{color:"#b91c1c"}}>{error}</p>}
+    </div>
   );
 }

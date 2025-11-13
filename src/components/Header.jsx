@@ -1,42 +1,37 @@
-import React from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import "./Header.css";
 
 export default function Header() {
-  const navigate = useNavigate();
-
   return (
-    <header className="site-header">
-      <div className="site-header-inner">
-        {/* Brand */}
-        <Link to="/" className="site-brand">
-          Picsell<span>art</span>
+    <header className="ps-header">
+      <div className="ps-header-inner">
+        <Link to="/" className="ps-brand" aria-label="Picsellart home">
+          <span className="ps-brand-left">Picsell</span>
+          <span className="ps-brand-right">art</span>
         </Link>
 
-        {/* Primary nav */}
-        <nav className="nav-main">
-          <NavLink to="/explore">Explore</NavLink>
-          <NavLink to="/faq">FAQ</NavLink>
-          <NavLink to="/contact">Contact</NavLink>
-          <NavLink to="/refunds">Refunds</NavLink>
+        <nav className="ps-nav">
+          <NavLink to="/explore" className={({isActive}) => isActive ? "ps-nav-link active" : "ps-nav-link"}>
+            Explore
+          </NavLink>
+          <NavLink to="/faq" className={({isActive}) => isActive ? "ps-nav-link active" : "ps-nav-link"}>
+            FAQ
+          </NavLink>
+          <NavLink to="/contact" className={({isActive}) => isActive ? "ps-nav-link active" : "ps-nav-link"}>
+            Contact
+          </NavLink>
+          <NavLink to="/refunds" className={({isActive}) => isActive ? "ps-nav-link active" : "ps-nav-link"}>
+            Refunds
+          </NavLink>
         </nav>
 
-        {/* Auth actions */}
-        <div className="nav-auth">
-          <button
-            type="button"
-            className="btn btn-outline"
-            onClick={() => navigate("/buyer-login")}
-          >
+        <div className="ps-actions">
+          <Link to="/buyer-login" className="ps-btn ghost" aria-label="Buyer login">
             Buyer Login
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => navigate("/seller-login")}
-          >
+          </Link>
+          <Link to="/seller-login" className="ps-btn primary" aria-label="Seller login">
             Seller Login
-          </button>
+          </Link>
         </div>
       </div>
     </header>

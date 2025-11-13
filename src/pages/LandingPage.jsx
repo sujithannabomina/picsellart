@@ -1,8 +1,6 @@
-// src/pages/LandingPage.jsx
-import { useEffect, useState } from "react";
-import Header from "../components/Header";
-
-const localImages = [
+import { Link } from "react-router-dom";
+import "./LandingPage.css"; // (styling below inlined after this file)
+const picks = [
   "/images/sample1.jpg",
   "/images/sample2.jpg",
   "/images/sample3.jpg",
@@ -11,52 +9,34 @@ const localImages = [
   "/images/sample6.jpg",
 ];
 
-export default function LandingPage() {
-  const [src, setSrc] = useState(localImages[0]);
+function pickRandom() {
+  return picks[Math.floor(Math.random() * picks.length)];
+}
 
-  useEffect(() => {
-    const i = Math.floor(Math.random() * localImages.length);
-    setSrc(localImages[i]);
-  }, []);
+export default function LandingPage() {
+  const hero = pickRandom();
 
   return (
-    <>
-      <Header />
-      <main className="mx-auto max-w-6xl px-4 py-10">
-        <div className="rounded-2xl overflow-hidden border">
-          <img src={src} alt="Hero" className="w-full h-auto block" />
+    <main className="lp-shell">
+      <section className="lp-hero">
+        <div className="lp-hero-media">
+          <img className="lp-hero-img" src={hero} alt="Featured" loading="eager" />
         </div>
 
-        <h1 className="mt-8 text-5xl font-extrabold text-slate-900 tracking-tight">
-          Turn your Images into Income
-        </h1>
-        <p className="mt-3 text-slate-700">
-          Upload your Photos, designs, or creative content and start selling to designers,
-          architects and creators today. | <strong>Secure Payments</strong> |{" "}
-          <strong>Verified Sellers</strong> | <strong>Instant Downloads</strong> |
-        </p>
+        <div className="lp-content">
+          <h1 className="lp-title">Turn your Images into Income</h1>
+          <p className="lp-sub">
+            Upload your Photos, designs, or creative content and start selling to designers,
+            architects and creators today. <span className="lp-bullets">| Secure Payments | Verified Sellers | Instant Downloads |</span>
+          </p>
 
-        <div className="mt-6 flex gap-3">
-          <a
-            href="/seller"
-            className="inline-flex items-center px-4 py-2 rounded-full bg-emerald-600 text-white font-semibold hover:bg-emerald-700"
-          >
-            Seller Login
-          </a>
-          <a
-            href="/buyer"
-            className="inline-flex items-center px-4 py-2 rounded-full bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
-          >
-            Buyer Login
-          </a>
-          <a
-            href="/explore"
-            className="inline-flex items-center px-4 py-2 rounded-full bg-slate-900 text-white font-semibold hover:bg-slate-800"
-          >
-            Explore Photos
-          </a>
+          <div className="lp-cta">
+            <Link to="/seller-login" className="ps-btn primary">Seller Login</Link>
+            <Link to="/buyer-login" className="ps-btn ghost">Buyer Login</Link>
+            <Link to="/explore" className="ps-btn dark">Explore Photos</Link>
+          </div>
         </div>
-      </main>
-    </>
+      </section>
+    </main>
   );
 }
