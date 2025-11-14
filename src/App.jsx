@@ -1,50 +1,70 @@
 // src/App.jsx
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Layout from "./components/Layout";
+import { Routes, Route } from "react-router-dom";
 
-// Pages
+import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
+
+// Public pages
 import LandingPage from "./pages/LandingPage";
 import Explore from "./pages/Explore";
-import BuyerLogin from "./pages/BuyerLogin";
-import SellerLogin from "./pages/SellerLogin";
-import BuyerDashboard from "./pages/BuyerDashboard";
-import SellerDashboard from "./pages/SellerDashboard";
 import Contact from "./pages/Contact";
 import Faq from "./pages/Faq";
 import Refunds from "./pages/Refunds";
 import NotFound from "./pages/NotFound";
 
-function App() {
+// Auth pages
+import BuyerLogin from "./pages/BuyerLogin";
+import SellerLogin from "./pages/SellerLogin";
+
+// Dashboards
+import BuyerDashboard from "./pages/BuyerDashboard";
+import SellerDashboard from "./pages/SellerDashboard";
+
+const App = () => {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          {/* Home / Landing */}
-          <Route path="/" element={<LandingPage />} />
+    <Layout>
+      <Routes>
+        {/* Landing / marketing */}
+        <Route path="/" element={<LandingPage />} />
 
-          {/* Public gallery */}
-          <Route path="/explore" element={<Explore />} />
+        {/* Explore gallery */}
+        <Route path="/explore" element={<Explore />} />
 
-          {/* Buyer auth & dashboard */}
-          <Route path="/buyer-login" element={<BuyerLogin />} />
-          <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
+        {/* Auth entry points */}
+        <Route path="/buyer-login" element={<BuyerLogin />} />
+        <Route path="/seller-login" element={<SellerLogin />} />
 
-          {/* Seller auth & dashboard */}
-          <Route path="/seller-login" element={<SellerLogin />} />
-          <Route path="/seller-dashboard" element={<SellerDashboard />} />
+        {/* Buyer area – must be logged in as buyer */}
+        <Route
+          path="/buyer-dashboard"
+          element={
+            <ProtectedRoute role="buyer">
+              <BuyerDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-          {/* Static pages */}
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/faq" element={<Faq />} />
-          <Route path="/refunds" element={<Refunds />} />
+        {/* Seller area – must be logged in as seller */}
+        <Route
+          path="/seller-dashboard"
+          element={
+            <ProtectedRoute role="seller">
+              <SellerDashboard />
+            </ProtectedRoute>
+          }
+        />
 
-          {/* 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Layout>
-    </Router>
+        {/* Static info pages */}
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/faq" element={<Faq />} />
+        <Route path="/refunds" element={<Refunds />} />
+
+        {/* Catch-all 404 */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </Layout>
   );
-}
+};
 
 export default App;
