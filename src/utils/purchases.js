@@ -1,66 +1,38 @@
 // src/utils/purchases.js
 import { db } from "../firebase";
-import {
-  collection,
-  doc,
-  setDoc,
-  getDocs,
-  query,
-  where,
-  orderBy,
-} from "firebase/firestore";
-
-const PURCHASES_COLLECTION = "purchases";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
 /**
- * Save a successful purchase.
- *
- * purchase = {
- *   id,           // payment id from Razorpay
- *   imageName,
- *   imageUrl,
- *   amount,       // in paise
- *   buyerUid,     // optional, but recommended
- *   timestamp     // ms since epoch
- * }
+ * Record a successful image purchase in Firestore.
+ * This powers the Buyer Dashboard history.
  */
-export async function recordPurchase(purchase) {
-  if (!purchase || !purchase.id) {
-    console.warn("recordPurchase called without id");
-    return;
+export async function recordPurchase({
+  userId,
+  imageId,
+  imageName,
+  imageUrl,
+  price,
+  currency = "INR",
+  paymentId
+}) {
+  if (!userId || !imageId || !paymentId) {
+    console.warn("recordPurchase called with missing fields", {
+      userId,
+      imageId,
+      paymentId
+    });
   }
 
-  const ref = doc(db, PURCHASES_COLLECTION, purchase.id);
+  const purchasesRef = collection(db, "purchases");
 
-  const data = {
-    imageName: purchase.imageName || "",
-    imageUrl: purchase.imageUrl || "",
-    amount: purchase.amount || 0,
-    buyerUid: purchase.buyerUid || null,
-    createdAt: purchase.timestamp
-      ? new Date(purchase.timestamp)
-      : new Date(),
-  };
-
-  await setDoc(ref, data, { merge: true });
-}
-
-/**
- * Get all purchases for a specific buyer.
- * Returns newest first.
- */
-export async function getPurchasesForBuyer(buyerUid) {
-  if (!buyerUid) return [];
-
-  const q = query(
-    collection(db, PURCHASES_COLLECTION),
-    where("buyerUid", "==", buyerUid),
-    orderBy("createdAt", "desc")
-  );
-
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  }));
+  await addDoc(purchasesRef, {
+    userId,
+    imageId,
+    imageName,
+    imageUrl,
+    price,
+    currency,
+    paymentId,
+    createdAt: serverTimestamp()
+  });
 }

@@ -1,292 +1,269 @@
 // src/pages/Explore.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
 import WatermarkedImage from "../components/WatermarkedImage";
 import { useAuth } from "../context/AuthContext";
 import { fetchAllExploreImages, filterAndPaginate } from "../utils/storage";
 import { recordPurchase } from "../utils/purchases";
 import { openCheckout } from "../utils/razorpay";
+import { useNavigate } from "react-router-dom";
 
-const PAGE_SIZE = 24; // internal page size – does not depend on exploreData.js
+const PAGE_SIZE = 12;
 
-const Explore = () => {
+export default function Explore() {
   const navigate = useNavigate();
-  const { user } = useAuth(); // we only depend on "user", not roles
+  const { user, isBuyer } = useAuth();
 
   const [allImages, setAllImages] = useState([]);
+  const [paginatedImages, setPaginatedImages] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingBuyId, setLoadingBuyId] = useState(null);
+  const [error, setError] = useState("");
 
-  // filters
-  const [search, setSearch] = useState("");
-  const [minPrice, setMinPrice] = useState("");
-  const [maxPrice, setMaxPrice] = useState("");
-  const [page, setPage] = useState(1);
-
-  // load all explore images (from Firebase storage via utils/storage)
+  // Load all images once
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
+      setLoading(true);
+      setError("");
+
       try {
-        setLoading(true);
-        const data = await fetchAllExploreImages();
+        const images = await fetchAllExploreImages();
+
         if (!cancelled) {
-          setAllImages(data || []);
+          setAllImages(images);
+
+          const { currentPageImages, totalPages: tp } = filterAndPaginate(
+            images,
+            searchTerm,
+            1,
+            PAGE_SIZE
+          );
+
+          setCurrentPage(1);
+          setPaginatedImages(currentPageImages);
+          setTotalPages(tp);
         }
       } catch (err) {
-        console.error("Error loading explore images", err);
-      } finally {
+        console.error("Failed to load explore images", err);
         if (!cancelled) {
-          setLoading(false);
+          setError("Unable to load images. Please try again later.");
         }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     }
 
     load();
+
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // only once on mount
 
-  // derive page items
-  const { items: pageItems, totalPages, totalItems } = useMemo(() => {
-    return filterAndPaginate(allImages, {
-      search,
-      minPrice: minPrice ? Number(minPrice) : null,
-      maxPrice: maxPrice ? Number(maxPrice) : null,
-      page,
-      pageSize: PAGE_SIZE,
-    });
-  }, [allImages, search, minPrice, maxPrice, page]);
+  // Refilter / repaginate when search or page changes
+  useEffect(() => {
+    if (!allImages.length) return;
 
-  const handleNextPage = () => {
-    if (totalPages && page < totalPages) {
-      setPage((p) => p + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
+    const { currentPageImages, totalPages: tp, currentPage: safePage } =
+      filterAndPaginate(allImages, searchTerm, currentPage, PAGE_SIZE);
 
-  const handlePrevPage = () => {
-    if (page > 1) {
-      setPage((p) => p - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  };
+    setCurrentPage(safePage);
+    setPaginatedImages(currentPageImages);
+    setTotalPages(tp);
+  }, [allImages, searchTerm, currentPage]);
 
-  const handleBuy = async (image) => {
-    // 1) Enforce login as Buyer (or at least logged-in user)
+  function handleSearchChange(e) {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1);
+  }
+
+  function handleClearSearch() {
+    setSearchTerm("");
+    setCurrentPage(1);
+  }
+
+  function requireBuyerLogin() {
     if (!user) {
-      alert("Please log in as a buyer to purchase images.");
-      navigate("/buyer-login");
+      // not logged in at all → send to buyer login
+      navigate("/buyer-login", { state: { redirectTo: "/explore" } });
+      return false;
+    }
+
+    // logged in, but maybe as seller only (if you distinguish in AuthContext)
+    if (isBuyer === false) {
+      alert("Please use a buyer account to purchase images.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function handleBuy(image) {
+    if (!requireBuyerLogin()) return;
+
+    const price = Number(image.price || 0);
+    if (!price || price <= 0) {
+      alert("This image does not have a valid price yet.");
       return;
     }
 
-    // 2) Figure out price in rupees from image metadata
-    const rupees =
-      image.displayPrice ??
-      image.price ??
-      image.basePrice ??
-      399; // sensible fallback
+    setLoadingBuyId(image.id);
 
-    const amountPaise = Math.round(rupees * 100);
+    try {
+      await openCheckout({
+        amount: price, // IN RUPEES – we convert to paise inside openCheckout
+        currency: image.currency || "INR",
+        imageTitle: image.title,
+        imageName: image.fileName,
+        buyer: user,
+        onSuccess: async (paymentResponse) => {
+          try {
+            await recordPurchase({
+              userId: user.uid,
+              imageId: image.id,
+              imageName: image.fileName,
+              imageUrl: image.url,
+              price,
+              currency: image.currency || "INR",
+              paymentId: paymentResponse.razorpay_payment_id
+            });
 
-    // 3) Open Razorpay checkout using our helper
-    await openCheckout({
-      amount: amountPaise,
-      name: "PicSellArt",
-      description: image.name || "Photo purchase",
-      image: "/logo.png",
-      prefill: {
-        name: user.displayName || "",
-        email: user.email || "",
-        contact: user.phoneNumber || "",
-      },
-      onSuccess: async (response) => {
-        try {
-          // 4) Record the purchase in Firestore for BuyerDashboard
-          await recordPurchase({
-            id: response.razorpay_payment_id,
-            imageName: image.name,
-            imageUrl: image.url,
-            amount: amountPaise,
-            buyerUid: user.uid,
-            timestamp: Date.now(),
-          });
+            // After successful purchase, immediately download that ONE image
+            const link = document.createElement("a");
+            link.href = image.url;
+            link.download = image.fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
 
-          alert(
-            "Payment successful! The download will now open in a new tab. You can also re-download from your Buyer Dashboard."
-          );
-          // 5) Direct download / view of that one image
-          window.open(image.url, "_blank");
-        } catch (err) {
-          console.error("Error recording purchase", err);
-          alert(
-            "Payment captured, but we had trouble logging it. Please contact support with your payment ID."
-          );
+            alert("Payment successful! Your image is downloading.");
+          } catch (err) {
+            console.error("Failed to record purchase", err);
+            alert(
+              "Payment succeeded but we could not record the purchase. Please contact support with your payment ID."
+            );
+          }
+        },
+        onFailure: () => {
+          alert("Payment was cancelled or failed. Please try again.");
         }
-      },
-      onFailure: (err) => {
-        console.error("Payment failed or dismissed", err);
-        alert("Payment was cancelled or failed. You were not charged.");
-      },
-    });
-  };
+      });
+    } finally {
+      setLoadingBuyId(null);
+    }
+  }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      {/* Page header */}
-      <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-slate-900">
-            Explore Street Photography
-          </h1>
-          <p className="text-slate-600 mt-2">
-            Curated images from your public folders and seller uploads. All
-            listed photos are watermarked until purchase.
-          </p>
-          <p className="text-xs text-slate-400 mt-1">
-            Showing {pageItems.length} of {totalItems} images
-          </p>
-        </div>
+    <main className="max-w-6xl mx-auto px-4 py-10">
+      <header className="mb-6">
+        <h1 className="text-3xl font-extrabold text-slate-900">
+          Street Photography
+        </h1>
+        <p className="text-slate-600 mt-1">
+          Curated images from our public gallery and verified sellers. Login as
+          a buyer to purchase and download.
+        </p>
+      </header>
 
-        {/* Filters */}
-        <div className="flex flex-wrap gap-3">
+      <section className="mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex-1 flex gap-2">
           <input
             type="text"
             placeholder="Search by name..."
-            value={search}
-            onChange={(e) => {
-              setPage(1);
-              setSearch(e.target.value);
-            }}
-            className="px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="w-full rounded-full border border-slate-200 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-purple/70 focus:border-transparent"
           />
-          <input
-            type="number"
-            min="0"
-            placeholder="Min ₹"
-            value={minPrice}
-            onChange={(e) => {
-              setPage(1);
-              setMinPrice(e.target.value);
-            }}
-            className="w-24 px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <input
-            type="number"
-            min="0"
-            placeholder="Max ₹"
-            value={maxPrice}
-            onChange={(e) => {
-              setPage(1);
-              setMaxPrice(e.target.value);
-            }}
-            className="w-24 px-3 py-2 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-        </div>
-      </div>
-
-      {/* Body */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <p className="text-slate-600 text-lg">Loading images…</p>
-        </div>
-      ) : pageItems.length === 0 ? (
-        <div className="flex flex-col items-center py-16">
-          <p className="text-slate-600 mb-3">
-            No images match your current filters.
-          </p>
           <button
-            className="px-4 py-2 rounded-xl border border-slate-300 text-sm hover:bg-slate-50"
-            onClick={() => {
-              setSearch("");
-              setMinPrice("");
-              setMaxPrice("");
-              setPage(1);
-            }}
+            onClick={handleClearSearch}
+            className="px-4 py-2 text-sm rounded-full border border-slate-200 bg-white hover:bg-slate-50"
           >
-            Clear filters
+            Clear
           </button>
         </div>
-      ) : (
-        <>
-          {/* Grid of images */}
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-10">
-            {pageItems.map((img) => {
-              const rupees =
-                img.displayPrice ??
-                img.price ??
-                img.basePrice ??
-                399;
+      </section>
 
-              return (
-                <div
-                  key={img.id || img.url}
-                  className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col"
-                >
-                  <div className="relative aspect-[4/3] bg-slate-100">
-                    <WatermarkedImage
-                      src={img.url}
-                      alt={img.name}
-                      watermarkText="PicSellArt"
-                    />
-                    <div className="absolute left-3 top-3 px-2 py-1 rounded-full bg-black/60 text-xs text-white">
-                      streetphotography
-                    </div>
-                  </div>
+      {loading && (
+        <p className="text-slate-500 text-sm">Loading images, please wait…</p>
+      )}
 
-                  <div className="p-4 flex-1 flex flex-col">
-                    <div className="flex justify-between items-start gap-2 mb-2">
-                      <h2 className="text-sm font-semibold text-slate-900 line-clamp-2">
-                        {img.name}
-                      </h2>
-                      <span className="text-sm font-bold text-indigo-600">
-                        ₹{rupees}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-500 mb-4">
-                      High-resolution download, single commercial use license.
-                      Watermark removed after purchase.
-                    </p>
-                    <button
-                      onClick={() => handleBuy(img)}
-                      className="mt-auto w-full px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
-                    >
-                      Buy &amp; Download
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+      {error && (
+        <p className="text-red-600 text-sm mb-4" role="alert">
+          {error}
+        </p>
+      )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-4">
-              <button
-                onClick={handlePrevPage}
-                disabled={page <= 1}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
-              >
-                Previous
-              </button>
-              <span className="text-sm text-slate-600">
-                Page <span className="font-semibold">{page}</span> of{" "}
-                <span className="font-semibold">{totalPages}</span>
+      {!loading && !error && paginatedImages.length === 0 && (
+        <p className="text-slate-500 text-sm">
+          No images found for this search.
+        </p>
+      )}
+
+      <section className="grid gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 mt-4">
+        {paginatedImages.map((image) => (
+          <div
+            key={image.id}
+            className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col"
+          >
+            <div className="relative aspect-[3/4] overflow-hidden bg-slate-100">
+              <WatermarkedImage src={image.url} alt={image.title} />
+              <span className="absolute top-3 left-3 text-[10px] tracking-[0.2em] uppercase bg-black/50 text-white px-2 py-1 rounded-full">
+                Picsellart
               </span>
+            </div>
+
+            <div className="px-4 py-3 flex flex-col gap-1">
+              <h2 className="font-semibold text-slate-900 text-sm">
+                {image.title}
+              </h2>
+              <p className="text-xs text-slate-500 truncate">
+                {image.fileName}
+              </p>
+              <p className="text-sm font-semibold text-brand-purple mt-1">
+                ₹{Number(image.price || 0).toLocaleString("en-IN")}
+              </p>
+
               <button
-                onClick={handleNextPage}
-                disabled={page >= totalPages}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-50"
+                onClick={() => handleBuy(image)}
+                disabled={loadingBuyId === image.id}
+                className="mt-2 inline-flex items-center justify-center rounded-full bg-slate-900 text-white text-xs font-medium px-4 py-2 hover:bg-black disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Next
+                {loadingBuyId === image.id ? "Processing…" : "Buy & Download"}
               </button>
             </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-};
+          </div>
+        ))}
+      </section>
 
-export default Explore;
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <nav className="flex items-center justify-center gap-2 mt-8">
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1 text-xs rounded-full border border-slate-200 bg-white disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <span className="text-xs text-slate-500">
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages, p + 1))
+            }
+            disabled={currentPage === totalPages}
+            className="px-3 py-1 text-xs rounded-full border border-slate-200 bg-white disabled:opacity-50"
+          >
+            Next
+          </button>
+        </nav>
+      )}
+    </main>
+  );
+}
