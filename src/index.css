@@ -1,4 +1,6 @@
-/* --------- Reset / base --------- */
+/* ================================
+   GLOBAL RESET + BASE
+   ================================ */
 
 *,
 *::before,
@@ -17,181 +19,634 @@ body,
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
-  background-color: #f5f7fb;
   color: #0f172a;
-}
-
-/* Smooth fonts */
-body,
-button,
-input,
-textarea {
+  background: #e5e7eb;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Links */
+/* remove default link styling */
 a {
   color: inherit;
   text-decoration: none;
 }
 
-a:hover {
-  text-decoration: underline;
+button {
+  font-family: inherit;
 }
 
-/* Generic layout helpers */
-.page-shell {
-  max-width: 1200px;
+/* Scrollbar (desktop) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #e5e7eb;
+}
+::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* ================================
+   ROOT LAYOUT
+   ================================ */
+
+.app-root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Wrapper used on most pages (below the header) */
+.page-wrapper {
+  min-height: calc(100vh - 64px);
+  background: radial-gradient(circle at top, #eef2ff, #e5e7eb 55%);
+  padding-bottom: 3rem;
+}
+
+.page-inner {
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 32px 16px 48px;
+  padding: 1.75rem 1.5rem 0;
 }
 
-/* Generic card style */
-.card {
-  background: #ffffff;
-  border-radius: 18px;
-  padding: 24px;
-  box-shadow: 0 12px 35px rgba(15, 23, 42, 0.08);
+/* Common section header */
+.page-header {
+  margin-bottom: 1.5rem;
 }
 
-/* Headings */
 .page-title {
-  font-size: 2.25rem;
+  font-size: 1.9rem;
   font-weight: 800;
-  letter-spacing: -0.04em;
-  margin-bottom: 8px;
+  letter-spacing: -0.03em;
+  margin: 0 0 0.35rem;
 }
 
 .page-subtitle {
-  font-size: 0.98rem;
-  color: #64748b;
-  margin-bottom: 24px;
+  margin: 0;
+  font-size: 0.96rem;
+  color: #4b5563;
 }
 
-/* Buttons – keep consistent with Header / LandingPage */
-.btn {
+/* ================================
+   SHARED BUTTONS + BADGES
+   ================================ */
+
+.pill-button {
+  border-radius: 999px;
+  padding: 0.45rem 1.1rem;
+  font-size: 0.85rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-weight: 500;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.55rem 1.3rem;
-  border-radius: 999px;
-  border: none;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease,
-    background-color 0.12s ease, color 0.12s ease;
+  gap: 0.3rem;
 }
 
-.btn-primary {
-  background: radial-gradient(circle at 0 0, #a855f7, #4f46e5);
+.pill-button.primary {
+  background: radial-gradient(circle at 0% 0%, #a855f7, #5b21ff);
   color: #ffffff;
-  box-shadow: 0 14px 35px rgba(79, 70, 229, 0.45);
+  box-shadow: 0 8px 20px rgba(91, 33, 255, 0.4);
 }
 
-.btn-primary:hover {
+.pill-button.primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 18px 45px rgba(79, 70, 229, 0.6);
+  box-shadow: 0 10px 25px rgba(91, 33, 255, 0.55);
 }
 
-.btn-outline {
+.pill-button.secondary {
   background: #ffffff;
   color: #111827;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.6);
 }
 
-.btn-outline:hover {
-  background: #f8fafc;
+.pill-button.secondary:hover {
+  background: #eef2ff;
 }
 
-/* Forms */
-.form-grid {
+.pill-button[disabled],
+.pill-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Simple tag/badge style if needed */
+.badge {
+  display: inline-flex;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+/* ================================
+   LANDING PAGE
+   ================================ */
+
+.landing-wrapper {
+  background: radial-gradient(circle at top, #eef2ff, #e5e7eb 60%);
+  min-height: calc(100vh - 64px);
+}
+
+.landing-hero {
+  max-width: 1120px;
+  margin: 2rem auto 3rem;
+  padding: 2rem 1.5rem;
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 2.5rem;
+  align-items: center;
 }
 
-.form-field label {
-  display: block;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #475569;
-  margin-bottom: 6px;
-}
-
-.form-field input,
-.form-field textarea {
-  width: 100%;
-  border-radius: 12px;
-  border: 1px solid #e2e8f0;
-  padding: 10px 12px;
-  font-size: 0.95rem;
-  outline: none;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-
-.form-field input:focus,
-.form-field textarea:focus {
-  border-color: #4f46e5;
-  box-shadow: 0 0 0 1px #4f46e5, 0 8px 20px rgba(79, 70, 229, 0.12);
-}
-
-/* Accordion (FAQ) */
-.faq-accordion {
+/* grid of three/four cards */
+.hero-images {
   display: grid;
-  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 160px;
+  gap: 0.75rem;
 }
 
-.faq-item {
-  border-radius: 14px;
+.hero-card {
   background: #ffffff;
-  border: 1px solid #e2e8f0;
-  padding: 14px 18px;
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+  display: flex;
+}
+
+.hero-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* hero text */
+.hero-text {
+  max-width: 460px;
+}
+
+.hero-pill {
+  font-size: 0.8rem;
+  color: #4b5563;
+  margin-bottom: 0.8rem;
+}
+
+.hero-title {
+  font-size: 2.5rem;
+  line-height: 1.1;
+  font-weight: 800;
+  color: #111827;
+  margin: 0 0 0.8rem;
+}
+
+.hero-subtitle {
+  font-size: 0.95rem;
+  color: #4b5563;
+  margin: 0 0 1rem;
+}
+
+.hero-list {
+  font-size: 0.9rem;
+  color: #374151;
+  margin: 0 0 1.5rem;
+  padding-left: 1.2rem;
+}
+
+.hero-list li + li {
+  margin-top: 0.35rem;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+/* ================================
+   AUTH PAGES (Buyer/Seller Login)
+   ================================ */
+
+.auth-page {
+  max-width: 540px;
+  margin: 3rem auto 0;
+  padding: 2rem 2.5rem;
+  border-radius: 1.5rem;
+  background: #ffffff;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.16);
+  text-align: left;
+}
+
+.auth-page .page-title {
+  margin-bottom: 0.4rem;
+}
+
+.auth-page .page-subtitle {
+  margin-bottom: 1.4rem;
+}
+
+/* ================================
+   EXPLORE PAGE
+   ================================ */
+
+.explore-search {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.explore-search input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  border: 1px solid #cbd5f5;
+  font-size: 0.9rem;
+  outline: none;
+  background: #ffffff;
+}
+
+.explore-search input:focus {
+  border-color: #5b21ff;
+  box-shadow: 0 0 0 1px rgba(91, 33, 255, 0.35);
+}
+
+.explore-search button {
+  border-radius: 0.75rem;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
   cursor: pointer;
 }
+.explore-search button:hover {
+  background: #f3f4f6;
+}
 
-.faq-question {
-  font-weight: 600;
-  font-size: 0.98rem;
+/* grid of photo cards */
+.explore-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 1rem;
+}
+
+/* single photo card */
+.photo-card {
+  background: #ffffff;
+  border-radius: 1rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.16);
+}
+
+.photo-thumb {
+  width: 100%;
+  max-height: 220px;
+  overflow: hidden;
+}
+
+.photo-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* info row below image */
+.photo-info {
+  padding: 0.75rem 0.9rem 0.85rem;
   display: flex;
   justify-content: space-between;
+  gap: 0.75rem;
   align-items: center;
-  color: #111827;
 }
 
-.faq-answer {
+.photo-info h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.15rem;
+}
+
+.photo-filename {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.photo-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+}
+
+.photo-price {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #16a34a;
+}
+
+/* ================================
+   WATERMARK OVERLAY (for WatermarkedImage)
+   ================================ */
+
+.watermark-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.watermark-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.watermark-overlay {
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+      45deg,
+      rgba(15, 23, 42, 0.15),
+      rgba(15, 23, 42, 0.15) 1px,
+      transparent 1px,
+      transparent 10px
+    );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  font-weight: 600;
   font-size: 0.9rem;
-  color: #64748b;
-  margin-top: 8px;
+  letter-spacing: 0.3em;
+  color: rgba(15, 23, 42, 0.3);
+  pointer-events: none;
 }
 
-/* Refunds bullet list */
-.refunds-list {
-  list-style-type: disc;
-  padding-left: 1.3rem;
-  color: #475569;
-  font-size: 0.94rem;
+/* ================================
+   PAGINATION
+   ================================ */
+
+.pagination {
+  margin-top: 1.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
 }
 
-.refunds-list li + li {
-  margin-top: 4px;
+.pagination button {
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  cursor: pointer;
 }
 
-/* Utility */
-.text-muted {
-  color: #94a3b8;
+.pagination button:hover:not(:disabled) {
+  background: #eef2ff;
 }
 
-.text-strong {
+.pagination button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* ================================
+   BUYER DASHBOARD
+   ================================ */
+
+.downloads-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.download-card {
+  background: #ffffff;
+  border-radius: 1rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+}
+
+.download-thumb {
+  width: 100%;
+  max-height: 200px;
+  overflow: hidden;
+}
+
+.download-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.download-info {
+  padding: 0.75rem 0.9rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.download-info h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.download-filename {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #6b7280;
+}
+
+.download-price {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #16a34a;
+}
+
+/* ================================
+   SELLER DASHBOARD
+   ================================ */
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+  margin-bottom: 2rem;
+}
+
+.stat-card {
+  background: #ffffff;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.12);
+}
+
+.stat-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #9ca3af;
+}
+
+.stat-value {
+  margin: 0;
+  font-size: 1.1rem;
   font-weight: 700;
 }
 
-/* Responsive tweaks */
-@media (max-width: 768px) {
-  .page-shell {
-    padding-inline: 14px;
+/* Plan selector */
+.plans-section {
+  margin-top: 1rem;
+}
+
+.plans-section h2 {
+  font-size: 1.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.plans-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1rem;
+}
+
+.plan-card {
+  background: #ffffff;
+  border-radius: 1.1rem;
+  padding: 1rem 1.1rem 1.2rem;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.plan-card h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.plan-price {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #5b21ff;
+}
+
+.plan-details {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.2rem 0 0.8rem;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.plan-details li + li {
+  margin-top: 0.2rem;
+}
+
+/* ================================
+   CONTACT / FAQ / REFUNDS SIMPLE LAYOUTS
+   ================================ */
+
+.content-card {
+  margin-top: 1.5rem;
+  padding: 1.5rem 1.7rem;
+  border-radius: 1.25rem;
+  background: #ffffff;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.12);
+  font-size: 0.95rem;
+  color: #374151;
+}
+
+.content-card h2 {
+  margin-top: 0;
+}
+
+.content-card p {
+  line-height: 1.5;
+}
+
+/* FAQs one-per-block */
+.faq-item + .faq-item {
+  margin-top: 0.9rem;
+}
+
+/* Simple form styling for contact page */
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.contact-form input,
+.contact-form textarea {
+  border-radius: 0.9rem;
+  border: 1px solid #cbd5f5;
+  padding: 0.55rem 0.8rem;
+  font-size: 0.9rem;
+  resize: vertical;
+  outline: none;
+  background: #ffffff;
+}
+
+.contact-form input:focus,
+.contact-form textarea:focus {
+  border-color: #5b21ff;
+  box-shadow: 0 0 0 1px rgba(91, 33, 255, 0.25);
+}
+
+/* ================================
+   NOT FOUND
+   ================================ */
+
+.not-found {
+  text-align: center;
+  padding: 4rem 1rem;
+  color: #4b5563;
+}
+
+/* ================================
+   RESPONSIVE
+   ================================ */
+
+@media (max-width: 900px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hero-images {
+    order: -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .page-inner {
+    padding-inline: 1rem;
+  }
+
+  .auth-page {
+    margin-top: 2rem;
+    padding-inline: 1.3rem;
   }
 
   .page-title {
-    font-size: 1.8rem;
+    font-size: 1.6rem;
   }
 }

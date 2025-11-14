@@ -1,151 +1,158 @@
 // src/pages/SellerDashboard.jsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth, db } from "../firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { DEFAULT_SELLER_LIMITS } from "../utils/plans";
-
-const SELLERS_COLLECTION = "sellers";
+import { useAuth } from "../context/AuthContext";
+import { SELLER_PLANS, getPlanById } from "../utils/plans";
+import {
+  activateSellerPlan,
+  ensureSellerProfile,
+  getSellerProfile,
+} from "../utils/seller";
+import { openPlanCheckout } from "../utils/razorpay";
 
 const SellerDashboard = () => {
+  const { user, role } = useAuth();
   const navigate = useNavigate();
-  const [seller, setSeller] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activatingId, setActivatingId] = useState(null);
 
-  // watch auth
+  const isSeller = user && role === "seller";
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setSeller(null);
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
+    if (!user) {
+      navigate("/seller-login");
+      return;
+    }
+    if (role !== "seller") {
+      navigate("/");
+      return;
+    }
 
-      setSeller(user);
+    const load = async () => {
       try {
-        const ref = doc(db, SELLERS_COLLECTION, user.uid);
-        const snap = await getDoc(ref);
-
-        if (!snap.exists()) {
-          // first-time seller profile with default limits
-          const initial = {
-            email: user.email || "",
-            planId: DEFAULT_SELLER_LIMITS.id || "starter",
-            planName: DEFAULT_SELLER_LIMITS.name || "Starter",
-            uploadsLimit: DEFAULT_SELLER_LIMITS.uploadsLimit || 25,
-            maxPrice: DEFAULT_SELLER_LIMITS.maxPrice || 199,
-            uploadsUsed: 0,
-            createdAt: new Date(),
-          };
-          await setDoc(ref, initial, { merge: true });
-          setProfile(initial);
-        } else {
-          setProfile(snap.data());
-        }
+        await ensureSellerProfile(user.uid, user.email);
+        const p = await getSellerProfile(user.uid);
+        setProfile(p);
       } catch (err) {
         console.error("Error loading seller profile", err);
       } finally {
         setLoading(false);
       }
-    });
+    };
 
-    return () => unsub();
-  }, []);
+    load();
+  }, [user, role, navigate]);
 
-  if (!seller && !loading) {
-    return (
-      <div className="max-w-5xl mx-auto py-10">
-        <h1 className="text-3xl font-bold text-slate-900 mb-4">
-          Seller Dashboard
-        </h1>
-        <p className="text-slate-600 mb-6">
-          Please log in as a seller to manage your photos and earnings.
-        </p>
-        <button
-          onClick={() => navigate("/seller-login")}
-          className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
-        >
-          Go to Seller Login
-        </button>
-      </div>
-    );
+  const handleActivatePlan = async (plan) => {
+    if (!user) return;
+    try {
+      setActivatingId(plan.id);
+      await openPlanCheckout({
+        user,
+        plan,
+        onSuccess: async () => {
+          await activateSellerPlan(user.uid, plan.id);
+          const updated = await getSellerProfile(user.uid);
+          setProfile(updated);
+          alert(`Plan "${plan.name}" activated successfully.`);
+        },
+      });
+    } catch (err) {
+      console.error("Error activating plan", err);
+      alert("Plan activation failed or was cancelled.");
+    } finally {
+      setActivatingId(null);
+    }
+  };
+
+  if (!isSeller) {
+    return null;
   }
 
-  if (loading || !profile) {
-    return (
-      <div className="max-w-5xl mx-auto py-10">
-        <p className="text-slate-600">Loading your seller dashboard…</p>
-      </div>
-    );
-  }
-
-  const remaining = Math.max(
-    0,
-    (profile.uploadsLimit || 0) - (profile.uploadsUsed || 0)
-  );
+  const activePlan = profile?.activePlanId
+    ? getPlanById(profile.activePlanId)
+    : null;
 
   return (
-    <div className="max-w-5xl mx-auto py-10">
-      <h1 className="text-3xl font-bold text-slate-900 mb-2">
-        Seller Dashboard
-      </h1>
-      <p className="text-slate-600 mb-8">
-        Logged in as <span className="font-semibold">{seller?.email}</span>
-      </p>
+    <main className="page-wrapper">
+      <div className="page-inner">
+        <header className="page-header">
+          <h1 className="page-title">Seller Dashboard</h1>
+          <p className="page-subtitle">
+            Manage your plan, track uploads and monitor your earnings.
+          </p>
+        </header>
 
-      {/* Plan summary */}
-      <div className="grid gap-6 md:grid-cols-3 mb-10">
-        <div className="p-5 rounded-2xl bg-white shadow-sm">
-          <p className="text-sm text-slate-500 mb-1">Current Plan</p>
-          <p className="text-xl font-bold text-slate-900">
-            {profile.planName || "Starter"}
-          </p>
-          <p className="text-xs text-slate-500 mt-2">
-            Plan ID: {profile.planId}
-          </p>
-        </div>
+        {loading && <p>Loading your seller account…</p>}
 
-        <div className="p-5 rounded-2xl bg-white shadow-sm">
-          <p className="text-sm text-slate-500 mb-1">Uploads</p>
-          <p className="text-xl font-bold text-slate-900">
-            {profile.uploadsUsed || 0} / {profile.uploadsLimit || 0}
-          </p>
-          <p className="text-xs text-slate-500 mt-2">
-            {remaining} uploads remaining
-          </p>
-        </div>
+        {!loading && (
+          <>
+            <section className="stats-row">
+              <div className="stat-card">
+                <p className="stat-label">Active Plan</p>
+                <p className="stat-value">
+                  {activePlan ? activePlan.name : "No plan active"}
+                </p>
+              </div>
+              <div className="stat-card">
+                <p className="stat-label">Uploads used</p>
+                <p className="stat-value">
+                  {profile?.uploadCount || 0}
+                  {activePlan && ` / ${activePlan.maxUploads}`}
+                </p>
+              </div>
+              <div className="stat-card">
+                <p className="stat-label">Max price per image</p>
+                <p className="stat-value">
+                  {activePlan ? `₹${activePlan.maxPricePerImage}` : "–"}
+                </p>
+              </div>
+            </section>
 
-        <div className="p-5 rounded-2xl bg-white shadow-sm">
-          <p className="text-sm text-slate-500 mb-1">Max price / image</p>
-          <p className="text-xl font-bold text-slate-900">
-            ₹{profile.maxPrice || 199}
-          </p>
-          <p className="text-xs text-slate-500 mt-2">
-            Upgrade plan to increase this limit.
-          </p>
-        </div>
+            {!activePlan && (
+              <section className="plans-section">
+                <h2>Choose a plan to start selling</h2>
+                <div className="plans-grid">
+                  {SELLER_PLANS.map((plan) => (
+                    <article key={plan.id} className="plan-card">
+                      <h3>{plan.name}</h3>
+                      <p className="plan-price">₹{plan.price}</p>
+                      <ul className="plan-details">
+                        <li>{plan.maxUploads} uploads</li>
+                        <li>Up to ₹{plan.maxPricePerImage} per image</li>
+                        <li>{plan.durationDays} days visibility</li>
+                        <li>{plan.highlight}</li>
+                      </ul>
+                      <button
+                        className="pill-button primary"
+                        disabled={activatingId === plan.id}
+                        onClick={() => handleActivatePlan(plan)}
+                      >
+                        {activatingId === plan.id
+                          ? "Processing…"
+                          : "Activate Plan"}
+                      </button>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {activePlan && (
+              <section className="plans-section">
+                <h2>Next steps</h2>
+                <p>
+                  Plan features like upload, editing and detailed sales stats
+                  plug into this dashboard. You can continue integrating your
+                  existing upload flow using the limits from your active plan.
+                </p>
+              </section>
+            )}
+          </>
+        )}
       </div>
-
-      {/* Placeholder action section (hooks into your existing upload flow) */}
-      <div className="p-6 rounded-2xl bg-slate-900 text-white flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold">Upload new photos</h2>
-          <p className="text-sm text-slate-200 mt-1">
-            Use your seller upload page to add new images. They will
-            automatically appear in Explore (once approved / uploaded).
-          </p>
-        </div>
-        <button
-          onClick={() => navigate("/seller-start")}
-          className="px-5 py-2 rounded-xl bg-white text-slate-900 font-semibold hover:bg-slate-100 text-sm"
-        >
-          Go to Uploads
-        </button>
-      </div>
-    </div>
+    </main>
   );
 };
 

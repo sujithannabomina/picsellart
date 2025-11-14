@@ -1,65 +1,69 @@
 // src/utils/razorpay.js
-import { loadRazorpay } from "./loadRazorpay";
+import { loadRazorpayScript } from "./loadRazorpay";
 
-/**
- * Open the Razorpay checkout widget.
- *
- * amount: in RUPEES (we convert to paise here)
- */
-export async function openCheckout({
-  amount,
-  currency = "INR",
-  imageTitle,
-  imageName,
-  buyer,
-  onSuccess,
-  onFailure
-}) {
-  const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+// Generic helper
+const openRazorpay = async ({ amount, user, description, notes, onSuccess }) => {
+  await loadRazorpayScript();
 
-  if (!razorpayKey) {
-    alert("Payments are not configured yet. Please contact support.");
+  if (!window.Razorpay) {
+    alert("Unable to load Razorpay. Please try again.");
     return;
   }
 
-  const loaded = await loadRazorpay();
-  if (!loaded) {
-    alert("Unable to load the payment gateway. Please try again.");
-    return;
+  const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
+  if (!key) {
+    console.warn("Missing VITE_RAZORPAY_KEY_ID");
   }
-
-  const finalAmountPaise = Math.round(Number(amount || 0) * 100);
 
   const options = {
-    key: razorpayKey,
-    amount: finalAmountPaise, // paise
-    currency,
+    key,
+    amount: amount * 100, // rupees -> paise
+    currency: "INR",
     name: "Picsellart",
-    description: `Purchase: ${imageTitle || imageName}`,
-    image: "/logo.png",
-    handler: function (response) {
-      // Successful payment
-      onSuccess?.(response);
-    },
+    description,
+    notes,
     prefill: {
-      name: buyer?.displayName || "",
-      email: buyer?.email || ""
+      name: user?.displayName || "",
+      email: user?.email || "",
     },
-    notes: {
-      imageName: imageName || "",
-      platform: "picsellart"
+    handler: async (response) => {
+      try {
+        await onSuccess(response);
+      } catch (err) {
+        console.error("Error after Razorpay success:", err);
+        alert("Payment captured but there was an internal error.");
+      }
     },
-    theme: {
-      color: "#5b3df5"
-    }
   };
 
   const rzp = new window.Razorpay(options);
-
-  rzp.on("payment.failed", function (response) {
-    console.error("Razorpay payment failed", response.error);
-    onFailure?.(response);
-  });
-
   rzp.open();
-}
+};
+
+// Purchase a single photo
+export const openPhotoCheckout = async ({ user, photo, onSuccess }) => {
+  await openRazorpay({
+    amount: photo.price,
+    user,
+    description: `Purchase: ${photo.fileName}`,
+    notes: {
+      type: "photo",
+      fileName: photo.fileName,
+    },
+    onSuccess,
+  });
+};
+
+// Activate a seller plan
+export const openPlanCheckout = async ({ user, plan, onSuccess }) => {
+  await openRazorpay({
+    amount: plan.price,
+    user,
+    description: `Seller Plan: ${plan.name}`,
+    notes: {
+      type: "plan",
+      planId: plan.id,
+    },
+    onSuccess,
+  });
+};

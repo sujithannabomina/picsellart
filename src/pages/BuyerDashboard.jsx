@@ -1,117 +1,89 @@
 // src/pages/BuyerDashboard.jsx
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 import { getPurchasesForBuyer } from "../utils/purchases";
 
 const BuyerDashboard = () => {
+  const { user, role } = useAuth();
   const navigate = useNavigate();
-  const [buyer, setBuyer] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Watch auth
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setBuyer(null);
-        setPurchases([]);
-        setLoading(false);
-        return;
-      }
+  const isBuyer = user && role === "buyer";
 
-      setBuyer(user);
+  useEffect(() => {
+    if (!user) {
+      navigate("/buyer-login");
+      return;
+    }
+    if (role !== "buyer") {
+      navigate("/");
+      return;
+    }
+
+    const load = async () => {
       try {
-        const data = await getPurchasesForBuyer(user.uid);
-        setPurchases(data);
+        const items = await getPurchasesForBuyer(user.uid);
+        setPurchases(items);
       } catch (err) {
         console.error("Error loading purchases", err);
       } finally {
         setLoading(false);
       }
-    });
+    };
 
-    return () => unsub();
-  }, []);
+    load();
+  }, [user, role, navigate]);
 
-  if (!buyer && !loading) {
-    return (
-      <div className="max-w-5xl mx-auto py-10">
-        <h1 className="text-3xl font-bold text-slate-900 mb-4">
-          Buyer Dashboard
-        </h1>
-        <p className="text-slate-600 mb-6">
-          Please log in as a buyer to view your downloads.
-        </p>
-        <button
-          onClick={() => navigate("/buyer-login")}
-          className="px-5 py-2 rounded-xl bg-indigo-600 text-white font-semibold hover:bg-indigo-700"
-        >
-          Go to Buyer Login
-        </button>
-      </div>
-    );
+  if (!isBuyer) {
+    return null;
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-10">
-      <h1 className="text-3xl font-bold text-slate-900 mb-2">
-        Buyer Dashboard
-      </h1>
-      {buyer && (
-        <p className="text-slate-600 mb-8">
-          Logged in as <span className="font-semibold">{buyer.email}</span>
-        </p>
-      )}
+    <main className="page-wrapper">
+      <div className="page-inner">
+        <header className="page-header">
+          <h1 className="page-title">My Downloads</h1>
+          <p className="page-subtitle">
+            All photos you have purchased are listed here with download links.
+          </p>
+        </header>
 
-      {loading ? (
-        <p className="text-slate-600">Loading your purchases…</p>
-      ) : purchases.length === 0 ? (
-        <p className="text-slate-600">
-          You haven’t purchased any images yet. Explore photos to get started!
-        </p>
-      ) : (
-        <div className="grid gap-5">
-          {purchases.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center gap-4 p-4 bg-white rounded-2xl shadow-sm"
-            >
-              <img
-                src={p.imageUrl}
-                alt={p.imageName}
-                className="w-20 h-20 object-cover rounded-xl"
-              />
-              <div className="flex-1">
-                <p className="font-semibold text-slate-900 truncate">
-                  {p.imageName}
-                </p>
-                <p className="text-sm text-slate-500">
-                  Purchased on{" "}
-                  {p.createdAt?.toDate
-                    ? p.createdAt.toDate().toLocaleString()
-                    : p.createdAt instanceof Date
-                    ? p.createdAt.toLocaleString()
-                    : ""}
-                </p>
+        {loading && <p>Loading your purchases…</p>}
+
+        {!loading && purchases.length === 0 && (
+          <p>You haven&apos;t purchased any photos yet.</p>
+        )}
+
+        <section className="downloads-grid">
+          {purchases.map((purchase) => (
+            <article key={purchase.id} className="download-card">
+              <div className="download-thumb">
+                <img
+                  src={purchase.downloadUrl}
+                  alt={purchase.displayName}
+                  loading="lazy"
+                />
               </div>
-              <div className="text-right">
-                <p className="font-bold text-indigo-600 mb-2">
-                  ₹{(p.amount || 0) / 100}
-                </p>
-                <button
-                  onClick={() => window.open(p.imageUrl, "_blank")}
-                  className="px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800"
+              <div className="download-info">
+                <h3>{purchase.displayName}</h3>
+                <p className="download-filename">{purchase.fileName}</p>
+                <p className="download-price">₹{purchase.price}</p>
+                <a
+                  href={purchase.downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="pill-button secondary"
                 >
                   Download
-                </button>
+                </a>
               </div>
-            </div>
+            </article>
           ))}
-        </div>
-      )}
-    </div>
+        </section>
+      </div>
+    </main>
   );
 };
 

@@ -1,100 +1,72 @@
-// Firestore helpers for seller profile + limits
+// src/utils/seller.js
+import { db } from "../firebase";
 import {
   doc,
   getDoc,
   setDoc,
-  updateDoc,
-  serverTimestamp,
+  Timestamp,
+  increment,
 } from "firebase/firestore";
-import { db } from "../firebase";
-import { DEFAULT_SELLER_LIMITS, getPlanById } from "./plans";
+import { getPlanById } from "./plans";
 
-/**
- * Ensure seller profile exists and return it.
- * Stored at: sellers/{uid}
- */
-export async function ensureSellerProfile(uid, overrides = {}) {
-  const ref = doc(db, "sellers", uid);
+const collectionName = "sellers";
+
+export const getSellerProfile = async (uid) => {
+  const ref = doc(db, collectionName, uid);
   const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return snap.data();
+};
 
-  if (!snap.exists()) {
-    const baseProfile = {
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-      planId: DEFAULT_SELLER_LIMITS.planId,
-      uploadsUsed: 0,
-      maxUploads: DEFAULT_SELLER_LIMITS.maxUploads,
-      maxPricePerImage: DEFAULT_SELLER_LIMITS.maxPricePerImage,
-      expiresAt: null,
-      ...overrides,
-    };
-    await setDoc(ref, baseProfile);
-    return { id: ref.id, ...baseProfile };
-  }
+export const ensureSellerProfile = async (uid, email) => {
+  const existing = await getSellerProfile(uid);
+  if (existing) return existing;
 
-  return { id: ref.id, ...snap.data() };
-}
-
-/**
- * Update seller plan after successful payment.
- */
-export async function applyPlanToSeller(uid, planId) {
-  const plan = getPlanById(planId) || getPlanById(DEFAULT_SELLER_LIMITS.planId);
-  const ref = doc(db, "sellers", uid);
-
-  const expiresAt =
-    plan?.durationDays != null
-      ? new Date(Date.now() + plan.durationDays * 24 * 60 * 60 * 1000)
-      : null;
-
-  await updateDoc(ref, {
-    planId: plan.id,
-    maxUploads: plan.maxUploads,
-    maxPricePerImage: plan.maxPricePerImage,
-    uploadsUsed: 0,
-    expiresAt,
-    updatedAt: serverTimestamp(),
-  });
-
-  const snap = await getDoc(ref);
-  return { id: ref.id, ...snap.data() };
-}
-
-/**
- * Get current limits for seller (used by SellerDashboard).
- */
-export async function getSellerLimits(uid) {
-  const profile = await ensureSellerProfile(uid);
-  return {
-    planId: profile.planId || DEFAULT_SELLER_LIMITS.planId,
-    maxUploads: profile.maxUploads ?? DEFAULT_SELLER_LIMITS.maxUploads,
-    maxPricePerImage:
-      profile.maxPricePerImage ?? DEFAULT_SELLER_LIMITS.maxPricePerImage,
-    uploadsUsed: profile.uploadsUsed ?? 0,
-    expiresAt: profile.expiresAt ?? null,
+  const ref = doc(db, collectionName, uid);
+  const now = Timestamp.now();
+  const profile = {
+    uid,
+    email: email || "",
+    activePlanId: null,
+    planExpiresAt: null,
+    uploadCount: 0,
+    totalEarnings: 0,
+    createdAt: now,
+    updatedAt: now,
   };
-}
+  await setDoc(ref, profile);
+  return profile;
+};
 
-/**
- * Record a successful image upload.
- * Call after Firestore record for image is written.
- */
-export async function recordSellerUpload(uid, incrementBy = 1) {
-  const ref = doc(db, "sellers", uid);
-  const snap = await getDoc(ref);
+export const activateSellerPlan = async (uid, planId) => {
+  const plan = getPlanById(planId);
+  if (!plan) throw new Error("Unknown plan");
 
-  if (!snap.exists()) {
-    await ensureSellerProfile(uid);
-    return recordSellerUpload(uid, incrementBy);
-  }
+  const ref = doc(db, collectionName, uid);
+  const now = Timestamp.now();
+  const expiresAt = Timestamp.fromMillis(
+    now.toMillis() + plan.durationDays * 24 * 60 * 60 * 1000
+  );
 
-  const current = snap.data();
-  const uploadsUsed = (current.uploadsUsed || 0) + incrementBy;
+  await setDoc(
+    ref,
+    {
+      activePlanId: plan.id,
+      planExpiresAt: expiresAt,
+      updatedAt: now,
+    },
+    { merge: true }
+  );
+};
 
-  await updateDoc(ref, {
-    uploadsUsed,
-    updatedAt: serverTimestamp(),
-  });
-
-  return uploadsUsed;
-}
+export const recordSellerUpload = async (uid, price) => {
+  const ref = doc(db, collectionName, uid);
+  await setDoc(
+    ref,
+    {
+      uploadCount: increment(1),
+      updatedAt: Timestamp.now(),
+    },
+    { merge: true }
+  );
+};

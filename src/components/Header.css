@@ -1,158 +1,123 @@
 /* src/components/Header.css */
-
-.ps-header {
+.site-header {
   position: sticky;
   top: 0;
-  z-index: 40;
-  background: #f1f5f9; /* slate-100 */
-  border-bottom: 1px solid rgba(148, 163, 184, 0.25); /* slate-400/25 */
-  backdrop-filter: blur(12px);
+  z-index: 50;
+  background: #f5f7fb;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 }
 
-.ps-header-inner {
-  max-width: 72rem; /* 1152px */
+.header-inner {
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 0.85rem 1rem;
+  padding: 0.8rem 1.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1.5rem;
 }
 
-/* Logo */
-.ps-logo {
+.logo {
   display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  background: transparent;
-  border: none;
-  padding: 0;
-  cursor: pointer;
-}
-
-.ps-logo-main {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  align-items: baseline;
   font-weight: 800;
+  font-size: 1.25rem;
   letter-spacing: 0.03em;
-  font-size: 1.25rem;
-  color: #0f172a; /* slate-900 */
-}
-
-.ps-logo-accent {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  font-weight: 700;
-  font-size: 1.25rem;
-  color: #6366f1; /* indigo-500 */
-}
-
-/* Nav links */
-.ps-nav {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex: 1;
-  justify-content: center;
-}
-
-.ps-nav-link {
-  position: relative;
-  font-size: 0.95rem;
-  color: #64748b; /* slate-500 */
-  text-decoration: none;
-  padding: 0.25rem 0.4rem;
-  transition: color 0.18s ease;
-}
-
-.ps-nav-link::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -0.2rem;
-  width: 0%;
-  height: 2px;
-  background: linear-gradient(90deg, #6366f1, #a855f7);
-  transition: width 0.18s ease;
-}
-
-.ps-nav-link:hover {
-  color: #0f172a; /* slate-900 */
-}
-
-.ps-nav-link:hover::after {
-  width: 100%;
-}
-
-.ps-nav-link-active {
   color: #0f172a;
-  font-weight: 600;
-}
-
-.ps-nav-link-active::after {
-  width: 100%;
-}
-
-/* Auth buttons */
-.ps-auth-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.ps-auth-btn {
-  font-size: 0.9rem;
-  border-radius: 999px;
-  padding: 0.5rem 1.1rem;
-  border: 1px solid transparent;
   text-decoration: none;
+}
+
+.logo-main {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+.logo-accent {
+  color: #5b21ff;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.95rem;
+}
+
+.nav-link {
+  color: #4b5563;
+  text-decoration: none;
+  padding-bottom: 0.15rem;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-link.active {
+  color: #111827;
+  border-color: #5b21ff;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.pill-button {
+  border-radius: 999px;
+  padding: 0.45rem 1.1rem;
+  font-size: 0.85rem;
+  border: none;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.15s ease;
+  font-weight: 500;
   white-space: nowrap;
 }
 
-.ps-auth-btn-outline {
-  background: white;
-  color: #0f172a;
-  border-color: rgba(148, 163, 184, 0.6);
-}
-
-.ps-auth-btn-outline:hover {
-  border-color: #6366f1;
-  color: #111827;
-  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08);
-}
-
-.ps-auth-btn-primary {
-  background: radial-gradient(circle at 10% 0%, #818cf8 0, #4f46e5 45%, #a855f7 100%);
+.pill-button.primary {
+  background: radial-gradient(circle at 0% 0%, #a855f7, #5b21ff);
   color: white;
-  box-shadow: 0 12px 40px rgba(79, 70, 229, 0.5);
+  box-shadow: 0 8px 20px rgba(91, 33, 255, 0.4);
 }
 
-.ps-auth-btn-primary:hover {
+.pill-button.primary:hover {
   transform: translateY(-1px);
-  box-shadow: 0 16px 45px rgba(79, 70, 229, 0.7);
+  box-shadow: 0 10px 25px rgba(91, 33, 255, 0.55);
 }
 
-.ps-auth-btn-active {
-  outline: 2px solid rgba(129, 140, 248, 0.5);
-  outline-offset: 2px;
+.pill-button.secondary {
+  background: white;
+  color: #111827;
+  border: 1px solid rgba(148, 163, 184, 0.6);
 }
 
-/* Responsive */
+.pill-button.secondary:hover {
+  background: #eef2ff;
+}
+
+.pill-button.ghost {
+  background: transparent;
+  color: #6b7280;
+  border: none;
+}
+
+.pill-button.ghost:hover {
+  color: #111827;
+}
+
+/* Small screens */
 @media (max-width: 768px) {
-  .ps-header-inner {
-    padding-inline: 0.75rem;
+  .header-inner {
+    padding-inline: 1rem;
     gap: 0.75rem;
   }
 
-  .ps-nav {
-    display: none; /* simple: hide center nav on very small screens */
+  .nav-links {
+    display: none;
   }
 
-  .ps-auth-actions {
+  .header-actions {
     gap: 0.4rem;
   }
 
-  .ps-auth-btn {
-    padding-inline: 0.9rem;
+  .pill-button {
+    padding: 0.35rem 0.8rem;
+    font-size: 0.8rem;
   }
 }

@@ -1,80 +1,41 @@
 // src/utils/purchases.js
 import { db } from "../firebase";
 import {
-  collection,
   addDoc,
-  serverTimestamp,
+  collection,
   getDocs,
   query,
   where,
   orderBy,
 } from "firebase/firestore";
 
-/**
- * Record a successful image purchase in Firestore.
- * Called after Razorpay payment succeeds.
- */
-export async function recordPurchase({
-  userId,
-  imageId,
-  imageName,
-  imageUrl,
-  price,
-  currency = "INR",
-  paymentId,
-}) {
-  if (!userId || !imageId || !paymentId) {
-    console.warn("recordPurchase called with missing fields", {
-      userId,
-      imageId,
-      paymentId,
-    });
-  }
+const collectionName = "purchases";
 
-  const purchasesRef = collection(db, "purchases");
-
-  await addDoc(purchasesRef, {
-    userId,
-    imageId,
-    imageName,
-    imageUrl,
-    price,
-    currency,
-    paymentId,
-    createdAt: serverTimestamp(),
+export const recordPurchase = async (buyerUid, photo, paymentInfo) => {
+  const ref = collection(db, collectionName);
+  await addDoc(ref, {
+    buyerUid,
+    photoId: photo.id,
+    fileName: photo.fileName,
+    displayName: photo.name,
+    price: photo.price,
+    currency: "INR",
+    downloadUrl: photo.originalUrl || photo.url,
+    createdAt: new Date(),
+    razorpay: paymentInfo || null,
   });
-}
+};
 
-/**
- * Fetch all purchases for a given buyer (userId),
- * ordered from newest to oldest.
- *
- * Used by: src/pages/BuyerDashboard.jsx
- */
-export async function getPurchasesForBuyer(userId) {
-  if (!userId) return [];
-
-  const purchasesRef = collection(db, "purchases");
-
+export const getPurchasesForBuyer = async (buyerUid) => {
+  const ref = collection(db, collectionName);
   const q = query(
-    purchasesRef,
-    where("userId", "==", userId),
+    ref,
+    where("buyerUid", "==", buyerUid),
     orderBy("createdAt", "desc")
   );
-
-  const snapshot = await getDocs(q);
-
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      imageId: data.imageId,
-      imageName: data.imageName,
-      imageUrl: data.imageUrl,
-      price: data.price,
-      currency: data.currency || "INR",
-      paymentId: data.paymentId,
-      createdAt: data.createdAt ?? null,
-    };
-  });
-}
+  const snap = await getDocs(q);
+  return snap.docs.map((docSnap) => ({
+    id: docSnap.id,
+    ...docSnap.data(),
+  }));
+};

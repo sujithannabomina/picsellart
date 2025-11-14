@@ -1,74 +1,72 @@
 // src/utils/storage.js
+import { listAll, ref, getDownloadURL } from "firebase/storage";
 import { storage } from "../firebase";
-import { ref, listAll, getDownloadURL } from "firebase/storage";
-import { priceForName } from "./exploreData";
 
-/**
- * Build a normalized image record from a Storage item + URL.
- * This is what the Explore page expects.
- */
-function buildImageRecord(itemRef, url) {
-  const fullPath = itemRef.fullPath;           // e.g. "public/images/sample1.jpg"
-  const fileName = fullPath.split("/").pop();  // "sample1.jpg"
-  const id = fileName.replace(/\.[^.]+$/, ""); // "sample1"
+// Fetch all explore images from Firebase Storage at "public/images"
+export const fetchAllExploreImages = async () => {
+  const baseRef = ref(storage, "public/images");
+  const result = await listAll(baseRef);
 
-  return {
-    id,
-    fileName,
-    storagePath: fullPath,
-    title: "Street Photography",               // simple, consistent title
-    price: priceForName(fileName),            // map to per-image price
-    currency: "INR",
-    url
-  };
-}
+  const files = result.items || [];
 
-/**
- * Fetch all images for Explore from Firebase Storage.
- * Assumes they live under "public/images/" in your bucket.
- */
-export async function fetchAllExploreImages() {
-  const folderRef = ref(storage, "public/images");
-  const listResult = await listAll(folderRef);
+  const images = await Promise.all(
+    files.map(async (itemRef, index) => {
+      const url = await getDownloadURL(itemRef);
+      const fileName = itemRef.name;
+      const price = derivePriceFromName(fileName, index);
 
-  if (!listResult.items.length) {
-    return [];
-  }
-
-  const urls = await Promise.all(
-    listResult.items.map((item) => getDownloadURL(item))
+      return {
+        id: fileName,
+        fileName,
+        name: "Street Photography",
+        url,
+        originalUrl: url,
+        price,
+      };
+    })
   );
 
-  return listResult.items.map((item, index) =>
-    buildImageRecord(item, urls[index])
-  );
-}
+  // Stable sort by fileName
+  return images.sort((a, b) => a.fileName.localeCompare(b.fileName));
+};
 
-/**
- * Filter by search term and paginate.
- * Returns a safe current page and the images to display.
- */
-export function filterAndPaginate(allImages, searchTerm, page, pageSize) {
-  const term = (searchTerm || "").trim().toLowerCase();
+// Simple price logic so sample images have different prices
+const derivePriceFromName = (fileName, index) => {
+  const match = fileName.match(/\d+/);
+  const n = match ? parseInt(match[0], 10) : index + 1;
 
-  let filtered = allImages;
-  if (term) {
-    filtered = allImages.filter((img) => {
-      const title = (img.title || "").toLowerCase();
-      const name = (img.fileName || "").toLowerCase();
-      return title.includes(term) || name.includes(term);
-    });
-  }
+  if (n % 5 === 0) return 999;
+  if (n % 3 === 0) return 799;
+  if (n % 2 === 0) return 499;
+  return 399;
+};
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-  const startIndex = (safePage - 1) * pageSize;
-  const currentPageImages = filtered.slice(startIndex, startIndex + pageSize);
+export const filterAndPaginate = (
+  images,
+  searchTerm,
+  currentPage,
+  pageSize
+) => {
+  const term = searchTerm.trim().toLowerCase();
+  const filtered = term
+    ? images.filter(
+        (img) =>
+          img.fileName.toLowerCase().includes(term) ||
+          (img.name || "").toLowerCase().includes(term)
+      )
+    : images;
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(1, currentPage), totalPages);
+
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
 
   return {
-    currentPageImages,
+    items: filtered.slice(start, end),
+    total,
+    page,
     totalPages,
-    currentPage: safePage,
-    totalItems: filtered.length
   };
-}
+};
