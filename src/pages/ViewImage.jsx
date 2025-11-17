@@ -1,13 +1,11 @@
+// src/pages/ViewImage.jsx
 import { useParams, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { getExploreImageById } from "../utils/storage";
-import { useAuth } from "../hooks/useAuth";
 
 export default function ViewImage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
-
   const [image, setImage] = useState(null);
 
   useEffect(() => {
@@ -18,12 +16,19 @@ export default function ViewImage() {
     load();
   }, [id]);
 
-  if (!image) return <p className="p-10 text-center">Loading image...</p>;
+  if (!image) {
+    return (
+      <div className="max-w-4xl mx-auto p-8">
+        <p>Loading image…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">{image.category}</h1>
 
+      {/* Watermarked preview */}
       <img
         src={image.watermarkedUrl}
         alt={image.name}
@@ -33,15 +38,18 @@ export default function ViewImage() {
       <p className="mt-4 text-gray-700">{image.name}</p>
       <p className="mt-1 font-semibold text-lg">₹{image.price}</p>
 
+      <p className="mt-3 text-sm text-gray-500">
+        This is a watermarked preview. You’ll receive a clean, full-resolution
+        file after purchase.
+      </p>
+
       <div className="mt-6 flex gap-4">
+        {/* Force buyer login before buying */}
         <button
-          onClick={() => {
-            if (!user) return navigate("/buyer-login");
-            navigate(`/buy/${image.id}`);
-          }}
+          onClick={() => navigate(`/buyer-login`)}
           className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
         >
-          Buy & Download
+          Buy &amp; Download
         </button>
 
         <button
