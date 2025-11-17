@@ -1,56 +1,31 @@
 // src/utils/loadRazorpay.js
 
-let razorpayScriptPromise = null;
-
 /**
- * Loads Razorpay checkout.js only once and returns a Promise
- * that resolves when window.Razorpay is available.
+ * Loads the Razorpay checkout script once and reuses it.
+ * Returns true if loaded successfully, false otherwise.
  */
-export function loadRazorpayScript() {
+export async function loadRazorpay() {
   if (typeof window === "undefined") {
-    // Safety for SSR / build-time – don't try to touch window
-    return Promise.reject(new Error("Razorpay can only be loaded in the browser"));
+    // Build / SSR environment – just skip loading here
+    return false;
   }
 
-  // If it's already loaded, just resolve immediately
-  if (window.Razorpay) {
-    return Promise.resolve(window.Razorpay);
+  // If script already exists, resolve immediately
+  if (document.getElementById("razorpay-sdk")) {
+    return true;
   }
 
-  // If a load is already in progress, return the same promise
-  if (razorpayScriptPromise) {
-    return razorpayScriptPromise;
-  }
-
-  // Create and store the promise so multiple callers share it
-  razorpayScriptPromise = new Promise((resolve, reject) => {
-    try {
-      const script = document.createElement("script");
-      script.src = "https://checkout.razorpay.com/v1/checkout.js";
-      script.async = true;
-
-      script.onload = () => {
-        if (window.Razorpay) {
-          resolve(window.Razorpay);
-        } else {
-          reject(new Error("Razorpay script loaded but window.Razorpay is missing"));
-        }
-      };
-
-      script.onerror = () => {
-        razorpayScriptPromise = null;
-        reject(new Error("Failed to load Razorpay script"));
-      };
-
-      document.body.appendChild(script);
-    } catch (err) {
-      razorpayScriptPromise = null;
-      reject(err);
-    }
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.id = "razorpay-sdk";
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.onload = () => resolve(true);
+    script.onerror = () => {
+      console.error("Failed to load Razorpay SDK");
+      reject(false);
+    };
+    document.body.appendChild(script);
   });
-
-  return razorpayScriptPromise;
 }
 
-// Optional default export (harmless, and avoids future import mistakes)
-export default loadRazorpayScript;
+export default loadRazorpay;
