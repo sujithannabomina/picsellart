@@ -6,38 +6,56 @@ import {
   signInWithPopup,
   signOut,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db } from "../firebase";
+import { auth } from "../firebase";
 
 const AuthContext = createContext(null);
-const provider = new GoogleAuthProvider();
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null); // firebase user
+  const [user, setUser] = useState(null);
   const [role, setRole] = useState(null); // "buyer" | "seller" | null
   const [loading, setLoading] = useState(true);
 
+  const provider = new GoogleAuthProvider();
+
+  const doLogin = async (desiredRole) => {
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const loggedInUser = result.user;
+
+      setUser(loggedInUser);
+      setRole(desiredRole);
+      localStorage.setItem("picsellart_role", desiredRole);
+
+      return { user: loggedInUser, role: desiredRole };
+    } catch (err) {
+      console.error("Google login failed:", err);
+      throw err;
+    }
+  };
+
+  const loginAsBuyer = () => doLogin("buyer");
+  const loginAsSeller = () => doLogin("seller");
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("Logout error:", err);
+    } finally {
+      setUser(null);
+      setRole(null);
+      localStorage.removeItem("picsellart_role");
+    }
+  };
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) {
+    const storedRole = localStorage.getItem("picsellart_role");
+    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+      if (firebaseUser) {
+        setUser(firebaseUser);
+        setRole(storedRole || null);
+      } else {
         setUser(null);
-        setRole(null);
-        setLoading(false);
-        return;
-      }
-
-      setUser(firebaseUser);
-
-      try {
-        const ref = doc(db, "users", firebaseUser.uid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          setRole(snap.data().role || null);
-        } else {
-          setRole(null);
-        }
-      } catch (err) {
-        console.error("Error loading user role", err);
         setRole(null);
       }
       setLoading(false);
@@ -46,37 +64,6 @@ export const AuthProvider = ({ children }) => {
     return () => unsub();
   }, []);
 
-  const loginAs = async (desiredRole) => {
-    const result = await signInWithPopup(auth, provider);
-    const firebaseUser = result.user;
-
-    const ref = doc(db, "users", firebaseUser.uid);
-    await setDoc(
-      ref,
-      {
-        uid: firebaseUser.uid,
-        email: firebaseUser.email || "",
-        displayName: firebaseUser.displayName || "",
-        photoURL: firebaseUser.photoURL || "",
-        role: desiredRole,
-        updatedAt: Date.now(),
-      },
-      { merge: true }
-    );
-
-    setUser(firebaseUser);
-    setRole(desiredRole);
-  };
-
-  const loginAsBuyer = () => loginAs("buyer");
-  const loginAsSeller = () => loginAs("seller");
-
-  const logout = async () => {
-    await signOut(auth);
-    setUser(null);
-    setRole(null);
-  };
-
   const value = {
     user,
     role,
@@ -84,6 +71,8 @@ export const AuthProvider = ({ children }) => {
     loginAsBuyer,
     loginAsSeller,
     logout,
+    isBuyer: !!user && role === "buyer",
+    isSeller: !!user && role === "seller",
   };
 
   return (

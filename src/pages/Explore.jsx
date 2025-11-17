@@ -1,34 +1,24 @@
 // src/pages/Explore.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import WatermarkedImage from "../components/WatermarkedImage";
 import { useAuth } from "../context/AuthContext";
-import {
-  fetchAllExploreImages,
-  filterAndPaginate,
-} from "../utils/storage";
-import { openPhotoCheckout } from "../utils/razorpay";
+import { fetchAllExploreImages, filterAndPaginate } from "../utils/storage";
 import { recordPurchase } from "../utils/purchases";
+import { openCheckout } from "../utils/razorpay";
 
-const PAGE_SIZE = 8;
+const ITEMS_PER_PAGE = 12;
 
 const Explore = () => {
   const [allImages, setAllImages] = useState([]);
-  const [pageData, setPageData] = useState({
-    items: [],
-    total: 0,
-    page: 1,
-    totalPages: 1,
-  });
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedImage, setSelectedImage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [buyingId, setBuyingId] = useState(null);
 
-  const { user, role } = useAuth();
+  const { user, isBuyer } = useAuth();
   const navigate = useNavigate();
-
-  const isBuyer = user && role === "buyer";
 
   useEffect(() => {
     const load = async () => {
@@ -36,7 +26,7 @@ const Explore = () => {
         const images = await fetchAllExploreImages();
         setAllImages(images);
       } catch (err) {
-        console.error("Error loading explore images", err);
+        console.error("Failed to load explore images:", err);
       } finally {
         setLoading(false);
       }
@@ -44,127 +34,185 @@ const Explore = () => {
     load();
   }, []);
 
-  useEffect(() => {
-    const result = filterAndPaginate(allImages, search, currentPage, PAGE_SIZE);
-    setPageData(result);
-  }, [allImages, search, currentPage]);
+  const { items, totalPages } = useMemo(
+    () => filterAndPaginate(allImages, search, page, ITEMS_PER_PAGE),
+    [allImages, search, page]
+  );
 
-  const handleSearchChange = (e) => {
-    setSearch(e.target.value);
-    setCurrentPage(1);
-  };
-
-  const handleClear = () => {
-    setSearch("");
-    setCurrentPage(1);
-  };
-
-  const handleBuy = async (photo) => {
-    if (!isBuyer) {
-      // force buyer login first, then come back
+  const handleBuyClick = async (image) => {
+    if (!user || !isBuyer) {
       navigate("/buyer-login", {
-        state: { redirectTo: "/explore", photoId: photo.id },
+        state: { redirectTo: "/explore" },
       });
       return;
     }
 
     try {
-      setBuyingId(photo.id);
-      await openPhotoCheckout({
-        user,
-        photo,
-        onSuccess: async (paymentInfo) => {
-          await recordPurchase(user.uid, photo, paymentInfo);
-          alert("Payment successful! You can now download this image.");
+      setBuyingId(image.id);
+      const amount = image.price ?? 399; // in rupees, your utils can convert to paise
+      const result = await openCheckout({
+        amount,
+        description: image.title || "Picsellart image",
+        metadata: {
+          fileName: image.fileName,
+          storagePath: image.storagePath,
         },
       });
+
+      if (result.success) {
+        await recordPurchase({
+          buyerId: user.uid,
+          amount: result.amount,
+          fileName: image.fileName,
+          storagePath: image.storagePath,
+          orderId: result.orderId,
+        });
+        alert("Payment successful! Check your downloads dashboard.");
+        navigate("/buyer-dashboard");
+      } else {
+        alert("Payment was cancelled.");
+      }
     } catch (err) {
-      console.error("Error during purchase", err);
-      alert("Payment failed or was cancelled.");
+      console.error("Payment error:", err);
+      alert("Payment failed. Please try again.");
     } finally {
       setBuyingId(null);
     }
   };
 
-  if (loading) {
-    return (
-      <main className="page-wrapper">
-        <div className="page-inner">
-          <p>Loading photos…</p>
-        </div>
-      </main>
-    );
-  }
+  const handleView = (image) => setSelectedImage(image);
+
+  const closeModal = () => setSelectedImage(null);
 
   return (
-    <main className="page-wrapper">
-      <div className="page-inner">
-        <header className="page-header">
-          <h1 className="page-title">Street Photography</h1>
-          <p className="page-subtitle">
-            Curated images from our public gallery and verified sellers. Login
-            as a buyer to purchase and download.
-          </p>
-        </header>
+    <main className="page-shell">
+      <section className="page-header-block">
+        <h1 className="page-title">Street Photography</h1>
+        <p className="page-subtitle">
+          Curated images from our public gallery and verified sellers. Login as
+          a buyer to purchase and download.
+        </p>
 
-        <div className="explore-search">
+        <div className="explore-toolbar">
           <input
             type="text"
             placeholder="Search by name..."
             value={search}
-            onChange={handleSearchChange}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
-          <button onClick={handleClear}>Clear</button>
+          <button
+            className="btn-secondary"
+            onClick={() => {
+              setSearch("");
+              setPage(1);
+            }}
+          >
+            Clear
+          </button>
         </div>
+      </section>
 
-        <section className="explore-grid">
-          {pageData.items.map((photo) => (
-            <article key={photo.id} className="photo-card">
-              <div className="photo-thumb">
-                <WatermarkedImage src={photo.url} alt={photo.name} />
-              </div>
-              <div className="photo-info">
-                <div>
-                  <h3>{photo.name}</h3>
-                  <p className="photo-filename">{photo.fileName}</p>
-                </div>
-                <div className="photo-meta">
-                  <span className="photo-price">₹{photo.price}</span>
-                  <button
-                    className="pill-button primary"
-                    onClick={() => handleBuy(photo)}
-                    disabled={buyingId === photo.id}
-                  >
-                    {buyingId === photo.id ? "Processing…" : "Buy & Download"}
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </section>
+      {loading && <div className="page-loading">Loading photos…</div>}
 
-        {pageData.totalPages > 1 && (
-          <div className="pagination">
-            <button
-              disabled={pageData.page === 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            >
-              Prev
-            </button>
-            <span>
-              Page {pageData.page} of {pageData.totalPages}
-            </span>
-            <button
-              disabled={pageData.page === pageData.totalPages}
-              onClick={() =>
-                setCurrentPage((p) => Math.min(pageData.totalPages, p + 1))
-              }
-            >
-              Next
-            </button>
+      {!loading && items.length === 0 && (
+        <div className="empty-state">
+          <p>No images found. Try a different search.</p>
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
+        <>
+          <div className="explore-grid">
+            {items.map((image) => (
+              <article key={image.id} className="image-card">
+                <div
+                  className="image-card-thumb"
+                  onClick={() => handleView(image)}
+                >
+                  <WatermarkedImage
+                    src={image.previewUrl}
+                    alt={image.title || image.fileName}
+                    watermarkText="Picsellart"
+                  />
+                </div>
+                <div className="image-card-body">
+                  <div className="image-card-title-block">
+                    <h3>{image.title || "Street Photography"}</h3>
+                    <span className="price-pill">
+                      ₹{image.price ?? 399}
+                    </span>
+                  </div>
+                  <p className="image-card-filename">{image.fileName}</p>
+                  <div className="image-card-actions">
+                    <button
+                      className="btn-secondary small"
+                      onClick={() => handleView(image)}
+                    >
+                      View
+                    </button>
+                    <button
+                      className="btn-primary small"
+                      onClick={() => handleBuyClick(image)}
+                      disabled={buyingId === image.id}
+                    >
+                      {buyingId === image.id ? "Processing…" : "Buy & Download"}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
-        )}
-      </div>
+
+          {totalPages > 1 && (
+            <div className="pagination-bar">
+              <button
+                className="btn-secondary small"
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Prev
+              </button>
+              <span className="pagination-info">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                className="btn-secondary small"
+                disabled={page === totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {selectedImage && (
+        <div className="modal-backdrop" onClick={closeModal}>
+          <div className="modal-window" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={closeModal}>
+              ✕
+            </button>
+            <h2 className="modal-title">
+              {selectedImage.title || "Preview"}
+            </h2>
+            <div className="modal-image-wrapper">
+              <WatermarkedImage
+                src={selectedImage.previewUrl}
+                alt={selectedImage.title || selectedImage.fileName}
+                watermarkText="Picsellart"
+              />
+            </div>
+            <p className="modal-caption">
+              Watermarked preview shown. Purchase to download the full
+              resolution, clean image.
+            </p>
+          </div>
+        </div>
+      )}
     </main>
   );
 };

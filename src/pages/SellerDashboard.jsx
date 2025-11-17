@@ -1,157 +1,68 @@
 // src/pages/SellerDashboard.jsx
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { SELLER_PLANS, getPlanById } from "../utils/plans";
-import {
-  activateSellerPlan,
-  ensureSellerProfile,
-  getSellerProfile,
-} from "../utils/seller";
-import { openPlanCheckout } from "../utils/razorpay";
+// you can later hook real stats here
 
 const SellerDashboard = () => {
-  const { user, role } = useAuth();
+  const { user, isSeller } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [activatingId, setActivatingId] = useState(null);
 
-  const isSeller = user && role === "seller";
-
+  // Redirect if not logged-in as seller
   useEffect(() => {
-    if (!user) {
-      navigate("/seller-login");
-      return;
+    if (!user || !isSeller) {
+      navigate("/seller-login", { replace: true });
     }
-    if (role !== "seller") {
-      navigate("/");
-      return;
-    }
+  }, [user, isSeller, navigate]);
 
-    const load = async () => {
-      try {
-        await ensureSellerProfile(user.uid, user.email);
-        const p = await getSellerProfile(user.uid);
-        setProfile(p);
-      } catch (err) {
-        console.error("Error loading seller profile", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    load();
-  }, [user, role, navigate]);
-
-  const handleActivatePlan = async (plan) => {
-    if (!user) return;
-    try {
-      setActivatingId(plan.id);
-      await openPlanCheckout({
-        user,
-        plan,
-        onSuccess: async () => {
-          await activateSellerPlan(user.uid, plan.id);
-          const updated = await getSellerProfile(user.uid);
-          setProfile(updated);
-          alert(`Plan "${plan.name}" activated successfully.`);
-        },
-      });
-    } catch (err) {
-      console.error("Error activating plan", err);
-      alert("Plan activation failed or was cancelled.");
-    } finally {
-      setActivatingId(null);
-    }
-  };
-
-  if (!isSeller) {
-    return null;
+  if (!user || !isSeller) {
+    return <div className="page-loading">Loading...</div>;
   }
 
-  const activePlan = profile?.activePlanId
-    ? getPlanById(profile.activePlanId)
-    : null;
-
   return (
-    <main className="page-wrapper">
-      <div className="page-inner">
-        <header className="page-header">
-          <h1 className="page-title">Seller Dashboard</h1>
-          <p className="page-subtitle">
-            Manage your plan, track uploads and monitor your earnings.
-          </p>
-        </header>
+    <main className="page-shell">
+      <section className="dashboard-card">
+        <h1 className="page-title">Seller Dashboard</h1>
+        <p className="page-subtitle">
+          Welcome, {user.displayName || user.email}. Manage your uploads,
+          earnings and plans.
+        </p>
 
-        {loading && <p>Loading your seller account…</p>}
+        <div className="dashboard-grid">
+          <div className="dashboard-widget">
+            <h2>Total Earnings</h2>
+            <p className="dashboard-number">₹0.00</p>
+            <p className="dashboard-muted">
+              Connect your Razorpay statements to reconcile.
+            </p>
+          </div>
 
-        {!loading && (
-          <>
-            <section className="stats-row">
-              <div className="stat-card">
-                <p className="stat-label">Active Plan</p>
-                <p className="stat-value">
-                  {activePlan ? activePlan.name : "No plan active"}
-                </p>
-              </div>
-              <div className="stat-card">
-                <p className="stat-label">Uploads used</p>
-                <p className="stat-value">
-                  {profile?.uploadCount || 0}
-                  {activePlan && ` / ${activePlan.maxUploads}`}
-                </p>
-              </div>
-              <div className="stat-card">
-                <p className="stat-label">Max price per image</p>
-                <p className="stat-value">
-                  {activePlan ? `₹${activePlan.maxPricePerImage}` : "–"}
-                </p>
-              </div>
-            </section>
+          <div className="dashboard-widget">
+            <h2>Active Plan</h2>
+            <p className="dashboard-number">Starter / Pro / Elite</p>
+            <p className="dashboard-muted">
+              Show the active plan details here (limit, expiry etc.).
+            </p>
+          </div>
 
-            {!activePlan && (
-              <section className="plans-section">
-                <h2>Choose a plan to start selling</h2>
-                <div className="plans-grid">
-                  {SELLER_PLANS.map((plan) => (
-                    <article key={plan.id} className="plan-card">
-                      <h3>{plan.name}</h3>
-                      <p className="plan-price">₹{plan.price}</p>
-                      <ul className="plan-details">
-                        <li>{plan.maxUploads} uploads</li>
-                        <li>Up to ₹{plan.maxPricePerImage} per image</li>
-                        <li>{plan.durationDays} days visibility</li>
-                        <li>{plan.highlight}</li>
-                      </ul>
-                      <button
-                        className="pill-button primary"
-                        disabled={activatingId === plan.id}
-                        onClick={() => handleActivatePlan(plan)}
-                      >
-                        {activatingId === plan.id
-                          ? "Processing…"
-                          : "Activate Plan"}
-                      </button>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            )}
+          <div className="dashboard-widget">
+            <h2>Uploads</h2>
+            <p className="dashboard-number">0 photos</p>
+            <p className="dashboard-muted">
+              Later you can extend this to list and manage photos.
+            </p>
+          </div>
+        </div>
 
-            {activePlan && (
-              <section className="plans-section">
-                <h2>Next steps</h2>
-                <p>
-                  Plan features like upload, editing and detailed sales stats
-                  plug into this dashboard. You can continue integrating your
-                  existing upload flow using the limits from your active plan.
-                </p>
-              </section>
-            )}
-          </>
-        )}
-      </div>
+        <div className="dashboard-footer">
+          <button
+            className="btn-primary"
+            onClick={() => navigate("/explore")}
+          >
+            View public gallery
+          </button>
+        </div>
+      </section>
     </main>
   );
 };

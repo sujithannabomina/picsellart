@@ -1,10 +1,11 @@
 // src/pages/BuyerLogin.jsx
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 const BuyerLogin = () => {
-  const { user, role, loginAsBuyer } = useAuth();
+  const { user, isBuyer, loginAsBuyer } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -12,33 +13,43 @@ const BuyerLogin = () => {
     (location.state && location.state.redirectTo) || "/buyer-dashboard";
 
   useEffect(() => {
-    if (user && role === "buyer") {
+    if (user && isBuyer) {
       navigate(redirectTo, { replace: true });
     }
-  }, [user, role, navigate, redirectTo]);
+  }, [user, isBuyer, navigate, redirectTo]);
 
   const handleLogin = async () => {
     try {
+      setSubmitting(true);
       await loginAsBuyer();
       navigate(redirectTo, { replace: true });
-    } catch (err) {
-      console.error("Buyer login failed", err);
+    } catch {
       alert("Login failed. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <main className="page-wrapper">
-      <div className="page-inner auth-page">
+    <main className="page-shell">
+      <section className="auth-card">
         <h1 className="page-title">Buyer Login</h1>
         <p className="page-subtitle">
-          Sign in with Google to purchase and download photos. Your purchases
-          will be stored in your buyer dashboard.
+          Sign in with Google to purchase, download, and manage your images.
         </p>
-        <button className="pill-button primary" onClick={handleLogin}>
-          Continue with Google
+
+        <button
+          className="btn-primary wide"
+          disabled={submitting}
+          onClick={handleLogin}
+        >
+          {submitting ? "Signing in..." : "Continue with Google"}
         </button>
-      </div>
+
+        <p className="auth-hint">
+          After login you’ll be redirected to your downloads dashboard.
+        </p>
+      </section>
     </main>
   );
 };

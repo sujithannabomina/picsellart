@@ -1,41 +1,26 @@
 // src/components/Header.jsx
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import "./Header.css";
 import { useAuth } from "../context/AuthContext";
+import "./Header.css";
 
 const Header = () => {
+  const { user, isBuyer, isSeller, logout } = useAuth();
   const navigate = useNavigate();
-  const { user, role, logout } = useAuth();
 
-  const isBuyer = user && role === "buyer";
-  const isSeller = user && role === "seller";
-
-  const handleBuyerClick = () => {
-    if (!isBuyer) {
-      navigate("/buyer-login");
-      return;
-    }
-    navigate("/buyer-dashboard");
-  };
-
-  const handleSellerClick = () => {
-    if (!isSeller) {
-      navigate("/seller-login");
-      return;
-    }
-    navigate("/seller-dashboard");
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
   };
 
   return (
     <header className="site-header">
       <div className="header-inner">
-        {/* Clicking this reloads / and rotates landing images */}
-        <a href="/" className="logo">
-          <span className="logo-main">Picsell</span>{" "}
-          <span className="logo-accent">art</span>
-        </a>
+        <Link to="/" className="logo">
+          <span className="logo-main">Picsell</span>
+          <span className="logo-highlight">art</span>
+        </Link>
 
-        <nav className="nav-links">
+        <nav className="main-nav">
           <NavLink to="/explore" className="nav-link">
             Explore
           </NavLink>
@@ -51,13 +36,33 @@ const Header = () => {
         </nav>
 
         <div className="header-actions">
+          {!user && (
+            <>
+              <button
+                className="btn-pill btn-ghost"
+                onClick={() => navigate("/buyer-login")}
+              >
+                Buyer Login
+              </button>
+              <button
+                className="btn-pill btn-primary"
+                onClick={() => navigate("/seller-login")}
+              >
+                Seller Login
+              </button>
+            </>
+          )}
+
           {isBuyer && (
             <>
               <button
-                className="pill-button secondary"
+                className="btn-pill btn-ghost"
                 onClick={() => navigate("/buyer-dashboard")}
               >
                 My Downloads
+              </button>
+              <button className="btn-pill btn-primary" onClick={handleLogout}>
+                Logout
               </button>
             </>
           )}
@@ -65,35 +70,15 @@ const Header = () => {
           {isSeller && (
             <>
               <button
-                className="pill-button secondary"
+                className="btn-pill btn-ghost"
                 onClick={() => navigate("/seller-dashboard")}
               >
                 Seller Dashboard
               </button>
-            </>
-          )}
-
-          {!user && (
-            <>
-              <button
-                className="pill-button secondary"
-                onClick={handleBuyerClick}
-              >
-                Buyer Login
-              </button>
-              <button
-                className="pill-button primary"
-                onClick={handleSellerClick}
-              >
-                Seller Login
+              <button className="btn-pill btn-primary" onClick={handleLogout}>
+                Logout
               </button>
             </>
-          )}
-
-          {user && (
-            <button className="pill-button ghost" onClick={logout}>
-              Logout
-            </button>
           )}
         </div>
       </div>

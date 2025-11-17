@@ -1,16 +1,33 @@
 // src/components/ProtectedRoute.jsx
-import { Navigate, useLocation } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-export default function ProtectedRoute({ children }) {
-  const { user, ready } = useAuth();
-  const loc = useLocation();
+/**
+ * Usage:
+ * <ProtectedRoute role="buyer">
+ *   <BuyerDashboard />
+ * </ProtectedRoute>
+ */
+const ProtectedRoute = ({ children, role }) => {
+  const { user, role: currentRole, loading } = useAuth();
 
-  if (!ready) return <main className="p-6">Loading…</main>;
+  if (loading) return <div className="page-loading">Loading...</div>;
+
   if (!user) {
-    // If the path contains "seller" → send to /seller; else to /buyer.
-    const loginPath = loc.pathname.includes("/seller") ? "/seller" : "/buyer";
-    return <Navigate to={loginPath} replace />;
+    return (
+      <Navigate
+        to={role === "seller" ? "/seller-login" : "/buyer-login"}
+        replace
+      />
+    );
   }
+
+  if (role && currentRole && currentRole !== role) {
+    // Logged in as different role – send home
+    return <Navigate to="/" replace />;
+  }
+
   return children;
-}
+};
+
+export default ProtectedRoute;
