@@ -1,9 +1,10 @@
 // src/App.jsx
 import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
 
 import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
+
 import LandingPage from "./pages/LandingPage";
 import Explore from "./pages/Explore";
 import Faq from "./pages/Faq";
@@ -13,8 +14,10 @@ import BuyerLogin from "./pages/BuyerLogin";
 import SellerLogin from "./pages/SellerLogin";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
+import ViewImage from "./pages/ViewImage";
 import NotFound from "./pages/NotFound";
-import ProtectedRoute from "./components/ProtectedRoute";
+
+import { AuthProvider } from "./context/AuthContext";
 
 function App() {
   return (
@@ -22,16 +25,21 @@ function App() {
       <AuthProvider>
         <Layout>
           <Routes>
+            {/* Public pages */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/explore" element={<Explore />} />
             <Route path="/faq" element={<Faq />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/refunds" element={<Refunds />} />
 
-            {/* Fallback login pages – normally Header buttons will be used */}
+            {/* View single image (watermarked) */}
+            <Route path="/view/:id" element={<ViewImage />} />
+
+            {/* Login pages (backup – header buttons can also trigger login) */}
             <Route path="/buyer-login" element={<BuyerLogin />} />
             <Route path="/seller-login" element={<SellerLogin />} />
 
+            {/* Protected dashboards */}
             <Route
               path="/buyer-dashboard"
               element={
@@ -49,6 +57,7 @@ function App() {
               }
             />
 
+            {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Layout>

@@ -1,72 +1,62 @@
-// src/utils/storage.js
-import { listAll, ref, getDownloadURL } from "firebase/storage";
 import { storage } from "../firebase";
+import { ref, listAll, getDownloadURL } from "firebase/storage";
+import sampleData from "./exploreData.json";
 
-// Fetch all explore images from Firebase Storage at "public/images"
-export const fetchAllExploreImages = async () => {
-  const baseRef = ref(storage, "public/images");
-  const result = await listAll(baseRef);
+// Fetch seller images from Firebase
+async function fetchSellerImages() {
+  try {
+    const folder = ref(storage, "seller-images/");
+    const res = await listAll(folder);
 
-  const files = result.items || [];
+    const files = await Promise.all(
+      res.items.map(async (file) => {
+        const url = await getDownloadURL(file);
+        return {
+          id: file.name,
+          name: file.name,
+          category: "Seller Upload",
+          price: 499,
+          watermarkedUrl: url,
+          thumbnailUrl: url,
+        };
+      })
+    );
 
-  const images = await Promise.all(
-    files.map(async (itemRef, index) => {
-      const url = await getDownloadURL(itemRef);
-      const fileName = itemRef.name;
-      const price = derivePriceFromName(fileName, index);
+    return files;
+  } catch (err) {
+    console.error("Seller image fetch error", err);
+    return [];
+  }
+}
 
-      return {
-        id: fileName,
-        fileName,
-        name: "Street Photography",
-        url,
-        originalUrl: url,
-        price,
-      };
-    })
-  );
+// Merge sample images + seller images
+export async function fetchAllExploreImages() {
+  const seller = await fetchSellerImages();
+  return [...sampleData, ...seller];
+}
 
-  // Stable sort by fileName
-  return images.sort((a, b) => a.fileName.localeCompare(b.fileName));
-};
+// Helper for find-by-id
+export async function getExploreImageById(id) {
+  const all = await fetchAllExploreImages();
+  return all.find((x) => x.id == id);
+}
 
-// Simple price logic so sample images have different prices
-const derivePriceFromName = (fileName, index) => {
-  const match = fileName.match(/\d+/);
-  const n = match ? parseInt(match[0], 10) : index + 1;
+// Pagination + filter
+export function filterAndPaginate(list, page, search) {
+  const limit = 12;
 
-  if (n % 5 === 0) return 999;
-  if (n % 3 === 0) return 799;
-  if (n % 2 === 0) return 499;
-  return 399;
-};
+  let filtered = list;
+  if (search) {
+    filtered = filtered.filter((x) =>
+      x.name.toLowerCase().includes(search.toLowerCase())
+    );
+  }
 
-export const filterAndPaginate = (
-  images,
-  searchTerm,
-  currentPage,
-  pageSize
-) => {
-  const term = searchTerm.trim().toLowerCase();
-  const filtered = term
-    ? images.filter(
-        (img) =>
-          img.fileName.toLowerCase().includes(term) ||
-          (img.name || "").toLowerCase().includes(term)
-      )
-    : images;
-
-  const total = filtered.length;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(Math.max(1, currentPage), totalPages);
-
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
+  const start = (page - 1) * limit;
+  const end = start + limit;
 
   return {
-    items: filtered.slice(start, end),
-    total,
-    page,
-    totalPages,
+    data: filtered.slice(start, end),
+    isLast: end >= filtered.length,
   };
-};
+}
