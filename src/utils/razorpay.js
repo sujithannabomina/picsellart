@@ -5,19 +5,13 @@ import { loadRazorpay } from "./loadRazorpay";
 /**
  * Generic Razorpay checkout opener for Picsellart.
  *
- * Usage from any page:
- *   openCheckout({
- *     amount: 49900,          // amount in paise
- *     currency: "INR",
- *     description: "Photo purchase",
- *     metadata: { photoId, planId, buyerId }
- *   });
- *
- * It will:
- * 1. Load Razorpay script
- * 2. Call /api/razorpay/create-order to create an order
- * 3. Open Razorpay checkout
- * 4. Call /api/razorpay/verifyPayment after success
+ * Params:
+ *  - amount: in paise
+ *  - currency: "INR"
+ *  - description: text for Razorpay window
+ *  - metadata: extra info (photoId, planId, uid, etc.)
+ *  - buyerDetails: { name, email, phone }
+ *  - onSuccess: optional async callback called AFTER payment is verified
  */
 export async function openCheckout({
   amount,
@@ -25,11 +19,14 @@ export async function openCheckout({
   description = "Picsellart purchase",
   metadata = {},
   buyerDetails = {},
+  onSuccess,
 }) {
   try {
     const scriptLoaded = await loadRazorpay();
     if (!scriptLoaded) {
-      alert("Unable to load payment gateway. Please check your connection and try again.");
+      alert(
+        "Unable to load payment gateway. Please check your connection and try again."
+      );
       return;
     }
 
@@ -59,8 +56,8 @@ export async function openCheckout({
 
     // 2️⃣ Prepare Razorpay options
     const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID, // set this in .env and in Vercel
-      amount: orderData.amount,                 // in paise
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      amount: orderData.amount,
       currency: orderData.currency || currency,
       name: "Picsellart",
       description,
@@ -89,19 +86,29 @@ export async function openCheckout({
 
           if (!verifyRes.ok) {
             console.error("Payment verification failed");
-            alert("Payment captured, but verification failed. Please contact support.");
+            alert(
+              "Payment captured, but verification failed. Please contact support."
+            );
             return;
           }
 
           const verifyData = await verifyRes.json();
           if (verifyData.success) {
+            // 🔔 Allow caller to run post-success logic
+            if (typeof onSuccess === "function") {
+              await onSuccess({ response, orderData, verifyData });
+            }
             alert("Payment successful! Thank you.");
           } else {
-            alert("Payment could not be verified. Please contact support.");
+            alert(
+              "Payment could not be verified. Please contact support with your payment ID."
+            );
           }
         } catch (err) {
           console.error("Error while verifying payment", err);
-          alert("Payment verification error. Please contact support.");
+          alert(
+            "Payment verification error. Please contact support with your payment ID."
+          );
         }
       },
       modal: {
@@ -115,9 +122,10 @@ export async function openCheckout({
     rzp.open();
   } catch (error) {
     console.error("Error in openCheckout:", error);
-    alert("Something went wrong while starting the payment. Please try again.");
+    alert(
+      "Something went wrong while starting the payment. Please refresh and try again."
+    );
   }
 }
 
-// Also provide a default export in case any old code imports default.
 export default openCheckout;

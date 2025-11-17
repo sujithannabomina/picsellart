@@ -4,69 +4,74 @@ import {
   doc,
   getDoc,
   setDoc,
+  serverTimestamp,
   Timestamp,
-  increment,
 } from "firebase/firestore";
-import { getPlanById } from "./plans";
 
-const collectionName = "sellers";
-
-export const getSellerProfile = async (uid) => {
-  const ref = doc(db, collectionName, uid);
+/**
+ * Fetch seller profile document.
+ * Stored at: sellers/{uid}
+ */
+export async function getSellerProfile(uid) {
+  const ref = doc(db, "sellers", uid);
   const snap = await getDoc(ref);
-  if (!snap.exists()) return null;
-  return snap.data();
-};
 
-export const ensureSellerProfile = async (uid, email) => {
-  const existing = await getSellerProfile(uid);
-  if (existing) return existing;
-
-  const ref = doc(db, collectionName, uid);
-  const now = Timestamp.now();
-  const profile = {
-    uid,
-    email: email || "",
+  const base = {
+    id: uid,
     activePlanId: null,
+    planName: null,
+    maxUploads: 0,
+    maxPrice: 0,
     planExpiresAt: null,
-    uploadCount: 0,
-    totalEarnings: 0,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: null,
   };
-  await setDoc(ref, profile);
-  return profile;
-};
 
-export const activateSellerPlan = async (uid, planId) => {
-  const plan = getPlanById(planId);
-  if (!plan) throw new Error("Unknown plan");
+  if (!snap.exists()) {
+    return base;
+  }
 
-  const ref = doc(db, collectionName, uid);
-  const now = Timestamp.now();
-  const expiresAt = Timestamp.fromMillis(
-    now.toMillis() + plan.durationDays * 24 * 60 * 60 * 1000
+  return { ...base, ...snap.data() };
+}
+
+/**
+ * Save / update seller plan after successful payment.
+ */
+export async function upsertSellerPlan(uid, plan) {
+  const ref = doc(db, "sellers", uid);
+
+  const expiresAtDate = new Date(
+    Date.now() + plan.durationDays * 24 * 60 * 60 * 1000
   );
+
+  const expiresAt = Timestamp.fromDate(expiresAtDate);
 
   await setDoc(
     ref,
     {
       activePlanId: plan.id,
+      planName: plan.name,
+      maxUploads: plan.maxUploads,
+      maxPrice: plan.maxPrice,
       planExpiresAt: expiresAt,
-      updatedAt: now,
+      updatedAt: serverTimestamp(),
+      createdAt: serverTimestamp(),
     },
     { merge: true }
   );
-};
+}
 
-export const recordSellerUpload = async (uid, price) => {
-  const ref = doc(db, collectionName, uid);
-  await setDoc(
-    ref,
-    {
-      uploadCount: increment(1),
-      updatedAt: Timestamp.now(),
-    },
-    { merge: true }
-  );
-};
+/**
+ * Check if profile has an active (non-expired) plan.
+ */
+export function hasActivePlan(profile) {
+  if (!profile || !profile.activePlanId || !profile.planExpiresAt) {
+    return false;
+  }
+
+  const now = new Date();
+  const exp = profile.planExpiresAt.toDate
+    ? profile.planExpiresAt.toDate()
+    : new Date(profile.planExpiresAt);
+
+  return exp > now;
+}

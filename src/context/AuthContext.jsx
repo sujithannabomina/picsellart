@@ -1,85 +1,55 @@
 // src/context/AuthContext.jsx
-import { createContext, useContext, useEffect, useState } from "react";
-import {
-  GoogleAuthProvider,
-  onAuthStateChanged,
-  signInWithPopup,
-  signOut,
-} from "firebase/auth";
-import { auth } from "../firebase";
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { auth, googleProvider } from "../firebase";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 
 const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null); // "buyer" | "seller" | null
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
 
-  const provider = new GoogleAuthProvider();
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser || null);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const doLogin = async (desiredRole) => {
+  const login = async (asRole) => {
     try {
-      const result = await signInWithPopup(auth, provider);
-      const loggedInUser = result.user;
-
-      setUser(loggedInUser);
-      setRole(desiredRole);
-      localStorage.setItem("picsellart_role", desiredRole);
-
-      return { user: loggedInUser, role: desiredRole };
+      setRole(asRole);
+      const result = await signInWithPopup(auth, googleProvider);
+      setUser(result.user);
+      const target =
+        asRole === "seller" ? "/seller-dashboard" : "/buyer-dashboard";
+      navigate(target);
     } catch (err) {
-      console.error("Google login failed:", err);
-      throw err;
+      console.error("Google login failed", err);
+      alert("Login failed. Please try again.");
     }
   };
-
-  const loginAsBuyer = () => doLogin("buyer");
-  const loginAsSeller = () => doLogin("seller");
 
   const logout = async () => {
     try {
       await signOut(auth);
-    } catch (err) {
-      console.error("Logout error:", err);
-    } finally {
       setUser(null);
       setRole(null);
-      localStorage.removeItem("picsellart_role");
+      navigate("/");
+    } catch (err) {
+      console.error("Logout failed", err);
+      alert("Logout failed. Please try again.");
     }
   };
 
-  useEffect(() => {
-    const storedRole = localStorage.getItem("picsellart_role");
-    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        setRole(storedRole || null);
-      } else {
-        setUser(null);
-        setRole(null);
-      }
-      setLoading(false);
-    });
+  const value = { user, role, login, logout, loading };
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
 
-    return () => unsub();
-  }, []);
-
-  const value = {
-    user,
-    role,
-    loading,
-    loginAsBuyer,
-    loginAsSeller,
-    logout,
-    isBuyer: !!user && role === "buyer",
-    isSeller: !!user && role === "seller",
-  };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {!loading && children}
-    </AuthContext.Provider>
-  );
-};
-
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  return useContext(AuthContext);
+}

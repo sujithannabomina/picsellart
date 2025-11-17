@@ -1,82 +1,96 @@
 // src/components/Header.jsx
+import React from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import "./Header.css";
 
-const Header = () => {
-  const { user, isBuyer, isSeller, logout } = useAuth();
+function Header() {
+  const { user, login, logout, role } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogout = async () => {
-    await logout();
+  const handleBuyerLogin = () => {
+    login("buyer"); // direct Google login, then go to buyer dashboard
+  };
+
+  const handleSellerLogin = () => {
+    login("seller"); // direct Google login, then go to seller dashboard
+  };
+
+  const goHome = () => {
     navigate("/");
   };
 
   return (
-    <header className="site-header">
-      <div className="header-inner">
-        <Link to="/" className="logo">
-          <span className="logo-main">Picsell</span>
-          <span className="logo-highlight">art</span>
-        </Link>
+    <header className="ps-header">
+      <div className="ps-header-inner">
+        {/* Logo / site name */}
+        <button className="ps-logo" onClick={goHome}>
+          <span className="ps-logo-main">Picsellart</span>
+        </button>
 
-        <nav className="main-nav">
-          <NavLink to="/explore" className="nav-link">
+        {/* Center nav links */}
+        <nav className="ps-nav">
+          <NavLink
+            to="/explore"
+            className={({ isActive }) =>
+              isActive ? "ps-nav-link ps-nav-link-active" : "ps-nav-link"
+            }
+          >
             Explore
           </NavLink>
-          <NavLink to="/faq" className="nav-link">
+          <NavLink
+            to="/faq"
+            className={({ isActive }) =>
+              isActive ? "ps-nav-link ps-nav-link-active" : "ps-nav-link"
+            }
+          >
             FAQ
           </NavLink>
-          <NavLink to="/contact" className="nav-link">
+          <NavLink
+            to="/contact"
+            className={({ isActive }) =>
+              isActive ? "ps-nav-link ps-nav-link-active" : "ps-nav-link"
+            }
+          >
             Contact
           </NavLink>
-          <NavLink to="/refunds" className="nav-link">
+          <NavLink
+            to="/refunds"
+            className={({ isActive }) =>
+              isActive ? "ps-nav-link ps-nav-link-active" : "ps-nav-link"
+            }
+          >
             Refunds
           </NavLink>
         </nav>
 
-        <div className="header-actions">
-          {!user && (
+        {/* Right side: login / account */}
+        <div className="ps-auth-buttons">
+          {user ? (
             <>
-              <button
-                className="btn-pill btn-ghost"
-                onClick={() => navigate("/buyer-login")}
-              >
+              <span className="ps-user-tag">
+                {role === "seller" ? "Seller" : "Buyer"} • {user.displayName || "Account"}
+              </span>
+              <button className="ps-btn ps-btn-outline" onClick={logout}>
+                Logout
+              </button>
+              {role === "seller" ? (
+                <Link to="/seller-dashboard" className="ps-btn ps-btn-primary">
+                  Dashboard
+                </Link>
+              ) : (
+                <Link to="/buyer-dashboard" className="ps-btn ps-btn-primary">
+                  Dashboard
+                </Link>
+              )}
+            </>
+          ) : (
+            <>
+              <button className="ps-btn ps-btn-outline" onClick={handleBuyerLogin}>
                 Buyer Login
               </button>
-              <button
-                className="btn-pill btn-primary"
-                onClick={() => navigate("/seller-login")}
-              >
+              <button className="ps-btn ps-btn-primary" onClick={handleSellerLogin}>
                 Seller Login
-              </button>
-            </>
-          )}
-
-          {isBuyer && (
-            <>
-              <button
-                className="btn-pill btn-ghost"
-                onClick={() => navigate("/buyer-dashboard")}
-              >
-                My Downloads
-              </button>
-              <button className="btn-pill btn-primary" onClick={handleLogout}>
-                Logout
-              </button>
-            </>
-          )}
-
-          {isSeller && (
-            <>
-              <button
-                className="btn-pill btn-ghost"
-                onClick={() => navigate("/seller-dashboard")}
-              >
-                Seller Dashboard
-              </button>
-              <button className="btn-pill btn-primary" onClick={handleLogout}>
-                Logout
               </button>
             </>
           )}
@@ -84,6 +98,6 @@ const Header = () => {
       </div>
     </header>
   );
-};
+}
 
 export default Header;
