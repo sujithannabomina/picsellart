@@ -12,14 +12,14 @@ import {
 
 import Home from "./pages/Home";
 import Explore from "./pages/Explore";
-import FAQ from "./pages/FAQ";
+import FAQ from "./pages/Faq";          // 👈 FIXED: Faq (not FAQ)
 import Contact from "./pages/Contact";
 import Refunds from "./pages/Refunds";
 import BuyerLogin from "./pages/BuyerLogin";
 import SellerLogin from "./pages/SellerLogin";
 import ViewImage from "./pages/ViewImage";
 
-// Scroll to top when route changes (better UX, does not affect styles)
+// Scroll to top when route changes
 function ScrollToTop() {
   const { pathname } = useLocation();
   React.useEffect(() => {
@@ -118,10 +118,10 @@ export default function App() {
           <Route path="/buyer-login" element={<BuyerLogin />} />
           <Route path="/seller-login" element={<SellerLogin />} />
 
-          {/* View page: get storage path from URL using splat pattern */}
+          {/* View page route – uses storage path after /view/ */}
           <Route path="/view/*" element={<ViewImage />} />
 
-          {/* Fallback: if some random path is opened, send user home */}
+          {/* Fallback – if unknown path, show Home */}
           <Route path="*" element={<Home />} />
         </Route>
       </Routes>
