@@ -1,348 +1,264 @@
 // src/pages/Explore.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { getExplorePhotos } from "../utils/storage";
+import { fetchPhotoIndex, fetchPhotoUrl } from "../utils/storage";
 
-const PAGE_SIZE = 6;
+const PER_PAGE = 8;
 
-function Explore() {
-  const [photos, setPhotos] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [searchText, setSearchText] = useState("");
+export default function Explore() {
+  const [allPhotos, setAllPhotos] = useState([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [indexLoading, setIndexLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
+  const [urlCache, setUrlCache] = useState({}); // storagePath -> downloadURL
   const [error, setError] = useState("");
 
+  // Load the lightweight index from Firebase once
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
-      setLoading(true);
-      setError("");
+    async function loadIndex() {
       try {
-        const data = await getExplorePhotos();
+        setIndexLoading(true);
+        const index = await fetchPhotoIndex();
         if (!cancelled) {
-          setPhotos(data);
-          setFiltered(data);
-          setCurrentPage(1);
+          setAllPhotos(index);
+          setError("");
         }
       } catch (err) {
-        console.error("Error loading explore photos", err);
+        console.error("Error loading photo index:", err);
         if (!cancelled) {
-          setError("Unable to load images. Please try again in a moment.");
+          setError("Unable to load images right now. Please try again.");
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setIndexLoading(false);
       }
     }
 
-    load();
+    loadIndex();
+
     return () => {
       cancelled = true;
     };
   }, []);
 
-  // Filter on search
+  // Filter by search
+  const filteredPhotos = useMemo(() => {
+    if (!searchTerm.trim()) return allPhotos;
+    const term = searchTerm.toLowerCase();
+    return allPhotos.filter(
+      (photo) =>
+        photo.fileName.toLowerCase().includes(term) ||
+        photo.title.toLowerCase().includes(term)
+    );
+  }, [allPhotos, searchTerm]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(filteredPhotos.length / PER_PAGE));
+
+  const currentPageItems = useMemo(() => {
+    const start = (currentPage - 1) * PER_PAGE;
+    const end = start + PER_PAGE;
+    return filteredPhotos.slice(start, end);
+  }, [filteredPhotos, currentPage]);
+
+  // Ensure currentPage is valid if filter changes
   useEffect(() => {
-    const text = searchText.trim().toLowerCase();
-    if (!text) {
-      setFiltered(photos);
+    if (currentPage > totalPages) {
       setCurrentPage(1);
-      return;
+    }
+  }, [currentPage, totalPages]);
+
+  // Load URLs only for current page items
+  useEffect(() => {
+    if (currentPageItems.length === 0) return;
+    let cancelled = false;
+
+    async function loadUrlsForPage() {
+      try {
+        setPageLoading(true);
+        const updates = {};
+
+        await Promise.all(
+          currentPageItems.map(async (photo) => {
+            if (!urlCache[photo.storagePath]) {
+              try {
+                const url = await fetchPhotoUrl(photo.storagePath);
+                updates[photo.storagePath] = url;
+              } catch (err) {
+                console.error("Error getting URL for", photo.storagePath, err);
+              }
+            }
+          })
+        );
+
+        if (!cancelled && Object.keys(updates).length > 0) {
+          setUrlCache((prev) => ({ ...prev, ...updates }));
+        }
+      } finally {
+        if (!cancelled) setPageLoading(false);
+      }
     }
 
-    const next = photos.filter((p) => {
-      return (
-        p.fileName.toLowerCase().includes(text) ||
-        p.title.toLowerCase().includes(text)
-      );
-    });
+    loadUrlsForPage();
 
-    setFiltered(next);
-    setCurrentPage(1);
-  }, [searchText, photos]);
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPageItems]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const startIndex = (currentPage - 1) * PAGE_SIZE;
-  const pageItems = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+  const handlePrev = () => {
+    setCurrentPage((p) => Math.max(1, p - 1));
+  };
 
-  const handlePrev = () =>
-    setCurrentPage((p) => (p > 1 ? p - 1 : p));
-  const handleNext = () =>
-    setCurrentPage((p) => (p < totalPages ? p + 1 : p));
+  const handleNext = () => {
+    setCurrentPage((p) => Math.min(totalPages, p + 1));
+  };
+
+  const showSkeletons =
+    indexLoading || (pageLoading && currentPageItems.length === 0);
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #eef1f7 0%, #e2e5ec 60%, #dde0e8 100%)",
-      }}
-    >
-      <main
-        style={{
-          maxWidth: "1120px",
-          margin: "0 auto",
-          padding: "48px 16px 64px",
-        }}
-      >
-        <header style={{ marginBottom: "24px" }}>
-          <h1
-            style={{
-              fontSize: "32px",
-              fontWeight: 800,
-              marginBottom: "8px",
-              color: "#111827",
-            }}
-          >
+    <div className="min-h-screen bg-slate-100 py-16">
+      <div className="mx-auto max-w-6xl px-4">
+        <header className="mb-10">
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
             Explore Marketplace
           </h1>
-          <p
-            style={{
-              color: "#4b5563",
-              fontSize: "15px",
-              maxWidth: "640px",
-            }}
-          >
-            Curated images from our public gallery and verified sellers.
-            Login as a buyer to purchase and download.
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">
+            Curated images from our public gallery and verified sellers. Login
+            as a buyer to purchase and download.
           </p>
+          <div className="mt-6 max-w-md">
+            <input
+              type="text"
+              placeholder="Search images..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-200"
+            />
+          </div>
         </header>
 
-        <div style={{ marginBottom: "24px" }}>
-          <input
-            type="text"
-            placeholder="Search images..."
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            style={{
-              width: "100%",
-              maxWidth: "320px",
-              padding: "10px 14px",
-              borderRadius: "999px",
-              border: "1px solid #d1d5db",
-              fontSize: "14px",
-              outline: "none",
-              boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
-            }}
-          />
-        </div>
-
-        {loading && (
-          <p style={{ color: "#4b5563", fontSize: "14px" }}>Loading images…</p>
-        )}
-
         {error && (
-          <p style={{ color: "#b91c1c", fontSize: "14px", marginBottom: "16px" }}>
+          <div className="mb-6 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
             {error}
-          </p>
+          </div>
         )}
 
-        {!loading && !error && filtered.length === 0 && (
-          <p style={{ color: "#4b5563", fontSize: "14px" }}>
-            No images found. Try a different search term.
-          </p>
-        )}
-
-        {/* Grid of cards */}
-        <section
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: "24px",
-          }}
-        >
-          {pageItems.map((photo) => (
-            <article
-              key={photo.id}
-              style={{
-                backgroundColor: "#ffffff",
-                borderRadius: "24px",
-                padding: "14px",
-                boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              {/* Image + watermark */}
+        {/* Grid */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {showSkeletons &&
+            Array.from({ length: PER_PAGE }).map((_, idx) => (
               <div
-                style={{
-                  position: "relative",
-                  borderRadius: "18px",
-                  overflow: "hidden",
-                  marginBottom: "12px",
-                  backgroundColor: "#111827",
-                }}
+                key={`skeleton-${idx}`}
+                className="flex flex-col rounded-3xl bg-white p-4 shadow-lg shadow-slate-200/80"
               >
-                <img
-                  src={photo.previewUrl}
-                  alt={photo.fileName}
-                  style={{
-                    width: "100%",
-                    height: "200px",
-                    objectFit: "cover",
-                    display: "block",
-                  }}
-                  loading="lazy"
-                />
-                {/* Watermark overlay */}
-                <div
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    pointerEvents: "none",
-                    background:
-                      "linear-gradient(135deg, rgba(0,0,0,0.0) 0%, rgba(15,23,42,0.38) 100%)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "18px",
-                    fontWeight: 700,
-                    letterSpacing: "0.25em",
-                    textTransform: "uppercase",
-                    color: "rgba(255,255,255,0.55)",
-                    mixBlendMode: "overlay",
-                  }}
-                >
-                  Picsellart
+                <div className="mb-4 h-48 w-full animate-pulse rounded-2xl bg-slate-200" />
+                <div className="mb-2 h-4 w-2/3 animate-pulse rounded bg-slate-200" />
+                <div className="mb-4 h-3 w-1/2 animate-pulse rounded bg-slate-100" />
+                <div className="mt-auto flex gap-2">
+                  <div className="h-9 flex-1 animate-pulse rounded-full bg-slate-100" />
+                  <div className="h-9 flex-1 animate-pulse rounded-full bg-slate-200" />
                 </div>
               </div>
+            ))}
 
-              <div style={{ marginBottom: "10px" }}>
-                <h3
-                  style={{
-                    fontSize: "16px",
-                    fontWeight: 700,
-                    marginBottom: "2px",
-                    color: "#111827",
-                  }}
-                >
-                  {photo.title}
-                </h3>
-                <p
-                  style={{
-                    fontSize: "12px",
-                    color: "#6b7280",
-                    marginBottom: "4px",
-                  }}
-                >
-                  {photo.fileName}
-                </p>
-                <p
-                  style={{
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    color: "#111827",
-                  }}
-                >
-                  ₹{photo.price}
-                </p>
-              </div>
+          {!showSkeletons &&
+            currentPageItems.map((photo) => {
+              const url = urlCache[photo.storagePath];
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  marginTop: "auto",
-                }}
-              >
-                {/* View button – goes to view page, still watermarked */}
-                <Link
-                  to={`/view/${photo.id}`}
-                  state={{ photo }}
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    padding: "8px 0",
-                    borderRadius: "999px",
-                    border: "1px solid #e5e7eb",
-                    fontSize: "13px",
-                    fontWeight: 500,
-                    color: "#111827",
-                    backgroundColor: "#ffffff",
-                    textDecoration: "none",
-                  }}
+              return (
+                <article
+                  key={photo.id}
+                  className="flex flex-col rounded-3xl bg-white p-4 shadow-lg shadow-slate-200/80"
                 >
-                  View
-                </Link>
+                  <div className="relative mb-4 overflow-hidden rounded-2xl bg-slate-900">
+                    {url ? (
+                      <img
+                        src={url}
+                        alt={photo.title}
+                        loading="lazy"
+                        className="h-48 w-full object-cover"
+                      />
+                    ) : (
+                      <div className="h-48 w-full animate-pulse bg-slate-200" />
+                    )}
 
-                {/* Buy button – will later enforce buyer login & payment */}
-                <Link
-                  to="/buyer-login"
-                  state={{ fromPhoto: photo }}
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    padding: "8px 0",
-                    borderRadius: "999px",
-                    border: "none",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: "#f9fafb",
-                    background:
-                      "linear-gradient(135deg, #050816 0%, #020617 40%, #020617 100%)",
-                    textDecoration: "none",
-                  }}
-                >
-                  Buy &amp; Download
-                </Link>
-              </div>
-            </article>
-          ))}
-        </section>
+                    {/* Strong watermark overlay */}
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="select-none text-3xl font-black tracking-[0.4em] text-white/45 mix-blend-soft-light rotate-[-26deg]">
+                        PICSELLART
+                      </span>
+                    </div>
+                  </div>
+
+                  <h2 className="text-sm font-semibold text-slate-900">
+                    {photo.title}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {photo.fileName}
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">
+                    ₹{photo.price}
+                  </p>
+
+                  <div className="mt-4 flex items-center gap-2">
+                    <Link
+                      to={`/view/${encodeURIComponent(photo.storagePath)}`}
+                      className="flex-1 rounded-full border border-slate-900/10 bg-white px-3 py-2 text-center text-xs font-medium text-slate-900 shadow-sm transition hover:border-slate-900/40 hover:bg-slate-50"
+                    >
+                      View
+                    </Link>
+                    <button
+                      type="button"
+                      className="flex-1 rounded-full bg-slate-900 px-3 py-2 text-center text-xs font-semibold text-white shadow-md shadow-slate-900/30 transition hover:bg-slate-800"
+                    >
+                      Buy &amp; Download
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+
+          {!indexLoading && !filteredPhotos.length && !error && (
+            <p className="col-span-full text-sm text-slate-500">
+              No images found for “{searchTerm}”.
+            </p>
+          )}
+        </div>
 
         {/* Pagination */}
-        {filtered.length > 0 && (
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              gap: "8px",
-              marginTop: "32px",
-            }}
-          >
+        {!indexLoading && filteredPhotos.length > 0 && (
+          <div className="mt-10 flex items-center justify-center gap-4 text-xs text-slate-600">
             <button
+              type="button"
               onClick={handlePrev}
               disabled={currentPage === 1}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "999px",
-                border: "1px solid #d1d5db",
-                backgroundColor: currentPage === 1 ? "#f9fafb" : "#ffffff",
-                color: "#111827",
-                fontSize: "13px",
-                cursor: currentPage === 1 ? "default" : "pointer",
-              }}
+              className="rounded-full border border-slate-200 bg-white px-4 py-1.5 font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
             >
               Prev
             </button>
-            <span
-              style={{ fontSize: "13px", color: "#4b5563", minWidth: "80px", textAlign: "center" }}
-            >
-              Page {currentPage} / {totalPages}
+            <span>
+              Page <span className="font-semibold">{currentPage}</span> /{" "}
+              <span className="font-semibold">{totalPages}</span>
             </span>
             <button
+              type="button"
               onClick={handleNext}
               disabled={currentPage === totalPages}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "999px",
-                border: "1px solid #d1d5db",
-                backgroundColor:
-                  currentPage === totalPages ? "#f9fafb" : "#ffffff",
-                color: "#111827",
-                fontSize: "13px",
-                cursor: currentPage === totalPages ? "default" : "pointer",
-              }}
+              className="rounded-full border border-slate-200 bg-white px-4 py-1.5 font-medium text-slate-700 shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
             >
               Next
             </button>
           </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }
-
-export default Explore;

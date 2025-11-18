@@ -2,70 +2,60 @@
 import { ref, listAll, getDownloadURL } from "firebase/storage";
 import { storage } from "../firebase";
 
-// Folders that should appear on the Explore page
-const PUBLIC_FOLDERS = ["public", "Buyer"];
+// Folders to scan in Storage
+const BUYER_FOLDER = "Buyer";
+const PUBLIC_FOLDER = "public";
 
-// Simple helper to generate a price pattern that looks nice
-function derivePrice(index) {
-  const priceCycle = [399, 499, 599, 799];
-  return priceCycle[index % priceCycle.length];
+// Simple price generator so your prices look like 399/499/599/799
+function getPriceForIndex(index) {
+  const prices = [399, 499, 599, 799];
+  return prices[index % prices.length];
 }
 
 /**
- * Load all images that should show on Explore.
- * - Reads from /public and /Buyer in Firebase Storage
- * - Returns nice objects for cards + view page
+ * Fetch a lightweight index of all photos from Firebase Storage.
+ * Returns: [{ id, title, fileName, storagePath, price }]
+ * NOTE: no download URLs here – keeps it fast.
  */
-export async function getExplorePhotos() {
-  const allPhotos = [];
-  let index = 0;
+export async function fetchPhotoIndex() {
+  const buyerRef = ref(storage, BUYER_FOLDER);
+  const publicRef = ref(storage, PUBLIC_FOLDER);
 
-  for (const folder of PUBLIC_FOLDERS) {
-    try {
-      const folderRef = ref(storage, `${folder}/`);
-      const res = await listAll(folderRef);
+  const [buyerList, publicList] = await Promise.all([
+    listAll(buyerRef),
+    listAll(publicRef),
+  ]);
 
-      for (const itemRef of res.items) {
-        const downloadUrl = await getDownloadURL(itemRef);
-        const fileName = itemRef.name;
-        const storagePath = itemRef.fullPath;
+  const allItems = [
+    ...buyerList.items.map((item) => ({
+      fullPath: item.fullPath,
+      name: item.name,
+    })),
+    ...publicList.items.map((item) => ({
+      fullPath: item.fullPath,
+      name: item.name,
+    })),
+  ];
 
-        const price = derivePrice(index);
+  // Sort for consistent order (by filename)
+  allItems.sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true }));
 
-        allPhotos.push({
-          // Encoded path used in URL
-          id: encodeURIComponent(storagePath),
-          storagePath,
-          title: "Street Photography",
-          fileName,
-          price,
-          previewUrl: downloadUrl,
-        });
+  const indexed = allItems.map((item, idx) => ({
+    id: item.fullPath,
+    title: "Street Photography",
+    fileName: item.name,
+    storagePath: item.fullPath,
+    price: getPriceForIndex(idx),
+  }));
 
-        index += 1;
-      }
-    } catch (err) {
-      console.error(`Error listing folder "${folder}"`, err);
-    }
-  }
+  return indexed;
+}
 
-  // Remove duplicates (in case the same file exists in both folders)
-  const uniqueMap = new Map();
-  for (const photo of allPhotos) {
-    if (!uniqueMap.has(photo.storagePath)) {
-      uniqueMap.set(photo.storagePath, photo);
-    }
-  }
-
-  const uniquePhotos = Array.from(uniqueMap.values());
-
-  // Sort nicely by filename (sample1, sample2, ..., sample112)
-  uniquePhotos.sort((a, b) =>
-    a.fileName.localeCompare(b.fileName, undefined, {
-      numeric: true,
-      sensitivity: "base",
-    })
-  );
-
-  return uniquePhotos;
+/**
+ * Get a download URL for a given storage path.
+ * Used only for images on the current page.
+ */
+export async function fetchPhotoUrl(storagePath) {
+  const imageRef = ref(storage, storagePath);
+  return getDownloadURL(imageRef);
 }
