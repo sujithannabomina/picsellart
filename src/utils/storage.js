@@ -99,3 +99,29 @@ export async function getImageMeta(fullPath) {
     title: "Street Photography",
   };
 }
+// Add this at the bottom of src/utils/storage.js
+
+/**
+ * Get a public URL for a single photo in Storage.
+ * `storagePath` is usually something like "Buyer/sample3.jpg"
+ * (we often pass it URL-encoded, so we decode first).
+ */
+export async function fetchPhotoUrl(storagePath) {
+  try {
+    // In case the param is URL-encoded from the router
+    const decodedPath = decodeURIComponent(storagePath || "");
+
+    // If it's already a full https URL, just return it
+    if (decodedPath.startsWith("http://") || decodedPath.startsWith("https://")) {
+      return decodedPath;
+    }
+
+    const photoRef = ref(storage, decodedPath);
+    const url = await getDownloadURL(photoRef);
+    return url;
+  } catch (err) {
+    console.error("Error fetching photo URL from Storage:", err);
+    throw err;
+  }
+}
+
