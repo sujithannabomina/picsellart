@@ -1,53 +1,63 @@
 // src/pages/Faq.jsx
-const faqs = [
-  {
-    q: "What is Picsellart?",
-    a: "Picsellart is a curated marketplace where photographers and creators sell high-quality digital images to designers, agencies and brands.",
-  },
-  {
-    q: "How do I become a seller?",
-    a: "Choose a seller plan, sign in with Google and upload your approved images. You set your own price within the plan limits.",
-  },
-  {
-    q: "How are images delivered to buyers?",
-    a: "After successful Razorpay payment, buyers receive instant access to a clean, watermark-free download from their dashboard.",
-  },
-  {
-    q: "Do images have watermarks?",
-    a: "Public previews on Explore and View are watermarked. Purchased downloads are full-resolution and watermark-free.",
-  },
-  {
-    q: "What is your refund policy?",
-    a: "Because files are instantly downloadable, refunds are only offered when a file is corrupt, incomplete or does not match the listing description.",
-  },
-  {
-    q: "Can I use images commercially?",
-    a: "Yes, unless a listing clearly says otherwise. Each file includes a standard commercial license. Reselling or redistributing the raw files is not allowed.",
-  },
-];
+import React from "react";
 
-const Faq = () => {
+export default function Faq() {
   return (
-    <main className="page-shell">
-      <section className="page-header-block">
-        <h1 className="page-title">Frequently Asked Questions</h1>
-        <p className="page-subtitle">
-          Answers to common questions about buying and selling on Picsellart.
+    <div className="page-wrapper">
+      <h1 className="page-title">Frequently Asked Questions</h1>
+      <p className="page-subtitle">
+        Answers to common questions about buying and selling on Picsellart.
+      </p>
+
+      <div className="card">
+        <h2>What is Picsellart?</h2>
+        <p>
+          Picsellart is a curated marketplace where photographers and creators
+          sell high-quality digital images to designers, agencies and brands.
         </p>
-      </section>
+      </div>
 
-      <section className="page-card">
-        <dl className="faq-list">
-          {faqs.map((item) => (
-            <div key={item.q} className="faq-item">
-              <dt className="faq-question">{item.q}</dt>
-              <dd className="faq-answer">{item.a}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    </main>
+      <div className="card">
+        <h2>How do I become a seller?</h2>
+        <p>
+          Choose a seller plan, sign in with Google and upload your approved
+          images. You set your own price within the plan limits.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>How are images delivered to buyers?</h2>
+        <p>
+          After successful Razorpay payment, buyers receive instant access to a
+          clean, watermark-free download from their dashboard.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Do images have watermarks?</h2>
+        <p>
+          Public previews on Explore and View are watermarked. Purchased
+          downloads are full-resolution and watermark-free.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>What is your refund policy?</h2>
+        <p>
+          Because files are instantly downloadable, refunds are only offered
+          when a file is corrupt, incomplete or does not match the listing
+          description.
+        </p>
+      </div>
+
+      <div className="card">
+        <h2>Can I use images commercially?</h2>
+        <p>
+          Yes, unless a listing clearly says otherwise. Each file includes a
+          standard commercial license. Reselling or redistributing the raw files
+          is not allowed.
+        </p>
+      </div>
+    </div>
   );
-};
-
-export default Faq;
+}

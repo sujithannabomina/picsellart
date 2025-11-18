@@ -1,103 +1,118 @@
-import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { fetchAllExploreImages, filterAndPaginate } from "../utils/storage";
+// src/pages/Explore.jsx
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  fetchAllExploreImages,
+  filterAndPaginate,
+} from "../utils/storage";
 
 export default function Explore() {
-  const [images, setImages] = useState([]);
-  const [preview, setPreview] = useState(null);
-  const [search, setSearch] = useState("");
+  const [allImages, setAllImages] = useState([]);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [pageData, setPageData] = useState({ data: [], isLast: true });
+  const [loading, setLoading] = useState(true);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     async function load() {
-      const data = await fetchAllExploreImages();
-      setImages(data);
+      setLoading(true);
+      const images = await fetchAllExploreImages();
+      setAllImages(images);
+      setLoading(false);
     }
     load();
   }, []);
 
-  const filtered = filterAndPaginate(images, page, search);
+  useEffect(() => {
+    const result = filterAndPaginate(allImages, page, search);
+    setPageData(result);
+  }, [allImages, page, search]);
+
+  const handleView = (img) => {
+    navigate(`/view/${img.id}`);
+  };
+
+  const handleBuy = (img) => {
+    // Buyer must log in before payment
+    navigate("/buyer-login");
+  };
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Explore Marketplace</h1>
+    <div className="page-wrapper">
+      <h1 className="page-title">Explore Marketplace</h1>
+      <p className="page-subtitle">
+        Curated images from our public gallery and verified sellers. Login as a
+        buyer to purchase and download.
+      </p>
 
-      <input
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        className="border px-4 py-2 rounded w-full max-w-md mb-6"
-        placeholder="Search images..."
-      />
+      <div className="explore-header-row">
+        <input
+          className="explore-search-input"
+          type="text"
+          placeholder="Search images..."
+          value={search}
+          onChange={(e) => {
+            setPage(1);
+            setSearch(e.target.value);
+          }}
+        />
+      </div>
 
-      {/* GRID */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        {filtered.data.map((img) => (
-          <div key={img.id} className="border rounded-lg p-3 shadow-sm bg-white">
-
-            <img
-              src={img.thumbnailUrl}
-              alt={img.name}
-              className="rounded-md h-40 w-full object-cover cursor-pointer"
-              onClick={() => setPreview(img)}
-            />
-
-            <h3 className="font-semibold mt-3">{img.category}</h3>
-            <p className="text-sm text-gray-500">{img.name}</p>
-            <p className="font-bold text-indigo-700">₹{img.price}</p>
-
-            <div className="flex gap-2 mt-3">
-              <Link
-                to={`/view/${img.id}`}
-                className="px-3 py-1 border rounded hover:bg-gray-100"
-              >
-                View
-              </Link>
-
-              <Link
-                to={`/buyer-login`}
-                className="px-3 py-1 border rounded hover:bg-gray-200"
-              >
-                Buy
-              </Link>
-            </div>
+      {loading ? (
+        <p>Loading images…</p>
+      ) : pageData.data.length === 0 ? (
+        <p>No images found.</p>
+      ) : (
+        <>
+          <div className="explore-grid">
+            {pageData.data.map((img) => (
+              <div className="explore-card" key={img.id}>
+                <img
+                  src={img.thumbnailUrl}
+                  alt={img.name}
+                  className="explore-card-image"
+                />
+                <div className="explore-card-title">{img.category}</div>
+                <div className="explore-card-meta">{img.name}</div>
+                <div className="explore-card-price">₹{img.price}</div>
+                <div className="explore-card-actions">
+                  <button
+                    className="explore-btn"
+                    onClick={() => handleView(img)}
+                  >
+                    View
+                  </button>
+                  <button
+                    className="explore-btn primary"
+                    onClick={() => handleBuy(img)}
+                  >
+                    Buy &amp; Download
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* PAGINATION */}
-      <div className="mt-6 flex items-center gap-3">
-        <button
-          disabled={page === 1}
-          onClick={() => setPage(p => p - 1)}
-          className="px-4 py-2 border rounded disabled:opacity-40"
-        >
-          Prev
-        </button>
-
-        <span>Page {page}</span>
-
-        <button
-          disabled={filtered.isLast}
-          onClick={() => setPage(p => p + 1)}
-          className="px-4 py-2 border rounded disabled:opacity-40"
-        >
-          Next
-        </button>
-      </div>
-
-      {/* PREVIEW MODAL */}
-      {preview && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div className="bg-white p-4 rounded-lg shadow-lg max-w-3xl">
-            <img src={preview.watermarkedUrl} className="rounded-lg" />
+          <div className="pagination">
             <button
-              className="mt-4 px-6 py-2 border rounded"
-              onClick={() => setPreview(null)}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
             >
-              Close
+              Prev
+            </button>
+            <span>Page {page}</span>
+            <button
+              onClick={() => {
+                if (!pageData.isLast) setPage((p) => p + 1);
+              }}
+              disabled={pageData.isLast}
+            >
+              Next
             </button>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

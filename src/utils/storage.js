@@ -1,80 +1,41 @@
 // src/utils/storage.js
-// Utilities for Explore page image listing
+// Image helpers for Explore + View pages
 
-import { storage } from "../firebase";
-import { ref, listAll, getDownloadURL } from "firebase/storage";
+// For now we load sample images from /public/images.
+// You currently have sample1.jpg ... sample6.jpg there.
+// You can add more later by extending SAMPLE_FILES.
+const SAMPLE_FILES = [
+  "sample1.jpg",
+  "sample2.jpg",
+  "sample3.jpg",
+  "sample4.jpg",
+  "sample5.jpg",
+  "sample6.jpg",
+];
 
-/**
- * 1) SAMPLE IMAGES FROM /public/images
- *
- * Vite copies everything in /public to the root of the site.
- * `import.meta.glob("/images/*")` will pick up:
- *   public/images/sample1.jpg, sample2.jpg, ...
- */
-const sampleModules = import.meta.glob("/images/*.{jpg,jpeg,png}", {
-  eager: true,
-  as: "url",
-});
-
-const sampleData = Object.entries(sampleModules).map(([path, url], index) => {
-  const fileName = path.split("/").pop() || `sample-${index + 1}.jpg`;
-
+const sampleData = SAMPLE_FILES.map((fileName, index) => {
   return {
-    id: `sample-${fileName}`,    // unique ID for view route
+    id: `sample-${index + 1}`,       // used in /view/:id
     name: fileName,
     category: "Street Photography",
-    price: 399,                  // base price – can adjust later
-    watermarkedUrl: url,         // right now same file; watermark overlay is handled in UI
-    thumbnailUrl: url,
+    price: 399 + (index % 3) * 100,  // 399 / 499 / 699 just for variety
+    thumbnailUrl: `/images/${fileName}`,
+    watermarkedUrl: `/images/${fileName}`, // watermark is visual overlay in UI
     source: "sample",
   };
 });
 
 /**
- * 2) SELLER IMAGES FROM FIREBASE STORAGE
- *
- * We assume seller uploads go to Storage folder: "seller-images/"
- * (we can adjust this later if your path is different).
- */
-async function fetchSellerImages() {
-  try {
-    const folderRef = ref(storage, "seller-images");
-    const res = await listAll(folderRef);
-
-    const items = await Promise.all(
-      res.items.map(async (item) => {
-        const url = await getDownloadURL(item);
-        const name = item.name;
-
-        return {
-          id: `seller-${name}`,
-          name,
-          category: "Seller Upload",
-          price: 499,             // default; real price can come from Firestore later
-          watermarkedUrl: url,
-          thumbnailUrl: url,
-          source: "seller",
-        };
-      })
-    );
-
-    return items;
-  } catch (err) {
-    console.error("Error fetching seller images from Storage:", err);
-    return [];
-  }
-}
-
-/**
- * Merge sample + seller images for Explore page.
+ * Get all images for Explore.
+ * (Later we can append seller uploads here.)
  */
 export async function fetchAllExploreImages() {
-  const sellerImages = await fetchSellerImages();
-  return [...sampleData, ...sellerImages];
+  // Async to keep API flexible, even though this is simple now.
+  return sampleData;
 }
 
 /**
- * Find one image by ID (used on /view/:id page).
+ * Find a single image by ID (used on /view/:id).
  */
 export async function getExploreImageById(id) {
   const all = await fetchAllExploreImages();
@@ -82,7 +43,7 @@ export async function getExploreImageById(id) {
 }
 
 /**
- * Filter + paginate helper for Explore grid.
+ * Filter + paginate helper.
  */
 export function filterAndPaginate(list, page, search) {
   const pageSize = 12;

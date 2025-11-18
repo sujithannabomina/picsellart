@@ -1,41 +1,63 @@
-import { Link, NavLink } from "react-router-dom";
+// src/components/Header.jsx
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import "./Header.css";
+
+const navItems = [
+  { path: "/explore", label: "Explore" },
+  { path: "/faq", label: "FAQ" },
+  { path: "/contact", label: "Contact" },
+  { path: "/refunds", label: "Refunds" },
+];
 
 export default function Header() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(path + "/");
+
   return (
-    <header className="bg-white border-b shadow-sm sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <header className="site-header">
+      <div className="site-header-inner">
+        {/* Brand */}
+        <button
+          className="brand"
+          onClick={() => navigate("/")}
+          aria-label="Go to homepage"
+        >
+          <span className="brand-mark">●</span>
+          <span className="brand-text">Picsellart</span>
+        </button>
 
-        {/* LOGO LEFT */}
-        <Link to="/" className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full shadow-md"></div>
-          <span className="text-xl font-bold text-gray-800 tracking-tight">
-            Picsellart
-          </span>
-        </Link>
-
-        {/* NAV LINKS */}
-        <nav className="flex items-center gap-6 text-gray-700">
-          <NavLink to="/explore" className="hover:text-black">Explore</NavLink>
-          <NavLink to="/faq" className="hover:text-black">FAQ</NavLink>
-          <NavLink to="/contact" className="hover:text-black">Contact</NavLink>
-          <NavLink to="/refunds" className="hover:text-black">Refunds</NavLink>
+        {/* Navigation */}
+        <nav className="site-nav">
+          {navItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={
+                "nav-link" + (isActive(item.path) ? " nav-link-active" : "")
+              }
+            >
+              {item.label}
+            </Link>
+          ))}
         </nav>
 
-        {/* BUTTONS RIGHT */}
-        <div className="flex items-center gap-3">
-          <Link
-            to="/buyer-login"
-            className="px-4 py-2 rounded-full border text-sm hover:bg-gray-100"
+        {/* Auth buttons */}
+        <div className="header-actions">
+          <button
+            className="header-btn ghost"
+            onClick={() => navigate("/buyer-login")}
           >
             Buyer Login
-          </Link>
-
-          <Link
-            to="/seller-login"
-            className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-indigo-500 text-white text-sm shadow-md hover:opacity-90"
+          </button>
+          <button
+            className="header-btn primary"
+            onClick={() => navigate("/seller-login")}
           >
             Seller Login
-          </Link>
+          </button>
         </div>
       </div>
     </header>
