@@ -99,7 +99,6 @@ export async function getImageMeta(fullPath) {
     title: "Street Photography",
   };
 }
-// Add this at the bottom of src/utils/storage.js
 
 /**
  * Get a public URL for a single photo in Storage.
@@ -124,4 +123,5 @@ export async function fetchPhotoUrl(storagePath) {
     throw err;
   }
 }
+
 
