@@ -1,119 +1,348 @@
 // src/pages/Explore.jsx
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  fetchAllExploreImages,
-  filterAndPaginate,
-} from "../utils/storage";
+import { Link } from "react-router-dom";
+import { getExplorePhotos } from "../utils/storage";
 
-export default function Explore() {
-  const [allImages, setAllImages] = useState([]);
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [pageData, setPageData] = useState({ data: [], isLast: true });
+const PAGE_SIZE = 6;
+
+function Explore() {
+  const [photos, setPhotos] = useState([]);
+  const [filtered, setFiltered] = useState([]);
+  const [searchText, setSearchText] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
-
-  const navigate = useNavigate();
+  const [error, setError] = useState("");
 
   useEffect(() => {
+    let cancelled = false;
+
     async function load() {
       setLoading(true);
-      const images = await fetchAllExploreImages();
-      setAllImages(images);
-      setLoading(false);
+      setError("");
+      try {
+        const data = await getExplorePhotos();
+        if (!cancelled) {
+          setPhotos(data);
+          setFiltered(data);
+          setCurrentPage(1);
+        }
+      } catch (err) {
+        console.error("Error loading explore photos", err);
+        if (!cancelled) {
+          setError("Unable to load images. Please try again in a moment.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     }
+
     load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  // Filter on search
   useEffect(() => {
-    const result = filterAndPaginate(allImages, page, search);
-    setPageData(result);
-  }, [allImages, page, search]);
+    const text = searchText.trim().toLowerCase();
+    if (!text) {
+      setFiltered(photos);
+      setCurrentPage(1);
+      return;
+    }
 
-  const handleView = (img) => {
-    navigate(`/view/${img.id}`);
-  };
+    const next = photos.filter((p) => {
+      return (
+        p.fileName.toLowerCase().includes(text) ||
+        p.title.toLowerCase().includes(text)
+      );
+    });
 
-  const handleBuy = (img) => {
-    // Buyer must log in before payment
-    navigate("/buyer-login");
-  };
+    setFiltered(next);
+    setCurrentPage(1);
+  }, [searchText, photos]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const pageItems = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+
+  const handlePrev = () =>
+    setCurrentPage((p) => (p > 1 ? p - 1 : p));
+  const handleNext = () =>
+    setCurrentPage((p) => (p < totalPages ? p + 1 : p));
 
   return (
-    <div className="page-wrapper">
-      <h1 className="page-title">Explore Marketplace</h1>
-      <p className="page-subtitle">
-        Curated images from our public gallery and verified sellers. Login as a
-        buyer to purchase and download.
-      </p>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(180deg, #eef1f7 0%, #e2e5ec 60%, #dde0e8 100%)",
+      }}
+    >
+      <main
+        style={{
+          maxWidth: "1120px",
+          margin: "0 auto",
+          padding: "48px 16px 64px",
+        }}
+      >
+        <header style={{ marginBottom: "24px" }}>
+          <h1
+            style={{
+              fontSize: "32px",
+              fontWeight: 800,
+              marginBottom: "8px",
+              color: "#111827",
+            }}
+          >
+            Explore Marketplace
+          </h1>
+          <p
+            style={{
+              color: "#4b5563",
+              fontSize: "15px",
+              maxWidth: "640px",
+            }}
+          >
+            Curated images from our public gallery and verified sellers.
+            Login as a buyer to purchase and download.
+          </p>
+        </header>
 
-      <div className="explore-header-row">
-        <input
-          className="explore-search-input"
-          type="text"
-          placeholder="Search images..."
-          value={search}
-          onChange={(e) => {
-            setPage(1);
-            setSearch(e.target.value);
+        <div style={{ marginBottom: "24px" }}>
+          <input
+            type="text"
+            placeholder="Search images..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            style={{
+              width: "100%",
+              maxWidth: "320px",
+              padding: "10px 14px",
+              borderRadius: "999px",
+              border: "1px solid #d1d5db",
+              fontSize: "14px",
+              outline: "none",
+              boxShadow: "0 8px 20px rgba(15, 23, 42, 0.06)",
+            }}
+          />
+        </div>
+
+        {loading && (
+          <p style={{ color: "#4b5563", fontSize: "14px" }}>Loading images…</p>
+        )}
+
+        {error && (
+          <p style={{ color: "#b91c1c", fontSize: "14px", marginBottom: "16px" }}>
+            {error}
+          </p>
+        )}
+
+        {!loading && !error && filtered.length === 0 && (
+          <p style={{ color: "#4b5563", fontSize: "14px" }}>
+            No images found. Try a different search term.
+          </p>
+        )}
+
+        {/* Grid of cards */}
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: "24px",
           }}
-        />
-      </div>
-
-      {loading ? (
-        <p>Loading images…</p>
-      ) : pageData.data.length === 0 ? (
-        <p>No images found.</p>
-      ) : (
-        <>
-          <div className="explore-grid">
-            {pageData.data.map((img) => (
-              <div className="explore-card" key={img.id}>
+        >
+          {pageItems.map((photo) => (
+            <article
+              key={photo.id}
+              style={{
+                backgroundColor: "#ffffff",
+                borderRadius: "24px",
+                padding: "14px",
+                boxShadow: "0 18px 40px rgba(15, 23, 42, 0.12)",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+              }}
+            >
+              {/* Image + watermark */}
+              <div
+                style={{
+                  position: "relative",
+                  borderRadius: "18px",
+                  overflow: "hidden",
+                  marginBottom: "12px",
+                  backgroundColor: "#111827",
+                }}
+              >
                 <img
-                  src={img.thumbnailUrl}
-                  alt={img.name}
-                  className="explore-card-image"
+                  src={photo.previewUrl}
+                  alt={photo.fileName}
+                  style={{
+                    width: "100%",
+                    height: "200px",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                  loading="lazy"
                 />
-                <div className="explore-card-title">{img.category}</div>
-                <div className="explore-card-meta">{img.name}</div>
-                <div className="explore-card-price">₹{img.price}</div>
-                <div className="explore-card-actions">
-                  <button
-                    className="explore-btn"
-                    onClick={() => handleView(img)}
-                  >
-                    View
-                  </button>
-                  <button
-                    className="explore-btn primary"
-                    onClick={() => handleBuy(img)}
-                  >
-                    Buy &amp; Download
-                  </button>
+                {/* Watermark overlay */}
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    pointerEvents: "none",
+                    background:
+                      "linear-gradient(135deg, rgba(0,0,0,0.0) 0%, rgba(15,23,42,0.38) 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "18px",
+                    fontWeight: 700,
+                    letterSpacing: "0.25em",
+                    textTransform: "uppercase",
+                    color: "rgba(255,255,255,0.55)",
+                    mixBlendMode: "overlay",
+                  }}
+                >
+                  Picsellart
                 </div>
               </div>
-            ))}
-          </div>
 
-          <div className="pagination">
+              <div style={{ marginBottom: "10px" }}>
+                <h3
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: 700,
+                    marginBottom: "2px",
+                    color: "#111827",
+                  }}
+                >
+                  {photo.title}
+                </h3>
+                <p
+                  style={{
+                    fontSize: "12px",
+                    color: "#6b7280",
+                    marginBottom: "4px",
+                  }}
+                >
+                  {photo.fileName}
+                </p>
+                <p
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    color: "#111827",
+                  }}
+                >
+                  ₹{photo.price}
+                </p>
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  marginTop: "auto",
+                }}
+              >
+                {/* View button – goes to view page, still watermarked */}
+                <Link
+                  to={`/view/${photo.id}`}
+                  state={{ photo }}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    padding: "8px 0",
+                    borderRadius: "999px",
+                    border: "1px solid #e5e7eb",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    color: "#111827",
+                    backgroundColor: "#ffffff",
+                    textDecoration: "none",
+                  }}
+                >
+                  View
+                </Link>
+
+                {/* Buy button – will later enforce buyer login & payment */}
+                <Link
+                  to="/buyer-login"
+                  state={{ fromPhoto: photo }}
+                  style={{
+                    flex: 1,
+                    textAlign: "center",
+                    padding: "8px 0",
+                    borderRadius: "999px",
+                    border: "none",
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: "#f9fafb",
+                    background:
+                      "linear-gradient(135deg, #050816 0%, #020617 40%, #020617 100%)",
+                    textDecoration: "none",
+                  }}
+                >
+                  Buy &amp; Download
+                </Link>
+              </div>
+            </article>
+          ))}
+        </section>
+
+        {/* Pagination */}
+        {filtered.length > 0 && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              gap: "8px",
+              marginTop: "32px",
+            }}
+          >
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
+              onClick={handlePrev}
+              disabled={currentPage === 1}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "999px",
+                border: "1px solid #d1d5db",
+                backgroundColor: currentPage === 1 ? "#f9fafb" : "#ffffff",
+                color: "#111827",
+                fontSize: "13px",
+                cursor: currentPage === 1 ? "default" : "pointer",
+              }}
             >
               Prev
             </button>
-            <span>Page {page}</span>
+            <span
+              style={{ fontSize: "13px", color: "#4b5563", minWidth: "80px", textAlign: "center" }}
+            >
+              Page {currentPage} / {totalPages}
+            </span>
             <button
-              onClick={() => {
-                if (!pageData.isLast) setPage((p) => p + 1);
+              onClick={handleNext}
+              disabled={currentPage === totalPages}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "999px",
+                border: "1px solid #d1d5db",
+                backgroundColor:
+                  currentPage === totalPages ? "#f9fafb" : "#ffffff",
+                color: "#111827",
+                fontSize: "13px",
+                cursor: currentPage === totalPages ? "default" : "pointer",
               }}
-              disabled={pageData.isLast}
             >
               Next
             </button>
           </div>
-        </>
-      )}
+        )}
+      </main>
     </div>
   );
 }
+
+export default Explore;

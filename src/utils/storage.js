@@ -1,68 +1,71 @@
 // src/utils/storage.js
-// Image helpers for Explore + View pages
+import { ref, listAll, getDownloadURL } from "firebase/storage";
+import { storage } from "../firebase";
 
-// For now we load sample images from /public/images.
-// You currently have sample1.jpg ... sample6.jpg there.
-// You can add more later by extending SAMPLE_FILES.
-const SAMPLE_FILES = [
-  "sample1.jpg",
-  "sample2.jpg",
-  "sample3.jpg",
-  "sample4.jpg",
-  "sample5.jpg",
-  "sample6.jpg",
-];
+// Folders that should appear on the Explore page
+const PUBLIC_FOLDERS = ["public", "Buyer"];
 
-const sampleData = SAMPLE_FILES.map((fileName, index) => {
-  return {
-    id: `sample-${index + 1}`,       // used in /view/:id
-    name: fileName,
-    category: "Street Photography",
-    price: 399 + (index % 3) * 100,  // 399 / 499 / 699 just for variety
-    thumbnailUrl: `/images/${fileName}`,
-    watermarkedUrl: `/images/${fileName}`, // watermark is visual overlay in UI
-    source: "sample",
-  };
-});
-
-/**
- * Get all images for Explore.
- * (Later we can append seller uploads here.)
- */
-export async function fetchAllExploreImages() {
-  // Async to keep API flexible, even though this is simple now.
-  return sampleData;
+// Simple helper to generate a price pattern that looks nice
+function derivePrice(index) {
+  const priceCycle = [399, 499, 599, 799];
+  return priceCycle[index % priceCycle.length];
 }
 
 /**
- * Find a single image by ID (used on /view/:id).
+ * Load all images that should show on Explore.
+ * - Reads from /public and /Buyer in Firebase Storage
+ * - Returns nice objects for cards + view page
  */
-export async function getExploreImageById(id) {
-  const all = await fetchAllExploreImages();
-  return all.find((img) => img.id === id);
-}
+export async function getExplorePhotos() {
+  const allPhotos = [];
+  let index = 0;
 
-/**
- * Filter + paginate helper.
- */
-export function filterAndPaginate(list, page, search) {
-  const pageSize = 12;
+  for (const folder of PUBLIC_FOLDERS) {
+    try {
+      const folderRef = ref(storage, `${folder}/`);
+      const res = await listAll(folderRef);
 
-  let filtered = list;
-  if (search && search.trim()) {
-    const term = search.toLowerCase();
-    filtered = filtered.filter(
-      (img) =>
-        img.name.toLowerCase().includes(term) ||
-        (img.category || "").toLowerCase().includes(term)
-    );
+      for (const itemRef of res.items) {
+        const downloadUrl = await getDownloadURL(itemRef);
+        const fileName = itemRef.name;
+        const storagePath = itemRef.fullPath;
+
+        const price = derivePrice(index);
+
+        allPhotos.push({
+          // Encoded path used in URL
+          id: encodeURIComponent(storagePath),
+          storagePath,
+          title: "Street Photography",
+          fileName,
+          price,
+          previewUrl: downloadUrl,
+        });
+
+        index += 1;
+      }
+    } catch (err) {
+      console.error(`Error listing folder "${folder}"`, err);
+    }
   }
 
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
+  // Remove duplicates (in case the same file exists in both folders)
+  const uniqueMap = new Map();
+  for (const photo of allPhotos) {
+    if (!uniqueMap.has(photo.storagePath)) {
+      uniqueMap.set(photo.storagePath, photo);
+    }
+  }
 
-  return {
-    data: filtered.slice(start, end),
-    isLast: end >= filtered.length,
-  };
+  const uniquePhotos = Array.from(uniqueMap.values());
+
+  // Sort nicely by filename (sample1, sample2, ..., sample112)
+  uniquePhotos.sort((a, b) =>
+    a.fileName.localeCompare(b.fileName, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
+
+  return uniquePhotos;
 }
