@@ -1,136 +1,111 @@
-// src/pages/ViewImage.jsx
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { fetchPhotoUrl } from "../utils/storage";
 
 export default function ViewImage() {
-  const { id } = useParams(); // encoded path like "Buyer%2Fsample3.jpg"
   const navigate = useNavigate();
-  const [imageUrl, setImageUrl] = useState("");
-  const [loading, setLoading] = useState(true);
+  const { storagePath } = useParams();
+  const decodedPath = decodeURIComponent(storagePath || "");
 
-  const fileName = decodeURIComponent(id || "").split("/").pop() || "image.jpg";
+  const [photo, setPhoto] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    let ignore = false;
-
-    async function load() {
+    let active = true;
+    (async () => {
       try {
-        const url = await fetchPhotoUrl(id);
-        if (!ignore) setImageUrl(url);
-      } catch (err) {
-        console.error("Error fetching photo URL", err);
+        const data = await fetchPhotoUrl(decodedPath);
+        if (active) setPhoto(data);
+      } catch (e) {
+        console.error("Error loading image", e);
+        if (active) setError("Unable to load this image.");
       } finally {
-        if (!ignore) setLoading(false);
+        if (active) setLoading(false);
       }
-    }
-
-    if (id) load();
+    })();
     return () => {
-      ignore = true;
+      active = false;
     };
-  }, [id]);
+  }, [decodedPath]);
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
-          <button
-            className="flex items-center gap-2"
-            onClick={() => navigate("/")}
-          >
-            <span className="h-3 w-3 rounded-full bg-violet-500 shadow" />
-            <span className="text-lg font-semibold tracking-tight">
-              Picsellart
-            </span>
-          </button>
+    <section className="pt-8 md:pt-10">
+      <button
+        onClick={() => navigate("/explore")}
+        className="mb-6 inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-800 hover:bg-slate-50"
+      >
+        ← Back to Explore
+      </button>
 
-          <button
-            onClick={() => navigate(-1)}
-            className="rounded-full border border-slate-300 px-4 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-          >
-            ← Back to Explore
-          </button>
-        </div>
-      </header>
+      {loading && <p className="text-sm text-slate-600">Loading image…</p>}
+      {error && !loading && (
+        <p className="text-sm text-red-600">{error}</p>
+      )}
 
-      <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 sm:px-6 lg:flex-row">
-        {/* Image */}
-        <section className="flex-1">
-          <div className="mx-auto max-w-xl rounded-3xl bg-slate-900 p-4 shadow-lg">
-            <div className="relative overflow-hidden rounded-2xl bg-black">
-              <div className="aspect-[4/3]">
-                {loading ? (
-                  <div className="h-full w-full animate-pulse bg-slate-800" />
-                ) : (
-                  <img
-                    src={imageUrl}
-                    alt={fileName}
-                    className="h-full w-full object-contain"
-                  />
-                )}
-              </div>
-              {/* Strong watermark on preview */}
+      {photo && !loading && !error && (
+        <div className="grid gap-10 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-start">
+          {/* Image */}
+          <div className="rounded-[32px] bg-slate-900/95 p-4 md:p-6 shadow-[0_20px_45px_rgba(15,23,42,0.75)]">
+            <div className="relative overflow-hidden rounded-3xl bg-slate-800 max-h-[70vh]">
+              <img
+                src={photo.url}
+                alt={photo.name}
+                className="h-full w-full object-contain bg-black"
+              />
+              <div className="absolute inset-0 bg-black/25" />
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="text-white/80 text-3xl font-semibold tracking-[0.5em] drop-shadow-xl">
+                <span className="text-white/85 text-3xl md:text-4xl font-semibold tracking-[0.4em] [text-shadow:0_0_16px_rgba(0,0,0,1)]">
                   PICSELLART
                 </span>
               </div>
             </div>
-            <p className="mt-3 text-center text-[11px] text-slate-300">
+            <p className="mt-3 text-[11px] text-slate-300 text-center">
               Watermarked preview shown. Purchase to download the full
               resolution, clean image.
             </p>
           </div>
-        </section>
 
-        {/* Details / Licensing */}
-        <section className="flex-1 space-y-6">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              Street Photography
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">{fileName}</p>
-            <p className="mt-3 text-xl font-semibold text-slate-900">₹799</p>
-          </div>
+          {/* Details */}
+          <div className="space-y-5">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold text-slate-900">
+                Street Photography
+              </h1>
+              <p className="text-xs text-slate-500 mt-1">{photo.name}</p>
+              <p className="mt-3 text-lg font-semibold text-slate-900">
+                ₹{photo.price.toLocaleString("en-IN")}
+              </p>
+            </div>
 
-          <div className="flex gap-3">
-            <button
-              onClick={() => navigate("/buyer-login")}
-              className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-violet-200 hover:brightness-110"
-            >
-              Buy &amp; Download
-            </button>
-            <button
-              onClick={() => navigate("/explore")}
-              className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-            >
-              Continue browsing
-            </button>
-          </div>
+            <div className="flex gap-3">
+              <button className="flex-1 rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:shadow-lg">
+                Buy &amp; Download
+              </button>
+              <button
+                onClick={() => navigate("/explore")}
+                className="flex-1 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+              >
+                Continue browsing
+              </button>
+            </div>
 
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">
-              Licensing &amp; usage
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              Purchased files include a standard commercial license. You can use
-              them in client work, social media, print and web designs. Reselling
-              raw files or sharing the download link is not allowed.
-            </p>
+            <div className="rounded-2xl bg-white shadow-sm border border-slate-200 p-4 text-xs text-slate-700 space-y-3">
+              <h2 className="font-semibold text-slate-900">
+                Licensing &amp; usage
+              </h2>
+              <p>
+                Purchased files include a standard commercial license. You can
+                use them in client work, social media, print and web designs.
+              </p>
+              <p>
+                Reselling raw files or sharing the download link is not allowed.
+                Each purchase is for a single buyer account.
+              </p>
+            </div>
           </div>
-
-          <div className="rounded-2xl bg-white p-4 shadow-sm">
-            <h2 className="text-sm font-semibold text-slate-900">
-              File delivery
-            </h2>
-            <p className="mt-2 text-xs leading-relaxed text-slate-600">
-              After successful Razorpay payment, buyers receive instant access to
-              a watermark-free, high-resolution file from their dashboard.
-            </p>
-          </div>
-        </section>
-      </main>
-    </div>
+        </div>
+      )}
+    </section>
   );
 }

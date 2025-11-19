@@ -1,107 +1,75 @@
-// src/utils/storage.js
 import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
-import { app } from "../firebase"; // IMPORTANT: named export, not default
+import app from "../firebase";
 
 const storage = getStorage(app);
 
-// We’ll cache the list of all paths so we don’t ask Firebase every time
-let cachedPaths = null;
+// folders where your preview images live
+const PUBLIC_FOLDERS = ["Buyer", "public"];
 
-async function listAllPhotoPaths() {
-  if (cachedPaths) return cachedPaths;
-
-  const prefixes = ["Buyer", "public"];
-  const allPaths = [];
-
-  for (const folder of prefixes) {
-    const listRef = ref(storage, folder);
-    try {
-      const res = await listAll(listRef);
-      res.items.forEach((itemRef) => {
-        allPaths.push(itemRef.fullPath); // e.g. "Buyer/sample1.jpg"
-      });
-    } catch (err) {
-      console.error(`Error listing folder ${folder}:`, err);
-    }
-  }
-
-  // Simple stable sort by file name
-  allPaths.sort((a, b) => a.localeCompare(b));
-  cachedPaths = allPaths;
-  return allPaths;
-}
-
-// Simple price generator based on file name – keeps UI realistic
+// small helper so prices look realistic but still auto-generated
 function computePriceFromName(name) {
   const base = 399;
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash + name.charCodeAt(i)) % 4;
-  }
-  return base + hash * 100; // 399, 499, 599, 699
+  const offset = (name.length * 17) % 300; // 0-299
+  const rounded = offset - (offset % 50); // step of 50
+  return base + rounded; // e.g. 399, 449, 499, 549, 599, 649, 699
 }
 
 /**
- * Landing section: get 3–4 hero candidates for the homepage
+ * Fetches ALL public photos from Firebase Storage (Buyer + public folders),
+ * in parallel for speed.
+ * Used by the Explore page.
  */
-export async function getLandingCandidates(limit = 3) {
-  const paths = await listAllPhotoPaths();
-  const firstFew = paths.slice(0, limit);
+export async function getAllPublicPhotos() {
+  const folderPromises = PUBLIC_FOLDERS.map(async (folder) => {
+    const folderRef = ref(storage, `${folder}/`);
+    const result = await listAll(folderRef);
 
-  const items = await Promise.all(
-    firstFew.map(async (path) => {
-      const url = await getDownloadURL(ref(storage, path));
-      const fileName = path.split("/").pop() || "";
-      return {
-        id: encodeURIComponent(path),
-        path,
-        url,
-        fileName,
-        title: "Street Photography",
-        price: computePriceFromName(fileName),
-      };
-    })
-  );
+    // getDownloadURL for this folder – in parallel
+    const urls = await Promise.all(
+      result.items.map(async (itemRef) => {
+        const url = await getDownloadURL(itemRef);
+        const name = itemRef.name;
+        const price = computePriceFromName(name);
 
-  return items;
+        return {
+          id: `${folder}/${name}`,
+          path: `${folder}/${name}`,
+          name,
+          folder,
+          url,
+          price,
+        };
+      })
+    );
+
+    return urls;
+  });
+
+  const groups = await Promise.all(folderPromises);
+  const all = groups.flat();
+
+  // stable order by file name
+  all.sort((a, b) => a.name.localeCompare(b.name));
+  return all;
 }
 
 /**
- * Explore page: load ONE page of photos
- * so we only fetch 8 image URLs at a time.
+ * Used on the landing page hero – just take first 3 nicely.
  */
-export async function getExplorePage(page = 1, pageSize = 8) {
-  const paths = await listAllPhotoPaths();
-  const total = paths.length;
-
-  const start = (page - 1) * pageSize;
-  const end = start + pageSize;
-  const pagePaths = paths.slice(start, end);
-
-  const items = await Promise.all(
-    pagePaths.map(async (path) => {
-      const url = await getDownloadURL(ref(storage, path));
-      const fileName = path.split("/").pop() || "";
-      return {
-        id: encodeURIComponent(path), // used in /view/:id route
-        path,
-        url,
-        fileName,
-        title: "Street Photography",
-        price: computePriceFromName(fileName),
-      };
-    })
-  );
-
-  return { total, items };
+export async function getLandingCandidates() {
+  const all = await getAllPublicPhotos();
+  return all.slice(0, 3);
 }
 
 /**
- * ViewImage page: get single photo URL by its encoded path
- * (e.g. "Buyer%2Fsample3.jpg")
+ * Used by the ViewImage page. Path is like "Buyer/sample3.jpg".
  */
-export async function fetchPhotoUrl(encodedPath) {
-  const fullPath = decodeURIComponent(encodedPath); // "Buyer/sample3.jpg"
-  const url = await getDownloadURL(ref(storage, fullPath));
-  return url;
+export async function fetchPhotoUrl(storagePath) {
+  const refObj = ref(storage, storagePath);
+  const url = await getDownloadURL(refObj);
+
+  const name = storagePath.split("/").pop() || storagePath;
+  const price = computePriceFromName(name);
+
+  return { url, price, name };
 }

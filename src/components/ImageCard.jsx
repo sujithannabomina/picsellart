@@ -1,54 +1,54 @@
 import { Link } from "react-router-dom";
 
 export default function ImageCard({ photo }) {
-  const { fullPath, name, price, url, title } = photo;
-  const encodedPath = encodeURIComponent(fullPath);
+  const { path, name, url, price } = photo;
 
   return (
-    <article className="flex flex-col justify-between rounded-3xl bg-white p-3 shadow-md transition hover:-translate-y-1 hover:shadow-xl">
-      <div>
-        <div className="relative overflow-hidden rounded-2xl">
-          <div className="aspect-[4/3]">
-            <img
-              src={url}
-              alt={name}
-              loading="lazy"
-              className="h-full w-full object-cover"
-            />
-          </div>
-          {/* Stronger watermark */}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="text-white/85 text-3xl font-semibold tracking-[0.35em] drop-shadow-lg mix-blend-overlay">
-              PICSELLART
-            </span>
-          </div>
+    <div className="flex flex-col rounded-3xl bg-white shadow-[0_14px_32px_rgba(15,23,42,0.16)] overflow-hidden">
+      {/* Image with watermark */}
+      <div className="relative h-52 w-full overflow-hidden bg-slate-200">
+        <img
+          src={url}
+          alt={name}
+          className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+          loading="lazy"
+        />
+        <div className="absolute inset-0 bg-black/25" />
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="text-white/85 text-2xl font-semibold tracking-[0.35em] [text-shadow:0_0_12px_rgba(0,0,0,1)]">
+            PICSELLART
+          </span>
         </div>
+      </div>
 
-        <div className="mt-4 space-y-1">
-          <h3 className="text-sm font-semibold text-slate-900">
-            {title || "Street Photography"}
-          </h3>
-          <p className="text-xs text-slate-500">{name}</p>
-          <p className="pt-1 text-sm font-semibold text-slate-900">
-            ₹{price}
+      {/* Info */}
+      <div className="flex flex-col gap-2 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">
+            Street Photography
           </p>
+          <p className="text-xs text-slate-500 truncate">{name}</p>
+        </div>
+
+        <p className="text-base font-semibold text-slate-900">
+          ₹{price.toLocaleString("en-IN")}
+        </p>
+
+        <div className="mt-1 mb-2 flex gap-2">
+          <Link
+            to={`/view/${encodeURIComponent(path)}`}
+            className="flex-1 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 text-center hover:bg-slate-50"
+          >
+            View
+          </Link>
+          <Link
+            to={`/buyer-login`}
+            className="flex-1 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white text-center hover:bg-slate-800"
+          >
+            Buy &amp; Download
+          </Link>
         </div>
       </div>
-
-      <div className="mt-4 flex gap-3">
-        <Link
-          to={`/view/${encodedPath}`}
-          className="flex-1 rounded-full border border-slate-300 px-3 py-1.5 text-center text-xs font-semibold text-slate-800 hover:border-slate-400"
-        >
-          View
-        </Link>
-        <button
-          type="button"
-          className="flex-1 rounded-full bg-slate-900 px-3 py-1.5 text-center text-xs font-semibold text-white hover:bg-slate-800"
-        >
-          Buy &amp; Download
-        </button>
-      </div>
-    </article>
+    </div>
   );
 }
