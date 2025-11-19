@@ -4,151 +4,133 @@ import { useNavigate, useParams } from "react-router-dom";
 import { fetchPhotoUrl } from "../utils/storage";
 
 export default function ViewImage() {
-  const { "*": encodedPath } = useParams(); // React Router v6 splat route
+  const { id } = useParams(); // encoded path like "Buyer%2Fsample3.jpg"
   const navigate = useNavigate();
   const [imageUrl, setImageUrl] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
-  const storagePath = decodeURIComponent(encodedPath || "");
-  const fileName = storagePath.split("/").pop() || "image.jpg";
-
-  // Simple mock price based on name (keep consistent with Explore)
-  function getPriceForFile(name) {
-    const prices = [399, 499, 599, 799];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = (hash + name.charCodeAt(i)) % prices.length;
-    }
-    return prices[hash];
-  }
+  const fileName = decodeURIComponent(id || "").split("/").pop() || "image.jpg";
 
   useEffect(() => {
-    let cancelled = false;
+    let ignore = false;
 
-    async function loadImage() {
-      if (!storagePath) {
-        setError("Invalid image.");
-        setLoading(false);
-        return;
-      }
-
+    async function load() {
       try {
-        setLoading(true);
-        const url = await fetchPhotoUrl(storagePath);
-        if (!cancelled) {
-          setImageUrl(url);
-          setError("");
-        }
+        const url = await fetchPhotoUrl(id);
+        if (!ignore) setImageUrl(url);
       } catch (err) {
-        console.error("Error loading image", storagePath, err);
-        if (!cancelled) {
-          setError("Unable to load this image. Please try again.");
-        }
+        console.error("Error fetching photo URL", err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!ignore) setLoading(false);
       }
     }
 
-    loadImage();
-
+    if (id) load();
     return () => {
-      cancelled = true;
+      ignore = true;
     };
-  }, [storagePath]);
-
-  const price = getPriceForFile(fileName);
+  }, [id]);
 
   return (
-    <div className="min-h-screen bg-slate-100 py-16">
-      <div className="mx-auto max-w-6xl px-4">
-        <button
-          type="button"
-          onClick={() => navigate("/explore")}
-          className="mb-8 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
-        >
-          <span className="text-lg">←</span>
-          Back to Explore
-        </button>
+    <div className="min-h-screen bg-slate-100">
+      <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6">
+          <button
+            className="flex items-center gap-2"
+            onClick={() => navigate("/")}
+          >
+            <span className="h-3 w-3 rounded-full bg-violet-500 shadow" />
+            <span className="text-lg font-semibold tracking-tight">
+              Picsellart
+            </span>
+          </button>
 
-        {error && (
-          <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          {/* Image panel */}
-          <div className="flex justify-center">
-            <div className="relative w-full max-w-xl rounded-[32px] bg-slate-900 p-4 shadow-2xl shadow-slate-900/40">
-              <div className="relative overflow-hidden rounded-[28px] bg-slate-900">
-                {loading && (
-                  <div className="h-[420px] w-full animate-pulse bg-slate-700/60" />
-                )}
-                {!loading && imageUrl && (
-                  <>
-                    <img
-                      src={imageUrl}
-                      alt={fileName}
-                      className="h-[420px] w-full object-cover"
-                    />
-                    {/* Strong watermark overlay */}
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <span className="select-none text-5xl font-black tracking-[0.5em] text-white/45 mix-blend-soft-light rotate-[-26deg]">
-                        PICSELLART
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-              <p className="mt-3 px-1 text-[11px] text-slate-300/90">
-                Watermarked preview shown. Purchase to download the full
-                resolution, clean image.
-              </p>
-            </div>
-          </div>
-
-          {/* Details panel */}
-          <div className="flex flex-col justify-center">
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-                Street Photography
-              </h1>
-              <p className="mt-1 text-xs text-slate-500">{fileName}</p>
-              <p className="mt-4 text-xl font-semibold text-slate-900">
-                ₹{price}
-              </p>
-
-              <div className="mt-6 flex gap-3">
-                <button
-                  type="button"
-                  className="flex-1 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-purple-500/40 transition hover:brightness-105"
-                >
-                  Buy &amp; Download
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate("/explore")}
-                  className="flex-1 rounded-full border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-800 shadow-sm transition hover:bg-slate-50"
-                >
-                  Continue browsing
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-8 rounded-2xl bg-white p-4 shadow-sm shadow-slate-200/70">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Licensing &amp; usage
-              </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-600">
-                Purchased files include a standard commercial license. You can
-                use them in client work, social media, print and web designs.
-                Reselling raw files or sharing the download link is not allowed.
-              </p>
-            </div>
-          </div>
+          <button
+            onClick={() => navigate(-1)}
+            className="rounded-full border border-slate-300 px-4 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            ← Back to Explore
+          </button>
         </div>
-      </div>
+      </header>
+
+      <main className="mx-auto flex max-w-6xl flex-col gap-10 px-4 py-10 sm:px-6 lg:flex-row">
+        {/* Image */}
+        <section className="flex-1">
+          <div className="mx-auto max-w-xl rounded-3xl bg-slate-900 p-4 shadow-lg">
+            <div className="relative overflow-hidden rounded-2xl bg-black">
+              <div className="aspect-[4/3]">
+                {loading ? (
+                  <div className="h-full w-full animate-pulse bg-slate-800" />
+                ) : (
+                  <img
+                    src={imageUrl}
+                    alt={fileName}
+                    className="h-full w-full object-contain"
+                  />
+                )}
+              </div>
+              {/* Strong watermark on preview */}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="text-white/80 text-3xl font-semibold tracking-[0.5em] drop-shadow-xl">
+                  PICSELLART
+                </span>
+              </div>
+            </div>
+            <p className="mt-3 text-center text-[11px] text-slate-300">
+              Watermarked preview shown. Purchase to download the full
+              resolution, clean image.
+            </p>
+          </div>
+        </section>
+
+        {/* Details / Licensing */}
+        <section className="flex-1 space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+              Street Photography
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">{fileName}</p>
+            <p className="mt-3 text-xl font-semibold text-slate-900">₹799</p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => navigate("/buyer-login")}
+              className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 text-sm font-semibold text-white shadow-md shadow-violet-200 hover:brightness-110"
+            >
+              Buy &amp; Download
+            </button>
+            <button
+              onClick={() => navigate("/explore")}
+              className="rounded-full border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+            >
+              Continue browsing
+            </button>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">
+              Licensing &amp; usage
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              Purchased files include a standard commercial license. You can use
+              them in client work, social media, print and web designs. Reselling
+              raw files or sharing the download link is not allowed.
+            </p>
+          </div>
+
+          <div className="rounded-2xl bg-white p-4 shadow-sm">
+            <h2 className="text-sm font-semibold text-slate-900">
+              File delivery
+            </h2>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600">
+              After successful Razorpay payment, buyers receive instant access to
+              a watermark-free, high-resolution file from their dashboard.
+            </p>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

@@ -1,127 +1,107 @@
+// src/utils/storage.js
 import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
-import app from "../firebase";
+import { app } from "../firebase"; // IMPORTANT: named export, not default
 
 const storage = getStorage(app);
 
-// Cache refs and URLs in memory so multiple navigations are fast
-let cachedRefs = null; // [{ fullPath, name, ref }]
-const urlCache = new Map(); // fullPath -> url
+// We’ll cache the list of all paths so we don’t ask Firebase every time
+let cachedPaths = null;
 
-async function loadAllRefs() {
-  if (cachedRefs) return cachedRefs;
+async function listAllPhotoPaths() {
+  if (cachedPaths) return cachedPaths;
 
-  const folders = ["public", "Buyer"];
+  const prefixes = ["Buyer", "public"];
+  const allPaths = [];
 
-  const results = await Promise.all(
-    folders.map((folder) => listAll(ref(storage, folder)))
-  );
+  for (const folder of prefixes) {
+    const listRef = ref(storage, folder);
+    try {
+      const res = await listAll(listRef);
+      res.items.forEach((itemRef) => {
+        allPaths.push(itemRef.fullPath); // e.g. "Buyer/sample1.jpg"
+      });
+    } catch (err) {
+      console.error(`Error listing folder ${folder}:`, err);
+    }
+  }
 
-  const refs = results.flatMap((result) =>
-    result.items.map((item) => ({
-      fullPath: item.fullPath,
-      name: item.name,
-      ref: item,
-    }))
-  );
-
-  // Simple sort so results are stable
-  refs.sort((a, b) => a.name.localeCompare(b.name));
-
-  cachedRefs = refs;
-  return refs;
+  // Simple stable sort by file name
+  allPaths.sort((a, b) => a.localeCompare(b));
+  cachedPaths = allPaths;
+  return allPaths;
 }
 
-async function getOrCachedUrl(itemRef) {
-  const key = itemRef.fullPath;
-  if (urlCache.has(key)) return urlCache.get(key);
-  const url = await getDownloadURL(itemRef);
-  urlCache.set(key, url);
-  return url;
+// Simple price generator based on file name – keeps UI realistic
+function computePriceFromName(name) {
+  const base = 399;
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash + name.charCodeAt(i)) % 4;
+  }
+  return base + hash * 100; // 399, 499, 599, 699
 }
 
 /**
- * Used on the landing page to pick 3 images.
+ * Landing section: get 3–4 hero candidates for the homepage
  */
 export async function getLandingCandidates(limit = 3) {
-  const refs = await loadAllRefs();
-  const slice = refs.slice(0, limit);
+  const paths = await listAllPhotoPaths();
+  const firstFew = paths.slice(0, limit);
 
-  const withUrls = await Promise.all(
-    slice.map(async (item) => ({
-      id: item.fullPath,
-      name: item.name,
-      fullPath: item.fullPath,
-      url: await getOrCachedUrl(item.ref),
-    }))
+  const items = await Promise.all(
+    firstFew.map(async (path) => {
+      const url = await getDownloadURL(ref(storage, path));
+      const fileName = path.split("/").pop() || "";
+      return {
+        id: encodeURIComponent(path),
+        path,
+        url,
+        fileName,
+        title: "Street Photography",
+        price: computePriceFromName(fileName),
+      };
+    })
   );
 
-  return withUrls;
+  return items;
 }
 
 /**
- * Returns metadata for ALL images (without URLs) used for Explore.
- * URLs are fetched page-by-page for speed.
+ * Explore page: load ONE page of photos
+ * so we only fetch 8 image URLs at a time.
  */
-export async function getExploreImagesMeta() {
-  const refs = await loadAllRefs();
+export async function getExplorePage(page = 1, pageSize = 8) {
+  const paths = await listAllPhotoPaths();
+  const total = paths.length;
 
-  const basePrices = [399, 499, 599, 799];
+  const start = (page - 1) * pageSize;
+  const end = start + pageSize;
+  const pagePaths = paths.slice(start, end);
 
-  return refs.map((item, index) => ({
-    id: item.fullPath,
-    name: item.name,
-    fullPath: item.fullPath,
-    price: basePrices[index % basePrices.length],
-    title: "Street Photography",
-  }));
+  const items = await Promise.all(
+    pagePaths.map(async (path) => {
+      const url = await getDownloadURL(ref(storage, path));
+      const fileName = path.split("/").pop() || "";
+      return {
+        id: encodeURIComponent(path), // used in /view/:id route
+        path,
+        url,
+        fileName,
+        title: "Street Photography",
+        price: computePriceFromName(fileName),
+      };
+    })
+  );
+
+  return { total, items };
 }
 
 /**
- * Fetch a download URL for a single storage path.
+ * ViewImage page: get single photo URL by its encoded path
+ * (e.g. "Buyer%2Fsample3.jpg")
  */
-export async function getImageUrlByPath(fullPath) {
-  const itemRef = ref(storage, fullPath);
-  return getOrCachedUrl(itemRef);
+export async function fetchPhotoUrl(encodedPath) {
+  const fullPath = decodeURIComponent(encodedPath); // "Buyer/sample3.jpg"
+  const url = await getDownloadURL(ref(storage, fullPath));
+  return url;
 }
-
-/**
- * Convenience for the View page – combines meta + URL.
- */
-export async function getImageMeta(fullPath) {
-  const url = await getImageUrlByPath(fullPath);
-  const name = fullPath.split("/").pop() || "image.jpg";
-
-  return {
-    id: fullPath,
-    name,
-    fullPath,
-    url,
-    title: "Street Photography",
-  };
-}
-
-/**
- * Get a public URL for a single photo in Storage.
- * `storagePath` is usually something like "Buyer/sample3.jpg"
- * (we often pass it URL-encoded, so we decode first).
- */
-export async function fetchPhotoUrl(storagePath) {
-  try {
-    // In case the param is URL-encoded from the router
-    const decodedPath = decodeURIComponent(storagePath || "");
-
-    // If it's already a full https URL, just return it
-    if (decodedPath.startsWith("http://") || decodedPath.startsWith("https://")) {
-      return decodedPath;
-    }
-
-    const photoRef = ref(storage, decodedPath);
-    const url = await getDownloadURL(photoRef);
-    return url;
-  } catch (err) {
-    console.error("Error fetching photo URL from Storage:", err);
-    throw err;
-  }
-}
-
-
