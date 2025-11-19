@@ -1,12 +1,14 @@
 // src/components/Layout.jsx
 import React from "react";
-import Header from "./Header";
+import Navbar from "./Navbar";
 
-export default function Layout({ children }) {
+const Layout = ({ children }) => {
   return (
-    <div className="app-shell">
-      <Header />
-      <main>{children}</main>
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <Navbar />
+      <main className="max-w-6xl mx-auto px-4 pt-10 pb-16">{children}</main>
     </div>
   );
-}
+};
+
+export default Layout;

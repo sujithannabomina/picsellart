@@ -1,6 +1,13 @@
-/* ================================
+/* =====================================
+   TAILWIND DIRECTIVES (must be first)
+   ===================================== */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =====================================
    GLOBAL RESET + BASE
-   ================================ */
+   ===================================== */
 
 *,
 *::before,
@@ -22,6 +29,13 @@ body {
   color: #0f172a;
   background: #e5e7eb;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Ensure images behave well in all layouts */
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
 }
 
 /* remove default link styling */
@@ -50,9 +64,9 @@ button {
   background: #6b7280;
 }
 
-/* ================================
+/* =====================================
    ROOT LAYOUT
-   ================================ */
+   ===================================== */
 
 .app-root {
   min-height: 100vh;
@@ -91,9 +105,9 @@ button {
   color: #4b5563;
 }
 
-/* ================================
+/* =====================================
    SHARED BUTTONS + BADGES
-   ================================ */
+   ===================================== */
 
 .pill-button {
   border-radius: 999px;
@@ -149,9 +163,9 @@ button {
   color: #4338ca;
 }
 
-/* ================================
+/* =====================================
    LANDING PAGE
-   ================================ */
+   ===================================== */
 
 .landing-wrapper {
   background: radial-gradient(circle at top, #eef2ff, #e5e7eb 60%);
@@ -232,9 +246,9 @@ button {
   gap: 0.6rem;
 }
 
-/* ================================
+/* =====================================
    AUTH PAGES (Buyer/Seller Login)
-   ================================ */
+   ===================================== */
 
 .auth-page {
   max-width: 540px;
@@ -254,9 +268,9 @@ button {
   margin-bottom: 1.4rem;
 }
 
-/* ================================
+/* =====================================
    EXPLORE PAGE
-   ================================ */
+   ===================================== */
 
 .explore-search {
   display: flex;
@@ -354,9 +368,9 @@ button {
   color: #16a34a;
 }
 
-/* ================================
+/* =====================================
    WATERMARK OVERLAY (for WatermarkedImage)
-   ================================ */
+   ===================================== */
 
 .watermark-wrapper {
   position: relative;
@@ -393,9 +407,9 @@ button {
   pointer-events: none;
 }
 
-/* ================================
+/* =====================================
    PAGINATION
-   ================================ */
+   ===================================== */
 
 .pagination {
   margin-top: 1.75rem;
@@ -423,9 +437,9 @@ button {
   cursor: default;
 }
 
-/* ================================
+/* =====================================
    BUYER DASHBOARD
-   ================================ */
+   ===================================== */
 
 .downloads-grid {
   display: grid;
@@ -479,9 +493,9 @@ button {
   color: #16a34a;
 }
 
-/* ================================
+/* =====================================
    SELLER DASHBOARD
-   ================================ */
+   ===================================== */
 
 .stats-row {
   display: grid;
@@ -561,9 +575,9 @@ button {
   margin-top: 0.2rem;
 }
 
-/* ================================
+/* =====================================
    CONTACT / FAQ / REFUNDS SIMPLE LAYOUTS
-   ================================ */
+   ===================================== */
 
 .content-card {
   margin-top: 1.5rem;
@@ -584,69 +598,4 @@ button {
 }
 
 /* FAQs one-per-block */
-.faq-item + .faq-item {
-  margin-top: 0.9rem;
-}
-
-/* Simple form styling for contact page */
-.contact-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
-
-.contact-form input,
-.contact-form textarea {
-  border-radius: 0.9rem;
-  border: 1px solid #cbd5f5;
-  padding: 0.55rem 0.8rem;
-  font-size: 0.9rem;
-  resize: vertical;
-  outline: none;
-  background: #ffffff;
-}
-
-.contact-form input:focus,
-.contact-form textarea:focus {
-  border-color: #5b21ff;
-  box-shadow: 0 0 0 1px rgba(91, 33, 255, 0.25);
-}
-
-/* ================================
-   NOT FOUND
-   ================================ */
-
-.not-found {
-  text-align: center;
-  padding: 4rem 1rem;
-  color: #4b5563;
-}
-
-/* ================================
-   RESPONSIVE
-   ================================ */
-
-@media (max-width: 900px) {
-  .landing-hero {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .hero-images {
-    order: -1;
-  }
-}
-
-@media (max-width: 640px) {
-  .page-inner {
-    padding-inline: 1rem;
-  }
-
-  .auth-page {
-    margin-top: 2rem;
-    padding-inline: 1.3rem;
-  }
-
-  .page-title {
-    font-size: 1.6rem;
-  }
-}
+.faq-item

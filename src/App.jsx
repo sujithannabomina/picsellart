@@ -1,43 +1,35 @@
 // src/App.jsx
-import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
 import Home from "./pages/Home";
 import Explore from "./pages/Explore";
-import Faq from "./pages/Faq";          // <— IMPORTANT: matches file name Faq.jsx
+import FAQ from "./pages/FAQ";
 import Contact from "./pages/Contact";
 import Refunds from "./pages/Refunds";
-import BuyerLogin from "./pages/BuyerLogin";
 import SellerLogin from "./pages/SellerLogin";
+import BuyerLogin from "./pages/BuyerLogin";
 import ViewImage from "./pages/ViewImage";
-import Navbar from "./components/Navbar";
+
+import Layout from "./components/Layout";
 
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-slate-50 text-slate-900">
-        {/* Top navigation bar with logo + links */}
-        <Navbar />
-
-        {/* Page routes */}
+      <Layout>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/explore" element={<Explore />} />
-          <Route path="/faq" element={<Faq />} />
+          <Route path="/faq" element={<FAQ />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/refunds" element={<Refunds />} />
-
-          {/* Auth pages */}
-          <Route path="/buyer-login" element={<BuyerLogin />} />
           <Route path="/seller-login" element={<SellerLogin />} />
+          <Route path="/buyer-login" element={<BuyerLogin />} />
+          <Route path="/view/:fileName" element={<ViewImage />} />
 
-          {/* View image page */}
-          <Route path="/view/:photoId" element={<ViewImage />} />
-
-          {/* Fallback – send anything unknown to home (or you can point to Explore) */}
+          {/* Fallback: send unknown paths to Home */}
           <Route path="*" element={<Home />} />
         </Routes>
-      </div>
+      </Layout>
     </Router>
   );
 }

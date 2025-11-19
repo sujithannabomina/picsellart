@@ -1,86 +1,79 @@
-import { Link, useLocation } from "react-router-dom";
+// src/components/Navbar.jsx
+import React from "react";
+import { Link, NavLink } from "react-router-dom";
 
-const navLinkBase =
-  "text-sm md:text-base px-3 py-1 rounded-full transition-colors";
-const navLinkActive = "text-violet-600";
-const navLinkInactive = "text-slate-600 hover:text-slate-900";
+const navLinkClasses =
+  "text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors";
 
-export default function Navbar() {
-  const location = useLocation();
-  const path = location.pathname;
+const activeNavLinkClasses =
+  "text-sm font-semibold text-slate-900 border-b-2 border-purple-500 pb-1";
 
-  const isActive = (to) => (path === to ? navLinkActive : navLinkInactive);
-
+function Navbar() {
   return (
-    <header className="border-b border-slate-200 bg-slate-50/80 backdrop-blur">
-      <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        {/* Brand */}
-        <Link
-          to="/"
-          className="flex items-center gap-2 rounded-full px-3 py-1 hover:bg-slate-100 transition-colors"
-        >
-          <span className="h-2 w-2 rounded-full bg-fuchsia-500 shadow-[0_0_12px_rgba(217,70,239,0.8)]" />
-          <span className="font-semibold tracking-wide text-slate-900">
+    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+        {/* Logo */}
+        <Link to="/" className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500" />
+          <span className="text-lg font-semibold tracking-tight">
             Picsellart
           </span>
         </Link>
 
-        {/* Center nav */}
-        <nav className="hidden md:flex items-center gap-2">
-          <Link to="/explore" className={`${navLinkBase} ${isActive("/explore")}`}>
+        {/* Center nav links */}
+        <nav className="hidden gap-6 md:flex">
+          <NavLink
+            to="/explore"
+            className={({ isActive }) =>
+              isActive ? activeNavLinkClasses : navLinkClasses
+            }
+          >
             Explore
-          </Link>
-          <Link to="/faq" className={`${navLinkBase} ${isActive("/faq")}`}>
+          </NavLink>
+          <NavLink
+            to="/faq"
+            className={({ isActive }) =>
+              isActive ? activeNavLinkClasses : navLinkClasses
+            }
+          >
             FAQ
-          </Link>
-          <Link to="/contact" className={`${navLinkBase} ${isActive("/contact")}`}>
+          </NavLink>
+          <NavLink
+            to="/contact"
+            className={({ isActive }) =>
+              isActive ? activeNavLinkClasses : navLinkClasses
+            }
+          >
             Contact
-          </Link>
-          <Link to="/refunds" className={`${navLinkBase} ${isActive("/refunds")}`}>
+          </NavLink>
+          <NavLink
+            to="/refunds"
+            className={({ isActive }) =>
+              isActive ? activeNavLinkClasses : navLinkClasses
+            }
+          >
             Refunds
-          </Link>
+          </NavLink>
         </nav>
 
         {/* Auth buttons */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <Link
             to="/buyer-login"
-            className="hidden sm:inline-flex items-center justify-center rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50"
+            className="rounded-full border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
           >
             Buyer Login
           </Link>
           <Link
             to="/seller-login"
-            className="inline-flex items-center justify-center rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-600 px-4 py-1.5 text-sm font-semibold text-white shadow-md hover:shadow-lg"
+            className="rounded-full bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             Seller Login
           </Link>
         </div>
       </div>
-
-      {/* mobile nav row */}
-      <div className="md:hidden border-t border-slate-200 bg-slate-50">
-        <nav className="max-w-6xl mx-auto px-3 py-2 flex items-center justify-center gap-2 text-xs">
-          <Link to="/explore" className={`${navLinkBase} ${isActive("/explore")}`}>
-            Explore
-          </Link>
-          <Link to="/faq" className={`${navLinkBase} ${isActive("/faq")}`}>
-            FAQ
-          </Link>
-          <Link
-            to="/contact"
-            className={`${navLinkBase} ${isActive("/contact")}`}
-          >
-            Contact
-          </Link>
-          <Link
-            to="/refunds"
-            className={`${navLinkBase} ${isActive("/refunds")}`}
-          >
-            Refunds
-          </Link>
-        </nav>
-      </div>
     </header>
   );
 }
+
+export default Navbar;
