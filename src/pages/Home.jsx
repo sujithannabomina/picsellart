@@ -1,74 +1,82 @@
 // src/pages/Home.jsx
-import React from "react";
+import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 export default function Home() {
   const navigate = useNavigate();
 
+  // Pick 3 random sample images on each mount / refresh
+  const heroImages = useMemo(() => {
+    const TOTAL_SAMPLES = 112; // change if you add more sample images
+    const indices = new Set();
+
+    while (indices.size < 3 && indices.size < TOTAL_SAMPLES) {
+      const randomIndex = Math.floor(Math.random() * TOTAL_SAMPLES) + 1; // 1..112
+      indices.add(randomIndex);
+    }
+
+    return Array.from(indices).map((i) => ({
+      src: `/images/sample${i}.jpg`,
+      alt: `Picsellart sample ${i}`,
+    }));
+  }, []);
+
   return (
-    <div className="page-wrapper landing-wrapper">
-      <main className="landing-hero">
-        {/* LEFT: TEXT */}
-        <section className="hero-text">
-          <p className="hero-pill">
-            Verified Sellers • Instant Downloads • Secure Payments
-          </p>
+    <section className="landing-hero">
+      {/* LEFT: TEXT CONTENT */}
+      <div className="hero-text">
+        <div className="hero-pill">Sell photos • Buy visuals • India-first</div>
 
-          <h1 className="hero-title">Turn your images into income</h1>
+        {/* MAIN TAGLINE */}
+        <h1 className="hero-title">Turn your photos into income</h1>
 
-          <p className="hero-subtitle">
-            Upload your street photography, interior shots or creative work and
-            sell directly to designers, architects and agencies. Buyers get
-            instant, watermark-free downloads after secure Razorpay checkout.
-          </p>
+        <p className="hero-subtitle">
+          Picsellart is a simple marketplace where creators upload real-world
+          photos from India and earn on every download. Designers, agencies and
+          businesses buy licensed images in a few clicks.
+        </p>
 
-          <ul className="hero-list">
-            <li>Set your own price within your seller plan limits.</li>
-            <li>Picsellart watermark on previews — clean file after purchase.</li>
-            <li>Track views, sales and earnings from your dashboard.</li>
-          </ul>
+        <ul className="hero-list">
+          <li>Upload your best street, travel, interior and food photos.</li>
+          <li>Set your own price within the plan limits and get paid per sale.</li>
+          <li>Buyers receive instant, watermark-free files after secure checkout.</li>
+        </ul>
 
-          <div className="hero-actions">
-            <button
-              type="button"
-              className="pill-button primary"
-              onClick={() => navigate("/seller/login")}
-            >
-              Seller Login
-            </button>
-            <button
-              type="button"
-              className="pill-button secondary"
-              onClick={() => navigate("/buyer/login")}
-            >
-              Buyer Login
-            </button>
-            <button
-              type="button"
-              className="pill-button secondary"
-              onClick={() => navigate("/explore")}
-            >
-              Explore Photos
-            </button>
-          </div>
-        </section>
+        <div className="hero-actions">
+          <button
+            type="button"
+            className="pill-button primary"
+            onClick={() => navigate("/buyer-login")}
+          >
+            Buyer Login
+          </button>
 
-        {/* RIGHT: IMAGE GRID (4 cards) */}
-        <section className="hero-images" aria-hidden="true">
-          <div className="hero-card">
-            <img src="/images/sample3.jpg" alt="South Indian tiffin hotel" />
+          <button
+            type="button"
+            className="pill-button secondary"
+            onClick={() => navigate("/seller-login")}
+          >
+            Seller Login
+          </button>
+
+          <button
+            type="button"
+            className="pill-button secondary"
+            onClick={() => navigate("/explore")}
+          >
+            Explore Pictures
+          </button>
+        </div>
+      </div>
+
+      {/* RIGHT: IMAGE STRIP – uses random images each visit */}
+      <div className="hero-images">
+        {heroImages.map((img, idx) => (
+          <div className="hero-card" key={idx}>
+            <img src={img.src} alt={img.alt} loading="lazy" />
           </div>
-          <div className="hero-card">
-            <img src="/images/sample19.jpg" alt="Indian classical dancers" />
-          </div>
-          <div className="hero-card">
-            <img src="/images/sample5.jpg" alt="Temple architecture" />
-          </div>
-          <div className="hero-card">
-            <img src="/images/sample23.jpg" alt="Indian breakfast close-up" />
-          </div>
-        </section>
-      </main>
-    </div>
+        ))}
+      </div>
+    </section>
   );
 }
