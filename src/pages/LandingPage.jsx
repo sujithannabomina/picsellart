@@ -16,20 +16,17 @@ export default function LandingPage() {
           </h1>
 
           <p className="hero-subtitle">
-            Browse premium, high-quality images uploaded by photographers and
-            creators across India. Buy and download instantly with full
-            commercial rights.
+            Browse premium, high-quality images uploaded by creators across
+            India. Buy and download instantly with full commercial rights.
           </p>
 
           <ul className="hero-list">
+            <li>Perfect for designers, agencies, and interior projects.</li>
             <li>
-              Perfect for designers, agencies, interior projects and campaigns.
+              Picsellart watermark on previews — clean file after secure
+              purchase.
             </li>
-            <li>
-              Picsellart watermark on previews – clean file delivered after
-              secure payment.
-            </li>
-            <li>Support independent creators with every purchase.</li>
+            <li>Support independent creators with every download.</li>
           </ul>
 
           <div className="hero-actions">

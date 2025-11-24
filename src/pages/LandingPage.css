@@ -1,11 +1,10 @@
 /* Landing page uses shared layout from index.css.
-   This file only adds a tiny spacing tweak. */
+   This file only adds a small top padding tweak. */
 
 .landing-wrapper {
   padding-top: 1.5rem;
 }
 
-/* On very small screens, tighten top spacing a bit */
 @media (max-width: 640px) {
   .landing-wrapper {
     padding-top: 1rem;

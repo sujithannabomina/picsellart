@@ -1,10 +1,9 @@
 // src/firebase.js
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getFunctions } from "firebase/functions";
 
-// Your existing Firebase config for picsellart
+// Your existing Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ",
   authDomain: "picsellart-619a7.firebaseapp.com",
@@ -15,18 +14,17 @@ const firebaseConfig = {
   measurementId: "G-3KNDHJ6JZY",
 };
 
-// Initialize Firebase app
-export const app = initializeApp(firebaseConfig);
+// Initialise core services
+const app = initializeApp(firebaseConfig);
 
-// Auth + providers
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+// Firestore DB for purchases, seller data, etc.
+const db = getFirestore(app);
 
-// Storage
-export const storage = getStorage(app);
+// Storage for all photos
+const storage = getStorage(app);
 
-// Cloud Functions (for Razorpay etc, if you use them)
-export const functions = getFunctions(app);
+// Named exports (recommended)
+export { app, db, storage };
 
-// IMPORTANT: default export so `import app from "../firebase";` works
+// Default export (so older `import app from "../firebase"` still works)
 export default app;
