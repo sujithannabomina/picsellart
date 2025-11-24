@@ -1,37 +1,34 @@
-// src/App.jsx
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-
-import Home from "./pages/Home";
-import Explore from "./pages/Explore";
-import FAQ from "./pages/FAQ";
-import Contact from "./pages/Contact";
-import Refunds from "./pages/Refunds";
-import SellerLogin from "./pages/SellerLogin";
-import BuyerLogin from "./pages/BuyerLogin";
-import ViewImage from "./pages/ViewImage";
-
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Layout from "./components/Layout";
 
-function App() {
-  return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/faq" element={<FAQ />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/refunds" element={<Refunds />} />
-          <Route path="/seller-login" element={<SellerLogin />} />
-          <Route path="/buyer-login" element={<BuyerLogin />} />
-          <Route path="/view/:fileName" element={<ViewImage />} />
+import LandingPage from "./pages/LandingPage";
+import Explore from "./pages/Explore";
+import BuyerLogin from "./pages/BuyerLogin";
+import SellerLogin from "./pages/SellerLogin";
+import BuyerDashboard from "./pages/BuyerDashboard";
+import SellerDashboard from "./pages/SellerDashboard";
+import Contact from "./pages/Contact";
+import Faq from "./pages/Faq";
+import Refunds from "./pages/Refunds";
+import NotFound from "./pages/NotFound";
 
-          {/* Fallback: send unknown paths to Home */}
-          <Route path="*" element={<Home />} />
-        </Routes>
-      </Layout>
-    </Router>
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route element={<Layout />}>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/buyer-login" element={<BuyerLogin />} />
+          <Route path="/seller-login" element={<SellerLogin />} />
+          <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
+          <Route path="/seller-dashboard" element={<SellerDashboard />} />
+          <Route path="/contact" element={<Contact />} />
+          <Route path="/faq" element={<Faq />} />
+          <Route path="/refunds" element={<Refunds />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   );
 }
-
-export default App;
