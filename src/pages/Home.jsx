@@ -2,81 +2,80 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
+// A small pool of hero images (from your existing public/images or Firebase URLs)
+// You can change the paths/alt text later if you want.
+const HERO_IMAGES = [
+  { src: "/images/sample1.jpg", alt: "Mountain sunrise landscape" },
+  { src: "/images/sample2.jpg", alt: "Forest path in soft light" },
+  { src: "/images/sample3.jpg", alt: "Indian street market" },
+  { src: "/images/sample4.jpg", alt: "Cityscape evening lights" },
+];
+
+function pickRandomImages(list, count = 3) {
+  const shuffled = [...list].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
 export default function Home() {
   const navigate = useNavigate();
 
-  // Pick 3 random sample images on each mount / refresh
-  const heroImages = useMemo(() => {
-    const TOTAL_SAMPLES = 112; // change if you add more sample images
-    const indices = new Set();
-
-    while (indices.size < 3 && indices.size < TOTAL_SAMPLES) {
-      const randomIndex = Math.floor(Math.random() * TOTAL_SAMPLES) + 1; // 1..112
-      indices.add(randomIndex);
-    }
-
-    return Array.from(indices).map((i) => ({
-      src: `/images/sample${i}.jpg`,
-      alt: `Picsellart sample ${i}`,
-    }));
-  }, []);
+  // Pick a random set of 3 images on each first load / refresh
+  const heroImages = useMemo(() => pickRandomImages(HERO_IMAGES, 3), []);
 
   return (
-    <section className="landing-hero">
-      {/* LEFT: TEXT CONTENT */}
-      <div className="hero-text">
-        <div className="hero-pill">Sell photos • Buy visuals • India-first</div>
+    <div className="page-wrapper landing-wrapper">
+      <div className="landing-hero">
+        {/* LEFT: text */}
+        <section className="hero-text">
+          <p className="hero-pill">Turn your photos into income</p>
 
-        {/* MAIN TAGLINE */}
-        <h1 className="hero-title">Turn your photos into income</h1>
+          <h1 className="hero-title">Picsellart</h1>
 
-        <p className="hero-subtitle">
-          Picsellart is a simple marketplace where creators upload real-world
-          photos from India and earn on every download. Designers, agencies and
-          businesses buy licensed images in a few clicks.
-        </p>
+          <p className="hero-subtitle">
+            Architects, designers, models and artists upload here and earn.
+            Blogs, web designers, marketing agencies and businesses buy licensed
+            images from Picsellart.
+          </p>
 
-        <ul className="hero-list">
-          <li>Upload your best street, travel, interior and food photos.</li>
-          <li>Set your own price within the plan limits and get paid per sale.</li>
-          <li>Buyers receive instant, watermark-free files after secure checkout.</li>
-        </ul>
+          <ul className="hero-list">
+            <li>Set your own price within your chosen plan limits.</li>
+            <li>Picsellart watermark on previews — clean file after purchase.</li>
+            <li>Track views, sales and earnings from your dashboard.</li>
+          </ul>
 
-        <div className="hero-actions">
-          <button
-            type="button"
-            className="pill-button primary"
-            onClick={() => navigate("/buyer-login")}
-          >
-            Buyer Login
-          </button>
+          <div className="hero-actions">
+            <button
+              className="pill-button primary"
+              onClick={() => navigate("/buyer-login")}
+            >
+              Buyer Login
+            </button>
 
-          <button
-            type="button"
-            className="pill-button secondary"
-            onClick={() => navigate("/seller-login")}
-          >
-            Seller Login
-          </button>
+            <button
+              className="pill-button secondary"
+              onClick={() => navigate("/seller-login")}
+            >
+              Become a Seller
+            </button>
 
-          <button
-            type="button"
-            className="pill-button secondary"
-            onClick={() => navigate("/explore")}
-          >
-            Explore Pictures
-          </button>
-        </div>
-      </div>
-
-      {/* RIGHT: IMAGE STRIP – uses random images each visit */}
-      <div className="hero-images">
-        {heroImages.map((img, idx) => (
-          <div className="hero-card" key={idx}>
-            <img src={img.src} alt={img.alt} loading="lazy" />
+            <button
+              className="pill-button secondary"
+              onClick={() => navigate("/explore")}
+            >
+              Explore Pictures
+            </button>
           </div>
-        ))}
+        </section>
+
+        {/* RIGHT: rotating images */}
+        <section className="hero-images">
+          {heroImages.map((img, idx) => (
+            <div key={idx} className="hero-card">
+              <img src={img.src} alt={img.alt} loading="lazy" />
+            </div>
+          ))}
+        </section>
       </div>
-    </section>
+    </div>
   );
 }
