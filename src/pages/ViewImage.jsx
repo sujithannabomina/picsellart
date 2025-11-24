@@ -1,111 +1,88 @@
-import React, { useEffect, useState } from "react";
+// src/pages/ViewImage.jsx
+import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { fetchPhotoUrl } from "../utils/storage";
+import { explorePhotos } from "../utils/exploreData";
+import WatermarkedImage from "../components/WatermarkedImage";
 
-export default function ViewImage() {
+const ViewImage = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
-  const { storagePath } = useParams();
-  const decodedPath = decodeURIComponent(storagePath || "");
 
-  const [photo, setPhoto] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const photo = explorePhotos.find((p) => String(p.id) === String(id));
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      try {
-        const data = await fetchPhotoUrl(decodedPath);
-        if (active) setPhoto(data);
-      } catch (e) {
-        console.error("Error loading image", e);
-        if (active) setError("Unable to load this image.");
-      } finally {
-        if (active) setLoading(false);
-      }
-    })();
-    return () => {
-      active = false;
-    };
-  }, [decodedPath]);
+  if (!photo) {
+    return (
+      <div className="page-wrapper">
+        <div className="page-inner">
+          <h1 className="page-title">Image not found</h1>
+          <p className="page-subtitle">
+            We couldn’t find this image. It may have been removed or the link is
+            incorrect.
+          </p>
+          <button
+            className="pill-button secondary"
+            onClick={() => navigate("/explore")}
+          >
+            Back to Explore
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <section className="pt-8 md:pt-10">
-      <button
-        onClick={() => navigate("/explore")}
-        className="mb-6 inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-800 hover:bg-slate-50"
-      >
-        ← Back to Explore
-      </button>
+    <div className="page-wrapper">
+      <div className="page-inner">
+        <header className="page-header">
+          <h1 className="page-title">{photo.title}</h1>
+          <p className="page-subtitle">
+            Public preview includes a Picsellart watermark for protection.
+            Log in as a buyer to purchase and download a clean, full-resolution
+            file.
+          </p>
+        </header>
 
-      {loading && <p className="text-sm text-slate-600">Loading image…</p>}
-      {error && !loading && (
-        <p className="text-sm text-red-600">{error}</p>
-      )}
-
-      {photo && !loading && !error && (
-        <div className="grid gap-10 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)] items-start">
-          {/* Image */}
-          <div className="rounded-[32px] bg-slate-900/95 p-4 md:p-6 shadow-[0_20px_45px_rgba(15,23,42,0.75)]">
-            <div className="relative overflow-hidden rounded-3xl bg-slate-800 max-h-[70vh]">
-              <img
-                src={photo.url}
-                alt={photo.name}
-                className="h-full w-full object-contain bg-black"
-              />
-              <div className="absolute inset-0 bg-black/25" />
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <span className="text-white/85 text-3xl md:text-4xl font-semibold tracking-[0.4em] [text-shadow:0_0_16px_rgba(0,0,0,1)]">
-                  PICSELLART
-                </span>
-              </div>
-            </div>
-            <p className="mt-3 text-[11px] text-slate-300 text-center">
-              Watermarked preview shown. Purchase to download the full
-              resolution, clean image.
-            </p>
+        <div className="view-layout">
+          {/* LEFT: BIG PREVIEW */}
+          <div className="view-main-image">
+            <WatermarkedImage src={photo.url} alt={photo.title} />
           </div>
 
-          {/* Details */}
-          <div className="space-y-5">
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold text-slate-900">
-                Street Photography
-              </h1>
-              <p className="text-xs text-slate-500 mt-1">{photo.name}</p>
-              <p className="mt-3 text-lg font-semibold text-slate-900">
-                ₹{photo.price.toLocaleString("en-IN")}
-              </p>
-            </div>
+          {/* RIGHT: DETAILS + ACTIONS */}
+          <div className="view-meta">
+            <div className="view-card">
+              <p className="view-label">Filename</p>
+              <p className="view-value">{photo.filename}</p>
 
-            <div className="flex gap-3">
-              <button className="flex-1 rounded-full bg-gradient-to-r from-fuchsia-500 to-violet-600 px-4 py-2 text-sm font-semibold text-white shadow-md hover:shadow-lg">
-                Buy &amp; Download
-              </button>
-              <button
-                onClick={() => navigate("/explore")}
-                className="flex-1 rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
-              >
-                Continue browsing
-              </button>
-            </div>
+              <p className="view-label">Price</p>
+              <p className="view-price">₹{photo.price}</p>
 
-            <div className="rounded-2xl bg-white shadow-sm border border-slate-200 p-4 text-xs text-slate-700 space-y-3">
-              <h2 className="font-semibold text-slate-900">
-                Licensing &amp; usage
-              </h2>
-              <p>
-                Purchased files include a standard commercial license. You can
-                use them in client work, social media, print and web designs.
+              <p className="view-label">License</p>
+              <p className="view-value">
+                Standard commercial license for designs, ads, web and client
+                work. Reselling the raw file is not allowed.
               </p>
-              <p>
-                Reselling raw files or sharing the download link is not allowed.
-                Each purchase is for a single buyer account.
-              </p>
+
+              <div className="view-actions">
+                <button
+                  className="pill-button primary"
+                  onClick={() => navigate("/buyer/login")}
+                >
+                  Login to Buy &amp; Download
+                </button>
+                <button
+                  className="pill-button secondary"
+                  onClick={() => navigate("/explore")}
+                >
+                  Back to Explore
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      )}
-    </section>
+      </div>
+    </div>
   );
-}
+};
+
+export default ViewImage;

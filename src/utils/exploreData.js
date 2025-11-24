@@ -1,25 +1,22 @@
 // src/utils/exploreData.js
 
-/**
- * Build an image record for Explore page.
- * This creates a stable object structure for each image.
- */
-export function buildImageRecord({ name, url }) {
-  return {
-    id: name,               // unique per storage item
-    name,
-    url,
-    title: name.replace(/\.[^/.]+$/, ""), // remove ext
-  };
-}
+// Simple static data for now – each item has an id used in URLs like /view/1
+// Images can come from Firebase or any public URL you already use.
+// For now, we'll point to your existing sample files in public/images as a fallback.
 
-/**
- * Get a default price for an image based on its name.
- * You can adjust this logic.
- */
-export function priceForName(name) {
-  const numMatch = name.match(/\d+/);
-  if (!numMatch) return 99;
-  const num = Number(numMatch[0]);
-  return 49 + (num % 150); // 49 → 199
-}
+const TOTAL_IMAGES = 112; // adjust if you have fewer/more
+
+export const explorePhotos = Array.from({ length: TOTAL_IMAGES }, (_, index) => {
+  const num = index + 1;
+  const filename = `sample${num}.jpg`;
+
+  return {
+    id: num,
+    title: `sample${num}`,
+    filename,
+    price: 199,
+    // FRONTEND uses this path; if you're using Firebase URLs, you can swap this
+    // e.g. url: yourFirebaseList[num]
+    url: `/images/${filename}`,
+  };
+});

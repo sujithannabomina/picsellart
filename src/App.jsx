@@ -1,68 +1,65 @@
+// src/App.jsx
 import React from "react";
-import { Routes, Route } from "react-router-dom";
-import Navbar from "./components/Navbar.jsx";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 
-import Home from "./pages/Home.jsx";
-import Explore from "./pages/Explore.jsx";
-import Faq from "./pages/Faq.jsx";
-import Contact from "./pages/Contact.jsx";
-import Refunds from "./pages/Refunds.jsx";
-import BuyerLogin from "./pages/BuyerLogin.jsx";
-import SellerLogin from "./pages/SellerLogin.jsx";
-import BuyerDashboard from "./pages/BuyerDashboard.jsx";
-import SellerDashboard from "./pages/SellerDashboard.jsx";
-import ViewImage from "./pages/ViewImage.jsx";
-import NotFound from "./pages/NotFound.jsx";
+import Layout from "./components/Layout";
+import LandingPage from "./pages/LandingPage";
+import Explore from "./pages/Explore";
+import Faq from "./pages/Faq";
+import Contact from "./pages/Contact";
+import Refunds from "./pages/Refunds";
+import BuyerLogin from "./pages/BuyerLogin";
+import SellerLogin from "./pages/SellerLogin";
+import BuyerDashboard from "./pages/BuyerDashboard";
+import SellerDashboard from "./pages/SellerDashboard";
+import ViewImage from "./pages/ViewImage";
+import NotFound from "./pages/NotFound";
 
-import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 
-function App() {
+const App = () => {
   return (
-    <div className="app-root">
-      <Navbar />
+    <AuthProvider>
+      <Router>
+        <div className="app-root">
+          <Layout>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/explore" element={<Explore />} />
+              <Route path="/faq" element={<Faq />} />
+              <Route path="/contact" element={<Contact />} />
+              <Route path="/refunds" element={<Refunds />} />
 
-      <div className="page-wrapper">
-        <div className="page-inner">
-          <Routes>
-            {/* Public pages */}
-            <Route path="/" element={<Home />} />
-            <Route path="/explore" element={<Explore />} />
-            <Route path="/faq" element={<Faq />} />
-            <Route path="/contact" element={<Contact />} />
-            <Route path="/refunds" element={<Refunds />} />
+              <Route path="/buyer/login" element={<BuyerLogin />} />
+              <Route path="/seller/login" element={<SellerLogin />} />
 
-            {/* Auth pages */}
-            <Route path="/buyer-login" element={<BuyerLogin />} />
-            <Route path="/seller-login" element={<SellerLogin />} />
+              <Route
+                path="/buyer/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <BuyerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/seller/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <SellerDashboard />
+                  </ProtectedRoute>
+                }
+              />
 
-            {/* Dashboards (protected) */}
-            <Route
-              path="/buyer/dashboard"
-              element={
-                <ProtectedRoute requiredRole="buyer">
-                  <BuyerDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/seller/dashboard"
-              element={
-                <ProtectedRoute requiredRole="seller">
-                  <SellerDashboard />
-                </ProtectedRoute>
-              }
-            />
+              <Route path="/view/:id" element={<ViewImage />} />
 
-            {/* View single image */}
-            <Route path="/photo/:photoId" element={<ViewImage />} />
-
-            {/* 404 */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Layout>
         </div>
-      </div>
-    </div>
+      </Router>
+    </AuthProvider>
   );
-}
+};
 
 export default App;
