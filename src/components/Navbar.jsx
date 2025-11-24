@@ -1,68 +1,83 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
-import "./Header.css";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
 
-export default function Navbar() {
-  const location = useLocation();
+const Navbar = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
-  const isActive = (path) => {
-    if (path === "/explore") {
-      // treat /view/:id as part of explore
-      return (
-        location.pathname === "/explore" ||
-        location.pathname.startsWith("/view/")
-      );
-    }
-    return location.pathname === path;
+  const handleBrandClick = () => {
+    navigate("/");
   };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/");
+    } catch (err) {
+      console.error("Logout failed", err);
+    }
+  };
+
+  const linkClass = ({ isActive }) =>
+    isActive ? "nav-link active" : "nav-link";
 
   return (
     <header className="site-header">
       <div className="header-inner">
-        {/* Brand */}
-        <Link to="/" className="brand">
-          <span className="brand-dot" />
-          <span className="brand-text">Picsellart</span>
-        </Link>
+        <button
+          type="button"
+          className="brand"
+          onClick={handleBrandClick}
+          aria-label="Go to Picsellart home"
+        >
+          <div className="brand-logo" />
+          <span className="brand-name">Picsellart</span>
+        </button>
 
-        {/* Center nav */}
-        <nav className="nav-links" aria-label="Main navigation">
-          <Link
-            to="/explore"
-            className={isActive("/explore") ? "nav-link active" : "nav-link"}
-          >
+        <nav className="main-nav">
+          <NavLink to="/explore" className={linkClass}>
             Explore
-          </Link>
-          <Link
-            to="/faq"
-            className={isActive("/faq") ? "nav-link active" : "nav-link"}
-          >
+          </NavLink>
+          <NavLink to="/faq" className={linkClass}>
             FAQ
-          </Link>
-          <Link
-            to="/contact"
-            className={isActive("/contact") ? "nav-link active" : "nav-link"}
-          >
+          </NavLink>
+          <NavLink to="/contact" className={linkClass}>
             Contact
-          </Link>
-          <Link
-            to="/refunds"
-            className={isActive("/refunds") ? "nav-link active" : "nav-link"}
-          >
+          </NavLink>
+          <NavLink to="/refunds" className={linkClass}>
             Refunds
-          </Link>
+          </NavLink>
         </nav>
 
-        {/* Right buttons */}
         <div className="header-actions">
-          <Link to="/buyer-login" className="pill-button secondary small">
-            Buyer Login
-          </Link>
-          <Link to="/seller-login" className="pill-button primary small">
-            Seller Login
-          </Link>
+          {user ? (
+            <>
+              <span className="user-label">
+                {user.role === "seller" ? "Seller" : "Buyer"}
+              </span>
+              <button
+                type="button"
+                className="pill-button secondary"
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink to="/buyer-login" className="pill-button secondary">
+                Buyer Login
+              </NavLink>
+              <NavLink to="/seller-login" className="pill-button primary">
+                Seller Login
+              </NavLink>
+            </>
+          )}
         </div>
       </div>
     </header>
   );
-}
+};
+
+export default Navbar;
