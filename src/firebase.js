@@ -2,8 +2,9 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 
-// Your existing Firebase config
+// Your Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ",
   authDomain: "picsellart-619a7.firebaseapp.com",
@@ -14,17 +15,21 @@ const firebaseConfig = {
   measurementId: "G-3KNDHJ6JZY",
 };
 
-// Initialise core services
+// Core app
 const app = initializeApp(firebaseConfig);
 
-// Firestore DB for purchases, seller data, etc.
+// Firestore DB
 const db = getFirestore(app);
 
-// Storage for all photos
+// Storage (for all photos)
 const storage = getStorage(app);
 
-// Named exports (recommended)
-export { app, db, storage };
+// Auth + Google provider
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
 
-// Default export (so older `import app from "../firebase"` still works)
+// Named exports (used across the app)
+export { app, db, storage, auth, googleProvider };
+
+// Default export so older imports like `import app from "../firebase"` still work
 export default app;
