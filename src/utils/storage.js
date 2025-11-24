@@ -1,75 +1,71 @@
-import { getStorage, ref, listAll, getDownloadURL } from "firebase/storage";
-import app from "../firebase";
+// src/utils/storage.js
+import { storage } from "../firebase";
+import { getDownloadURL, listAll, ref } from "firebase/storage";
 
-const storage = getStorage(app);
+const PUBLIC_ROOT = "public/images";
+const MAX_EXPLORE_ITEMS = 120;
 
-// folders where your preview images live
-const PUBLIC_FOLDERS = ["Buyer", "public"];
-
-// small helper so prices look realistic but still auto-generated
-function computePriceFromName(name) {
-  const base = 399;
-  const offset = (name.length * 17) % 300; // 0-299
-  const rounded = offset - (offset % 50); // step of 50
-  return base + rounded; // e.g. 399, 449, 499, 549, 599, 649, 699
+// simple price pattern
+function priceForIndex(index) {
+  const pattern = [399, 499, 599, 799];
+  return pattern[index % pattern.length];
 }
 
 /**
- * Fetches ALL public photos from Firebase Storage (Buyer + public folders),
- * in parallel for speed.
- * Used by the Explore page.
+ * List photos for Explore (public gallery).
+ * Each item has: id, storagePath, filename, title, price, url
  */
-export async function getAllPublicPhotos() {
-  const folderPromises = PUBLIC_FOLDERS.map(async (folder) => {
-    const folderRef = ref(storage, `${folder}/`);
-    const result = await listAll(folderRef);
+export async function getExplorePhotos() {
+  const rootRef = ref(storage, PUBLIC_ROOT);
+  const res = await listAll(rootRef);
 
-    // getDownloadURL for this folder – in parallel
-    const urls = await Promise.all(
-      result.items.map(async (itemRef) => {
-        const url = await getDownloadURL(itemRef);
-        const name = itemRef.name;
-        const price = computePriceFromName(name);
+  const sorted = res.items
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, MAX_EXPLORE_ITEMS);
 
-        return {
-          id: `${folder}/${name}`,
-          path: `${folder}/${name}`,
-          name,
-          folder,
-          url,
-          price,
-        };
-      })
-    );
+  const urls = await Promise.all(sorted.map((item) => getDownloadURL(item)));
 
-    return urls;
-  });
-
-  const groups = await Promise.all(folderPromises);
-  const all = groups.flat();
-
-  // stable order by file name
-  all.sort((a, b) => a.name.localeCompare(b.name));
-  return all;
+  return sorted.map((item, index) => ({
+    id: item.fullPath,
+    storagePath: item.fullPath,
+    filename: item.name,
+    title: "Street Photography",
+    price: priceForIndex(index),
+    url: urls[index],
+  }));
 }
 
 /**
- * Used on the landing page hero – just take first 3 nicely.
- */
-export async function getLandingCandidates() {
-  const all = await getAllPublicPhotos();
-  return all.slice(0, 3);
-}
-
-/**
- * Used by the ViewImage page. Path is like "Buyer/sample3.jpg".
+ * Generic helper: given a storage path like "public/images/sample3.jpg"
+ * or "Buyer/user123/file.jpg", return a download URL.
  */
 export async function fetchPhotoUrl(storagePath) {
-  const refObj = ref(storage, storagePath);
-  const url = await getDownloadURL(refObj);
+  const fileRef = ref(storage, storagePath);
+  return getDownloadURL(fileRef);
+}
 
-  const name = storagePath.split("/").pop() || storagePath;
-  const price = computePriceFromName(name);
+/**
+ * For compatibility: sometimes only filename is passed.
+ * We assume it's under PUBLIC_ROOT.
+ */
+export async function getPhotoByFileName(fileName) {
+  const path = fileName.includes("/")
+    ? fileName
+    : `${PUBLIC_ROOT}/${fileName}`;
+  return fetchPhotoUrl(path);
+}
 
-  return { url, price, name };
+/**
+ * Optional helper for landing hero if any old code still uses it.
+ * Just returns first few items from explore list.
+ */
+export async function getLandingCandidates(limit = 4) {
+  const photos = await getExplorePhotos();
+  return photos.slice(0, limit);
+}
+
+// Extra generic alias in case other modules use this name
+export async function getDownloadUrlForPath(path) {
+  return fetchPhotoUrl(path);
 }
