@@ -1,25 +1,36 @@
 // src/pages/Home.jsx
 import React from "react";
 
+const heroImages = [
+  "/images/sample1.jpg",
+  "/images/sample2.jpg",
+  "/images/sample3.jpg",
+  "/images/sample4.jpg",
+];
+
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 flex flex-col md:flex-row items-center gap-10">
-        {/* Left text block */}
-        <div className="w-full md:w-1/2">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-purple-500 mb-3">
+    <div className="min-h-screen bg-slate-50">
+      <main className="max-w-6xl mx-auto px-4 py-16 flex flex-col md:flex-row items-center gap-12">
+        {/* LEFT: TEXT */}
+        <section className="flex-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-violet-500">
             Sell once • Earn many times
           </p>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-slate-900">
-            Turn your photos into income.
+
+          <h1 className="mt-3 text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight">
+            Turn your photos into
+            <br />
+            income.
           </h1>
-          <p className="mt-4 text-sm sm:text-base text-slate-600 max-w-xl">
+
+          <p className="mt-4 text-slate-600 max-w-xl text-sm md:text-base">
             Architects, designers, bloggers, marketing agencies and businesses
             buy licensed images from Picsellart. You upload once — we handle
             secure checkout and instant downloads.
           </p>
 
-          <ul className="mt-6 space-y-2 text-sm text-slate-700">
+          <ul className="mt-5 space-y-2 text-sm text-slate-700">
             <li>• Set your own price within your selected seller plan.</li>
             <li>
               • Picsellart watermark on previews — clean, full-resolution file
@@ -31,63 +42,55 @@ export default function Home() {
           <div className="mt-7 flex flex-wrap gap-3">
             <a
               href="/buyer-login"
-              className="px-5 py-2.5 rounded-full border border-slate-300 bg-white text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 active:scale-[0.98] transition"
+              className="rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
             >
               Buyer Login
             </a>
             <a
               href="/seller-login"
-              className="px-5 py-2.5 rounded-full bg-purple-600 text-sm font-medium text-white shadow-lg shadow-purple-300 hover:bg-purple-700 active:scale-[0.98] transition"
+              className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-5 py-2 text-sm font-medium text-white shadow-md hover:opacity-95"
             >
               Become a Seller
             </a>
             <a
               href="/explore"
-              className="px-5 py-2.5 rounded-full border border-slate-300 bg-white text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 active:scale-[0.98] transition"
+              className="rounded-full border border-slate-300 px-5 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
             >
               Explore Pictures
             </a>
           </div>
-        </div>
+        </section>
 
-        {/* Right image grid – uses 4 local sample images */}
-        <div className="w-full md:w-1/2 flex justify-center">
-          <div className="grid grid-cols-2 gap-4 max-w-md">
-            <div className="rounded-3xl overflow-hidden shadow-md shadow-slate-200">
+        {/* RIGHT: IMAGE COLLAGE */}
+        <section className="flex-1 w-full">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2 rounded-3xl overflow-hidden shadow-sm h-52 md:h-64">
               <img
-                src="/images/sample1.jpg"
-                alt="Sample 1"
-                className="h-40 w-full object-cover"
+                src={heroImages[0]}
+                alt="Picsellart preview 1"
+                className="w-full h-full object-cover"
                 loading="lazy"
               />
             </div>
-            <div className="rounded-3xl overflow-hidden shadow-md shadow-slate-200">
+            <div className="rounded-3xl overflow-hidden shadow-sm h-40 md:h-48">
               <img
-                src="/images/sample2.jpg"
-                alt="Sample 2"
-                className="h-40 w-full object-cover"
+                src={heroImages[1]}
+                alt="Picsellart preview 2"
+                className="w-full h-full object-cover"
                 loading="lazy"
               />
             </div>
-            <div className="rounded-3xl overflow-hidden shadow-md shadow-slate-200">
+            <div className="rounded-3xl overflow-hidden shadow-sm h-40 md:h-48">
               <img
-                src="/images/sample3.jpg"
-                alt="Sample 3"
-                className="h-40 w-full object-cover"
-                loading="lazy"
-              />
-            </div>
-            <div className="rounded-3xl overflow-hidden shadow-md shadow-slate-200">
-              <img
-                src="/images/sample4.jpg"
-                alt="Sample 4"
-                className="h-40 w-full object-cover"
+                src={heroImages[2]}
+                alt="Picsellart preview 3"
+                className="w-full h-full object-cover"
                 loading="lazy"
               />
             </div>
           </div>
-        </div>
-      </section>
-    </main>
+        </section>
+      </main>
+    </div>
   );
 }
