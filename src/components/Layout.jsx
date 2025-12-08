@@ -1,16 +1,19 @@
+// src/components/Layout.jsx
+import React from "react";
 import { Outlet } from "react-router-dom";
-import Navbar from "./Navbar";
-import "./Header.css";
+import Navbar from "./Navbar.jsx";
 
-export default function Layout() {
+const Layout = () => {
   return (
-    <div className="app-root">
+    <>
       <Navbar />
       <main className="page-wrapper">
         <div className="page-inner">
           <Outlet />
         </div>
       </main>
-    </div>
+    </>
   );
-}
+};
+
+export default Layout;

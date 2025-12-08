@@ -1,14 +1,12 @@
+// src/components/Navbar.jsx
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import logo from "/picsellart-logo.png"; // adjust if your logo path is different
 
 const Navbar = () => {
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
-
-  const handleBrandClick = () => {
-    navigate("/");
-  };
+  const { user, role, logout } = useAuth();
 
   const handleLogout = async () => {
     try {
@@ -19,59 +17,61 @@ const Navbar = () => {
     }
   };
 
-  const linkClass = ({ isActive }) =>
-    isActive ? "nav-link active" : "nav-link";
-
   return (
     <header className="site-header">
-      <div className="header-inner">
-        <button
-          type="button"
-          className="brand"
-          onClick={handleBrandClick}
-          aria-label="Go to Picsellart home"
-        >
-          <div className="brand-logo" />
+      <div className="navbar-inner">
+        <button className="brand" onClick={() => navigate("/")}>
+          <span className="brand-dot" />
           <span className="brand-name">Picsellart</span>
         </button>
 
-        <nav className="main-nav">
-          <NavLink to="/explore" className={linkClass}>
-            Explore
+        <nav className="nav-links">
+          <NavLink to="/" end>
+            Home
           </NavLink>
-          <NavLink to="/faq" className={linkClass}>
-            FAQ
-          </NavLink>
-          <NavLink to="/contact" className={linkClass}>
-            Contact
-          </NavLink>
-          <NavLink to="/refunds" className={linkClass}>
-            Refunds
-          </NavLink>
+          <NavLink to="/explore">Explore</NavLink>
+          <NavLink to="/faq">FAQ</NavLink>
+          <NavLink to="/contact">Contact</NavLink>
+          <NavLink to="/refunds">Refunds</NavLink>
         </nav>
 
-        <div className="header-actions">
+        <div className="nav-actions">
           {user ? (
             <>
-              <span className="user-label">
-                {user.role === "seller" ? "Seller" : "Buyer"}
-              </span>
-              <button
-                type="button"
-                className="pill-button secondary"
-                onClick={handleLogout}
-              >
+              {role === "buyer" && (
+                <button
+                  className="pill-button secondary"
+                  onClick={() => navigate("/buyer-dashboard")}
+                >
+                  Buyer Dashboard
+                </button>
+              )}
+              {role === "seller" && (
+                <button
+                  className="pill-button secondary"
+                  onClick={() => navigate("/seller-dashboard")}
+                >
+                  Seller Dashboard
+                </button>
+              )}
+              <button className="pill-button primary" onClick={handleLogout}>
                 Logout
               </button>
             </>
           ) : (
             <>
-              <NavLink to="/buyer-login" className="pill-button secondary">
+              <button
+                className="pill-button secondary"
+                onClick={() => navigate("/buyer-login")}
+              >
                 Buyer Login
-              </NavLink>
-              <NavLink to="/seller-login" className="pill-button primary">
+              </button>
+              <button
+                className="pill-button primary"
+                onClick={() => navigate("/seller-login")}
+              >
                 Seller Login
-              </NavLink>
+              </button>
             </>
           )}
         </div>
