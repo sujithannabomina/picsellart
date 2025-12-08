@@ -1,35 +1,34 @@
-import React, { useMemo } from "react";
+// src/pages/Home.jsx
+import React from "react";
 import { useNavigate } from "react-router-dom";
 
 const HERO_IMAGES = [
-  "https://images.pexels.com/photos/1133957/pexels-photo-1133957.jpeg",
-  "https://images.pexels.com/photos/1785493/pexels-photo-1785493.jpeg",
-  "https://images.pexels.com/photos/532173/pexels-photo-532173.jpeg",
-  "https://images.pexels.com/photos/631165/pexels-photo-631165.jpeg",
+  "/images/sample1.jpg",
+  "/images/sample2.jpg",
+  "/images/sample3.jpg",
+  "/images/sample4.jpg",
+  "/images/sample5.jpg",
+  "/images/sample6.jpg",
 ];
 
-function shuffleAndPick(list, count) {
-  const arr = [...list];
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr.slice(0, count);
+function getRandomImages(count) {
+  const shuffled = [...HERO_IMAGES].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
 }
 
-export default function Home() {
+const Home = () => {
   const navigate = useNavigate();
 
-  // Pick 3 images in random order each time the page loads
-  const images = useMemo(() => shuffleAndPick(HERO_IMAGES, 3), []);
+  // pick 4 images once per mount (so they change on refresh/visit)
+  const [heroImages] = React.useState(() => getRandomImages(4));
 
   return (
-    <main className="landing-wrapper">
-      <section className="landing-hero">
+    <main className="page page-home">
+      <section className="hero">
         <div className="hero-text">
-          <p className="hero-pill">Sell once • Earn many times</p>
+          <p className="hero-kicker">Sell once • Earn many times</p>
 
-          <h1 className="hero-title">Turn your photos into income.</h1>
+          <h1 className="hero-heading">Turn your photos into income.</h1>
 
           <p className="hero-subtitle">
             Architects, designers, bloggers, marketing agencies and businesses
@@ -46,24 +45,21 @@ export default function Home() {
             <li>Track views, sales and earnings from your dashboard.</li>
           </ul>
 
-          <div className="hero-actions">
+          <div className="hero-buttons">
             <button
-              type="button"
-              className="pill-button secondary"
+              className="btn btn-outline"
               onClick={() => navigate("/buyer-login")}
             >
               Buyer Login
             </button>
             <button
-              type="button"
-              className="pill-button primary"
+              className="btn btn-primary"
               onClick={() => navigate("/seller-login")}
             >
               Become a Seller
             </button>
             <button
-              type="button"
-              className="pill-button secondary"
+              className="btn btn-ghost"
               onClick={() => navigate("/explore")}
             >
               Explore Pictures
@@ -71,14 +67,16 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="hero-images">
-          {images.map((src, index) => (
-            <div key={index} className="hero-card">
-              <img src={src} alt={`Sample gallery ${index + 1}`} />
+        <div className="hero-gallery" aria-label="Sample images preview">
+          {heroImages.map((src, index) => (
+            <div key={src} className="hero-image-card">
+              <img src={src} alt={`Sample ${index + 1}`} />
             </div>
           ))}
         </div>
       </section>
     </main>
   );
-}
+};
+
+export default Home;

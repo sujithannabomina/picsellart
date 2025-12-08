@@ -1,100 +1,82 @@
 // src/components/Navbar.jsx
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
 
 const Navbar = () => {
   const navigate = useNavigate();
-  const { user, role, logout } = useAuth();
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate("/");
-    } catch (err) {
-      console.error("Logout failed", err);
-    }
-  };
 
   return (
-    <header className="site-header">
+    <header className="navbar">
       <div className="navbar-inner">
-        {/* Brand / Logo */}
+        {/* Logo + brand */}
         <button
-          className="brand"
-          type="button"
+          className="nav-logo"
           onClick={() => navigate("/")}
+          aria-label="Go to home"
         >
-          {/* If you have picsellart-logo.png in /public, this will load it.
-              If the path is different, ONLY the image will be broken,
-              but the build will still work. */}
-          <img
-            src="/picsellart-logo.png"
-            alt="Picsellart logo"
-            className="brand-logo-img"
-          />
-          <span className="brand-name">Picsellart</span>
+          <img src="/logo.png" alt="Picsellart logo" />
+          <span>Picsellart</span>
         </button>
 
-        {/* Center nav links */}
-        <nav className="nav-links">
-          <NavLink to="/" end>
+        {/* Center navigation */}
+        <nav className="nav-links" aria-label="Main navigation">
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) =>
+              "nav-link" + (isActive ? " nav-link-active" : "")
+            }
+          >
             Home
           </NavLink>
-          <NavLink to="/explore">Explore</NavLink>
-          <NavLink to="/faq">FAQ</NavLink>
-          <NavLink to="/contact">Contact</NavLink>
-          <NavLink to="/refunds">Refunds</NavLink>
+          <NavLink
+            to="/explore"
+            className={({ isActive }) =>
+              "nav-link" + (isActive ? " nav-link-active" : "")
+            }
+          >
+            Explore
+          </NavLink>
+          <NavLink
+            to="/faq"
+            className={({ isActive }) =>
+              "nav-link" + (isActive ? " nav-link-active" : "")
+            }
+          >
+            FAQ
+          </NavLink>
+          <NavLink
+            to="/contact"
+            className={({ isActive }) =>
+              "nav-link" + (isActive ? " nav-link-active" : "")
+            }
+          >
+            Contact
+          </NavLink>
+          <NavLink
+            to="/refunds"
+            className={({ isActive }) =>
+              "nav-link" + (isActive ? " nav-link-active" : "")
+            }
+          >
+            Refunds
+          </NavLink>
         </nav>
 
-        {/* Right actions */}
+        {/* Right side actions */}
         <div className="nav-actions">
-          {user ? (
-            <>
-              {role === "buyer" && (
-                <button
-                  type="button"
-                  className="pill-button secondary"
-                  onClick={() => navigate("/buyer-dashboard")}
-                >
-                  Buyer Dashboard
-                </button>
-              )}
-              {role === "seller" && (
-                <button
-                  type="button"
-                  className="pill-button secondary"
-                  onClick={() => navigate("/seller-dashboard")}
-                >
-                  Seller Dashboard
-                </button>
-              )}
-              <button
-                type="button"
-                className="pill-button primary"
-                onClick={handleLogout}
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="pill-button secondary"
-                onClick={() => navigate("/buyer-login")}
-              >
-                Buyer Login
-              </button>
-              <button
-                type="button"
-                className="pill-button primary"
-                onClick={() => navigate("/seller-login")}
-              >
-                Seller Login
-              </button>
-            </>
-          )}
+          <button
+            className="btn btn-nav"
+            onClick={() => navigate("/buyer-login")}
+          >
+            Buyer Login
+          </button>
+          <button
+            className="btn btn-nav-primary"
+            onClick={() => navigate("/seller-login")}
+          >
+            Seller Login
+          </button>
         </div>
       </div>
     </header>
