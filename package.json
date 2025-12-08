@@ -2,27 +2,29 @@
   "name": "picsellart",
   "version": "1.0.0",
   "private": true,
-  "description": "Picsellart — marketplace to buy & sell stunning photos",
-  "engines": {
-    "node": ">=18.0.0"
-  },
+  "description": "Picsellart — Buy & Sell Stunning Images",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "serve": "vite preview",
+    "lint": "echo \"No linting configured\""
+  },
+  "engines": {
+    "node": "22.x"
   },
   "dependencies": {
-    "axios": "^1.7.7",
-    "firebase": "^11.0.0",
+    "@firebase/util": "^1.10.0",
+    "firebase": "^11.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.26.2"
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
+    "@vitejs/plugin-react": "^4.3.2",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.14",
-    "vite": "^7.2.2"
+    "vite": "^7.2.7"
   }
 }
