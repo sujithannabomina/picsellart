@@ -1,86 +1,82 @@
 // src/pages/ViewImage.jsx
-import React from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { explorePhotos } from "../utils/exploreData";
-import WatermarkedImage from "../components/WatermarkedImage";
+import React, { useEffect, useState } from "react";
+import { useParams, Link } from "react-router-dom";
+import { storage } from "../firebase";
+import { ref, getDownloadURL } from "firebase/storage";
 
 const ViewImage = () => {
-  const { id } = useParams();
-  const navigate = useNavigate();
+  const { folder, fileName } = useParams();
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const photo = explorePhotos.find((p) => String(p.id) === String(id));
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        const folderPath = decodeURIComponent(folder);
+        const name = decodeURIComponent(fileName);
+        const imageRef = ref(storage, `${folderPath}/${name}`);
+        const imageUrl = await getDownloadURL(imageRef);
+        setUrl(imageUrl);
+      } catch (err) {
+        console.error("Error loading single image", err);
+        setError("Unable to load this image.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  if (!photo) {
-    return (
-      <div className="page-wrapper">
-        <div className="page-inner">
-          <h1 className="page-title">Image not found</h1>
-          <p className="page-subtitle">
-            We couldn’t find this image. It may have been removed or the link is
-            incorrect.
-          </p>
-          <button
-            className="pill-button secondary"
-            onClick={() => navigate("/explore")}
-          >
-            Back to Explore
-          </button>
-        </div>
-      </div>
-    );
-  }
+    load();
+  }, [folder, fileName]);
+
+  const decodedName = decodeURIComponent(fileName || "");
 
   return (
-    <div className="page-wrapper">
-      <div className="page-inner">
-        <header className="page-header">
-          <h1 className="page-title">{photo.title}</h1>
-          <p className="page-subtitle">
-            Public preview includes a Picsellart watermark for protection.
-            Log in as a buyer to purchase and download a clean, full-resolution
-            file.
-          </p>
-        </header>
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-indigo-50">
+      <main className="max-w-4xl mx-auto px-4 py-10 md:py-12">
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-xl md:text-2xl font-bold text-slate-900">
+            Image preview
+          </h1>
+          <Link
+            to="/explore"
+            className="text-xs md:text-sm text-indigo-600 hover:text-indigo-700"
+          >
+            ← Back to Explore
+          </Link>
+        </div>
 
-        <div className="view-layout">
-          {/* LEFT: BIG PREVIEW */}
-          <div className="view-main-image">
-            <WatermarkedImage src={photo.url} alt={photo.title} />
-          </div>
+        <p className="text-xs text-slate-500 mb-4 break-all">
+          {decodedName}
+        </p>
 
-          {/* RIGHT: DETAILS + ACTIONS */}
-          <div className="view-meta">
-            <div className="view-card">
-              <p className="view-label">Filename</p>
-              <p className="view-value">{photo.filename}</p>
+        {loading && (
+          <div className="text-slate-600 text-sm">Loading image…</div>
+        )}
 
-              <p className="view-label">Price</p>
-              <p className="view-price">₹{photo.price}</p>
+        {error && !loading && (
+          <div className="text-red-600 text-sm font-medium">{error}</div>
+        )}
 
-              <p className="view-label">License</p>
-              <p className="view-value">
-                Standard commercial license for designs, ads, web and client
-                work. Reselling the raw file is not allowed.
-              </p>
-
-              <div className="view-actions">
-                <button
-                  className="pill-button primary"
-                  onClick={() => navigate("/buyer/login")}
-                >
-                  Login to Buy &amp; Download
-                </button>
-                <button
-                  className="pill-button secondary"
-                  onClick={() => navigate("/explore")}
-                >
-                  Back to Explore
-                </button>
+        {!loading && !error && url && (
+          <div className="bg-white rounded-3xl shadow-md overflow-hidden">
+            <div className="relative">
+              <img
+                src={url}
+                alt={decodedName}
+                className="w-full max-h-[70vh] object-contain bg-slate-950"
+              />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <span className="text-white/70 text-2xl md:text-3xl font-extrabold tracking-[0.3em] mix-blend-overlay rotate-[-20deg]">
+                  PICSELLART
+                </span>
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        )}
+      </main>
     </div>
   );
 };

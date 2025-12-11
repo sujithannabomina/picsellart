@@ -4,7 +4,6 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Your existing config (from earlier)
 const firebaseConfig = {
   apiKey: "AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ",
   authDomain: "picsellart-619a7.firebaseapp.com",
@@ -17,8 +16,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 
-export { app, auth, db, storage };
+export default app;

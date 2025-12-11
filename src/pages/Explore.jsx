@@ -1,189 +1,283 @@
 // src/pages/Explore.jsx
 import React, { useEffect, useState, useMemo } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { storage } from "../firebase";
 import { ref, listAll, getDownloadURL } from "firebase/storage";
 
-const PUBLIC_IMAGES_PATH = "public/images";
+const ITEMS_PER_PAGE = 12;
 
-function buildPhotoObject(item, url) {
-  const filename = item.name; // e.g. "sample1.jpg"
-  const nameWithoutExt = filename.replace(/\.[^/.]+$/, "");
-
-  // Sample images (your 112) start with "sample..."
-  const isPlatformSample = /^sample/i.test(nameWithoutExt);
-
-  // Try to extract numeric ID (sample1.jpg → 1, sample101 → 101)
-  const numberMatch = nameWithoutExt.match(/(\d+)/);
-  const numericId = numberMatch ? numberMatch[1] : null;
-
-  const id = numericId || encodeURIComponent(nameWithoutExt);
-
-  const price = isPlatformSample ? 199 : 249; // you can change later
-
-  return {
-    id,
-    filename,
-    name: isPlatformSample ? "Street Photography" : nameWithoutExt,
-    url,
-    isPlatformSample,
-    price,
-  };
-}
-
-export default function Explore() {
+const Explore = () => {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const navigate = useNavigate();
+
+  // helper for random price
+  const getRandomPrice = (min = 199, max = 499) => {
+    return Math.round(
+      Math.floor(Math.random() * (max - min + 1)) + min
+    );
+  };
 
   useEffect(() => {
-    async function loadImages() {
+    const loadImages = async () => {
       setLoading(true);
       setError("");
 
       try {
-        const folderRef = ref(storage, PUBLIC_IMAGES_PATH);
-        const res = await listAll(folderRef);
+        // 1. Sample images (your platform images)
+        const publicRef = ref(storage, "public/images");
+        const publicList = await listAll(publicRef);
 
-        const urls = await Promise.all(
-          res.items.map((item) =>
-            getDownloadURL(item).then((url) => buildPhotoObject(item, url))
-          )
+        const publicPhotos = await Promise.all(
+          publicList.items.map(async (itemRef) => {
+            const url = await getDownloadURL(itemRef);
+            return {
+              id: `public/images/${itemRef.name}`,
+              folder: "public/images",
+              fileName: itemRef.name,
+              url,
+              title: "Street Photography",
+              price: getRandomPrice(),
+              ownerType: "platform", // purchase earnings for you
+            };
+          })
         );
 
-        // Sort by numeric ID if available, otherwise by filename
-        urls.sort((a, b) => {
-          const aNum = parseInt(a.id, 10);
-          const bNum = parseInt(b.id, 10);
+        // 2. Seller images (Buyer/ folder)
+        const buyerRef = ref(storage, "Buyer");
+        const buyerList = await listAll(buyerRef);
 
-          if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-          return a.filename.localeCompare(b.filename);
-        });
+        const buyerPhotos = await Promise.all(
+          buyerList.items.map(async (itemRef) => {
+            const url = await getDownloadURL(itemRef);
+            return {
+              id: `Buyer/${itemRef.name}`,
+              folder: "Buyer",
+              fileName: itemRef.name,
+              url,
+              title: "Street Photography",
+              price: getRandomPrice(),
+              ownerType: "seller", // purchase earnings for seller
+            };
+          })
+        );
 
-        setPhotos(urls);
+        const all = [...publicPhotos, ...buyerPhotos].sort((a, b) =>
+          a.fileName.localeCompare(b.fileName)
+        );
+
+        setPhotos(all);
+        setCurrentPage(1);
       } catch (err) {
         console.error("Error loading images from Firebase Storage", err);
         setError("Failed to load images.");
       } finally {
         setLoading(false);
       }
-    }
+    };
 
     loadImages();
   }, []);
 
   const filteredPhotos = useMemo(() => {
-    if (!searchTerm.trim()) return photos;
-    const term = searchTerm.toLowerCase();
+    const q = search.trim().toLowerCase();
+    if (!q) return photos;
     return photos.filter(
       (p) =>
-        p.name.toLowerCase().includes(term) ||
-        p.filename.toLowerCase().includes(term)
+        p.title.toLowerCase().includes(q) ||
+        p.fileName.toLowerCase().includes(q)
     );
-  }, [photos, searchTerm]);
+  }, [photos, search]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredPhotos.length / ITEMS_PER_PAGE)
+  );
+
+  const paginatedPhotos = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredPhotos.slice(
+      startIndex,
+      startIndex + ITEMS_PER_PAGE
+    );
+  }, [filteredPhotos, currentPage]);
+
+  const handleBuy = (photo) => {
+    // For now, always send to Buyer Login
+    navigate("/buyer-login");
+  };
+
+  const handleViewNewTab = (photo) => {
+    const encodedFolder = encodeURIComponent(photo.folder);
+    const encodedName = encodeURIComponent(photo.fileName);
+    const url = `/view/${encodedFolder}/${encodedName}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <main className="max-w-6xl mx-auto px-4 py-10">
-        <header className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold text-slate-900">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-indigo-50">
+      <main className="max-w-6xl mx-auto px-4 py-10 md:py-12">
+        <header className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">
             Explore Marketplace
           </h1>
-          <p className="mt-2 text-slate-600 max-w-2xl">
-            Curated images from our public gallery and verified sellers. Login
-            as a buyer to purchase and download watermark-free files.
+          <p className="text-slate-600 text-sm md:text-base">
+            Curated images from our public gallery and verified sellers.
+            Login as a buyer to purchase and download watermark-free files.
           </p>
-          <div className="mt-6">
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search street, interior, food..."
-              className="w-full md:w-96 rounded-full border border-slate-300 px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400"
-            />
-          </div>
         </header>
 
+        {/* Search bar */}
+        <div className="mb-6">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+            }}
+            placeholder="Search street, interior, food..."
+            className="w-full max-w-md px-4 py-2 rounded-full border border-slate-300 bg-white shadow-sm text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-indigo-400"
+          />
+        </div>
+
         {loading && (
-          <p className="text-slate-500 text-sm">Loading images from gallery…</p>
+          <div className="text-slate-600 text-sm">Loading images…</div>
         )}
 
-        {!loading && error && (
-          <p className="text-red-600 text-sm">{error}</p>
+        {error && !loading && (
+          <div className="text-red-600 text-sm font-medium">
+            {error}
+          </div>
         )}
 
         {!loading && !error && filteredPhotos.length === 0 && (
-          <p className="text-slate-500 text-sm">No images found.</p>
+          <div className="text-slate-600 text-sm">
+            No images found. Try a different search term.
+          </div>
         )}
 
+        {/* Image grid */}
         {!loading && !error && filteredPhotos.length > 0 && (
-          <section className="grid gap-6 mt-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-            {filteredPhotos.map((photo) => (
-              <article
-                key={photo.id + photo.filename}
-                className="bg-white rounded-2xl shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow"
-              >
-                <div className="aspect-[4/5] overflow-hidden">
-                  <img
-                    src={photo.url}
-                    alt={photo.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                </div>
-
-                <div className="p-4 flex flex-col gap-2">
-                  <div>
-                    <h2 className="text-sm font-semibold text-slate-900">
-                      {photo.name}
-                    </h2>
-                    <p className="text-xs text-slate-500">{photo.filename}</p>
-                  </div>
-
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-sm font-semibold text-emerald-600">
-                      ₹{photo.price}
-                    </span>
-                    {photo.isPlatformSample && (
-                      <span className="text-[10px] uppercase tracking-wide text-slate-400">
-                        Picsellart sample
+          <>
+            <section className="grid gap-6 md:gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-8">
+              {paginatedPhotos.map((photo) => (
+                <article
+                  key={photo.id}
+                  className="bg-white rounded-3xl shadow-md overflow-hidden flex flex-col"
+                >
+                  <div className="relative">
+                    <img
+                      src={photo.url}
+                      alt={photo.title}
+                      className="w-full h-64 object-cover"
+                      loading="lazy"
+                    />
+                    {/* Watermark overlay */}
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                      <span className="text-white/70 text-xl md:text-2xl font-extrabold tracking-[0.3em] mix-blend-overlay rotate-[-20deg]">
+                        PICSELLART
                       </span>
-                    )}
+                    </div>
                   </div>
 
-                  <div className="mt-3 flex gap-2">
-                    {/* VIEW – opens view page in new tab */}
-                    <a
-                      href={`/view/${photo.id}?file=${encodeURIComponent(
-                        photo.filename
-                      )}&ownerType=${
-                        photo.isPlatformSample ? "platform" : "seller"
+                  <div className="flex-1 px-4 pt-4 pb-3 flex flex-col">
+                    <h2 className="text-base md:text-lg font-semibold text-slate-900 mb-1">
+                      {photo.title}
+                    </h2>
+                    <p className="text-xs text-slate-500 mb-1">
+                      {photo.fileName}
+                    </p>
+                    <p className="text-sm font-semibold text-slate-900 mb-3">
+                      ₹{photo.price}
+                      <span className="ml-1 text-xs text-slate-500">
+                        {photo.ownerType === "platform"
+                          ? "Picsellart sample"
+                          : "Seller image"}
+                      </span>
+                    </p>
+
+                    <div className="mt-auto flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleViewNewTab(photo)}
+                        className="flex-1 px-3 py-2 text-xs md:text-sm rounded-full border border-slate-300 bg-white hover:bg-slate-50 transition"
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleBuy(photo)}
+                        className="flex-1 px-3 py-2 text-xs md:text-sm rounded-full bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition"
+                      >
+                        Buy
+                      </button>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </section>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mb-10">
+                <button
+                  type="button"
+                  disabled={currentPage === 1}
+                  onClick={() =>
+                    setCurrentPage((p) => Math.max(1, p - 1))
+                  }
+                  className={`px-3 py-1 text-xs md:text-sm rounded-full border border-slate-300 bg-white hover:bg-slate-50 transition ${
+                    currentPage === 1
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
+                  }`}
+                >
+                  Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 text-xs md:text-sm rounded-full border transition ${
+                        page === currentPage
+                          ? "bg-indigo-600 text-white border-indigo-600"
+                          : "bg-white border-slate-300 hover:bg-slate-50"
                       }`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 text-xs md:text-sm inline-flex items-center justify-center rounded-full border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50"
                     >
-                      View
-                    </a>
-
-                    {/* BUY – also goes to view page, but you can later handle ?buy=1 there */}
-                    <a
-                      href={`/view/${photo.id}?file=${encodeURIComponent(
-                        photo.filename
-                      )}&ownerType=${
-                        photo.isPlatformSample ? "platform" : "seller"
-                      }&buy=1`}
-                      className="flex-1 text-xs md:text-sm inline-flex items-center justify-center rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-3 py-1.5 font-medium text-white shadow-sm hover:opacity-95"
-                    >
-                      Buy
-                    </a>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </section>
+                      {page}
+                    </button>
+                  )
+                )}
+                <button
+                  type="button"
+                  disabled={currentPage === totalPages}
+                  onClick={() =>
+                    setCurrentPage((p) =>
+                      Math.min(totalPages, p + 1)
+                    )
+                  }
+                  className={`px-3 py-1 text-xs md:text-sm rounded-full border border-slate-300 bg-white hover:bg-slate-50 transition ${
+                    currentPage === totalPages
+                      ? "opacity-50 cursor-not-allowed"
+                      : ""
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </>
         )}
       </main>
     </div>
   );
-}
+};
+
+export default Explore;
