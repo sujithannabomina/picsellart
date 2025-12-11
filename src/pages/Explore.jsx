@@ -1,86 +1,80 @@
 // src/pages/Explore.jsx
-import React, { useEffect, useState, useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { storage } from "../firebase";
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ref, listAll, getDownloadURL } from "firebase/storage";
+import { storage } from "../firebase"; // assumes you export storage
+import ImageCard from "../components/ImageCard";
+import Pagination from "../components/Pagination";
+import { useAuth } from "../hooks/useAuth"; // assumes you already have this
 
-const ITEMS_PER_PAGE = 12;
+const PAGE_SIZE = 12;
+const PRICE_OPTIONS = [199, 249, 299, 349, 399];
+
+function priceFromFileName(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) & 0xffffffff;
+  }
+  const index = Math.abs(hash) % PRICE_OPTIONS.length;
+  return PRICE_OPTIONS[index];
+}
 
 const Explore = () => {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-
+  const [page, setPage] = useState(1);
+  const { user } = useAuth();
   const navigate = useNavigate();
 
-  // helper for random price
-  const getRandomPrice = (min = 199, max = 499) => {
-    return Math.round(
-      Math.floor(Math.random() * (max - min + 1)) + min
-    );
-  };
-
   useEffect(() => {
-    const loadImages = async () => {
-      setLoading(true);
-      setError("");
-
+    async function fetchPhotos() {
       try {
-        // 1. Sample images (your platform images)
+        setLoading(true);
+        setError("");
+
         const publicRef = ref(storage, "public/images");
-        const publicList = await listAll(publicRef);
-
-        const publicPhotos = await Promise.all(
-          publicList.items.map(async (itemRef) => {
-            const url = await getDownloadURL(itemRef);
-            return {
-              id: `public/images/${itemRef.name}`,
-              folder: "public/images",
-              fileName: itemRef.name,
-              url,
-              title: "Street Photography",
-              price: getRandomPrice(),
-              ownerType: "platform", // purchase earnings for you
-            };
-          })
-        );
-
-        // 2. Seller images (Buyer/ folder)
         const buyerRef = ref(storage, "Buyer");
-        const buyerList = await listAll(buyerRef);
 
-        const buyerPhotos = await Promise.all(
-          buyerList.items.map(async (itemRef) => {
-            const url = await getDownloadURL(itemRef);
-            return {
-              id: `Buyer/${itemRef.name}`,
-              folder: "Buyer",
-              fileName: itemRef.name,
-              url,
-              title: "Street Photography",
-              price: getRandomPrice(),
-              ownerType: "seller", // purchase earnings for seller
-            };
-          })
-        );
+        const [publicList, buyerList] = await Promise.all([
+          listAll(publicRef),
+          listAll(buyerRef),
+        ]);
 
-        const all = [...publicPhotos, ...buyerPhotos].sort((a, b) =>
-          a.fileName.localeCompare(b.fileName)
-        );
+        const allItems = [...publicList.items, ...buyerList.items];
 
-        setPhotos(all);
-        setCurrentPage(1);
+        const photoPromises = allItems.map(async (item) => {
+          const url = await getDownloadURL(item);
+          const fileName = item.name;
+
+          const isFromPublic = item.fullPath.startsWith("public/");
+          return {
+            id: encodeURIComponent(item.fullPath),
+            storagePath: item.fullPath,
+            url,
+            fileName,
+            title: "Street Photography",
+            price: priceFromFileName(fileName),
+            ownerType: isFromPublic ? "platform" : "seller",
+          };
+        });
+
+        const photoList = await Promise.all(photoPromises);
+
+        // Sort newest first by storage path (approximate)
+        photoList.sort((a, b) => (a.storagePath > b.storagePath ? -1 : 1));
+
+        setPhotos(photoList);
       } catch (err) {
-        console.error("Error loading images from Firebase Storage", err);
+        console.error("Error loading photos", err);
         setError("Failed to load images.");
       } finally {
         setLoading(false);
       }
-    };
+    }
 
-    loadImages();
+    fetchPhotos();
   }, []);
 
   const filteredPhotos = useMemo(() => {
@@ -88,195 +82,97 @@ const Explore = () => {
     if (!q) return photos;
     return photos.filter(
       (p) =>
-        p.title.toLowerCase().includes(q) ||
-        p.fileName.toLowerCase().includes(q)
+        p.fileName.toLowerCase().includes(q) ||
+        (p.title || "").toLowerCase().includes(q)
     );
   }, [photos, search]);
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredPhotos.length / ITEMS_PER_PAGE)
+    Math.ceil(filteredPhotos.length / PAGE_SIZE)
   );
 
-  const paginatedPhotos = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredPhotos.slice(
-      startIndex,
-      startIndex + ITEMS_PER_PAGE
-    );
-  }, [filteredPhotos, currentPage]);
+  const pagedPhotos = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredPhotos.slice(start, start + PAGE_SIZE);
+  }, [filteredPhotos, page]);
 
-  const handleBuy = (photo) => {
-    // For now, always send to Buyer Login
-    navigate("/buyer-login");
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [totalPages, page]);
+
+  const handleView = (photo) => {
+    const url = `/view/${photo.id}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const handleViewNewTab = (photo) => {
-    const encodedFolder = encodeURIComponent(photo.folder);
-    const encodedName = encodeURIComponent(photo.fileName);
-    const url = `/view/${encodedFolder}/${encodedName}`;
+  const handleBuy = (photo) => {
+    if (!user) {
+      navigate("/buyer-login");
+      return;
+    }
+    const url = `/view/${photo.id}?buyNow=1`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-indigo-50">
-      <main className="max-w-6xl mx-auto px-4 py-10 md:py-12">
-        <header className="mb-6 md:mb-8">
+    <main className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-slate-50 to-slate-100 px-4 py-10">
+      <section className="max-w-6xl mx-auto">
+        <header className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">
             Explore Marketplace
           </h1>
-          <p className="text-slate-600 text-sm md:text-base">
-            Curated images from our public gallery and verified sellers.
-            Login as a buyer to purchase and download watermark-free files.
+          <p className="text-sm md:text-base text-slate-700 mb-4">
+            Curated images from our public gallery and verified sellers. Login
+            as a buyer to purchase and download watermark-free files.
           </p>
-        </header>
-
-        {/* Search bar */}
-        <div className="mb-6">
           <input
             type="text"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
-              setCurrentPage(1);
+              setPage(1);
             }}
             placeholder="Search street, interior, food..."
-            className="w-full max-w-md px-4 py-2 rounded-full border border-slate-300 bg-white shadow-sm text-sm md:text-base focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            className="w-full max-w-md px-4 py-2 rounded-full border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-violet-400"
           />
-        </div>
+        </header>
 
         {loading && (
-          <div className="text-slate-600 text-sm">Loading images…</div>
+          <p className="text-sm text-slate-600">Loading images...</p>
         )}
-
-        {error && !loading && (
-          <div className="text-red-600 text-sm font-medium">
-            {error}
-          </div>
+        {error && (
+          <p className="text-sm text-red-600 mb-4">{error}</p>
         )}
 
         {!loading && !error && filteredPhotos.length === 0 && (
-          <div className="text-slate-600 text-sm">
-            No images found. Try a different search term.
-          </div>
+          <p className="text-sm text-slate-600">
+            No images found. Try a different search.
+          </p>
         )}
 
-        {/* Image grid */}
         {!loading && !error && filteredPhotos.length > 0 && (
           <>
-            <section className="grid gap-6 md:gap-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 mb-8">
-              {paginatedPhotos.map((photo) => (
-                <article
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {pagedPhotos.map((photo) => (
+                <ImageCard
                   key={photo.id}
-                  className="bg-white rounded-3xl shadow-md overflow-hidden flex flex-col"
-                >
-                  <div className="relative">
-                    <img
-                      src={photo.url}
-                      alt={photo.title}
-                      className="w-full h-64 object-cover"
-                      loading="lazy"
-                    />
-                    {/* Watermark overlay */}
-                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                      <span className="text-white/70 text-xl md:text-2xl font-extrabold tracking-[0.3em] mix-blend-overlay rotate-[-20deg]">
-                        PICSELLART
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 px-4 pt-4 pb-3 flex flex-col">
-                    <h2 className="text-base md:text-lg font-semibold text-slate-900 mb-1">
-                      {photo.title}
-                    </h2>
-                    <p className="text-xs text-slate-500 mb-1">
-                      {photo.fileName}
-                    </p>
-                    <p className="text-sm font-semibold text-slate-900 mb-3">
-                      ₹{photo.price}
-                      <span className="ml-1 text-xs text-slate-500">
-                        {photo.ownerType === "platform"
-                          ? "Picsellart sample"
-                          : "Seller image"}
-                      </span>
-                    </p>
-
-                    <div className="mt-auto flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleViewNewTab(photo)}
-                        className="flex-1 px-3 py-2 text-xs md:text-sm rounded-full border border-slate-300 bg-white hover:bg-slate-50 transition"
-                      >
-                        View
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleBuy(photo)}
-                        className="flex-1 px-3 py-2 text-xs md:text-sm rounded-full bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition"
-                      >
-                        Buy
-                      </button>
-                    </div>
-                  </div>
-                </article>
+                  photo={photo}
+                  onView={handleView}
+                  onBuy={handleBuy}
+                />
               ))}
-            </section>
+            </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mb-10">
-                <button
-                  type="button"
-                  disabled={currentPage === 1}
-                  onClick={() =>
-                    setCurrentPage((p) => Math.max(1, p - 1))
-                  }
-                  className={`px-3 py-1 text-xs md:text-sm rounded-full border border-slate-300 bg-white hover:bg-slate-50 transition ${
-                    currentPage === 1
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
-                >
-                  Prev
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (page) => (
-                    <button
-                      key={page}
-                      type="button"
-                      onClick={() => setCurrentPage(page)}
-                      className={`px-3 py-1 text-xs md:text-sm rounded-full border transition ${
-                        page === currentPage
-                          ? "bg-indigo-600 text-white border-indigo-600"
-                          : "bg-white border-slate-300 hover:bg-slate-50"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  )
-                )}
-                <button
-                  type="button"
-                  disabled={currentPage === totalPages}
-                  onClick={() =>
-                    setCurrentPage((p) =>
-                      Math.min(totalPages, p + 1)
-                    )
-                  }
-                  className={`px-3 py-1 text-xs md:text-sm rounded-full border border-slate-300 bg-white hover:bg-slate-50 transition ${
-                    currentPage === totalPages
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
-                >
-                  Next
-                </button>
-              </div>
-            )}
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onChange={setPage}
+            />
           </>
         )}
-      </main>
-    </div>
+      </section>
+    </main>
   );
 };
 

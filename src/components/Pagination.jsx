@@ -1,29 +1,45 @@
-export default function Pagination({ page, totalPages, onChange }) {
+// src/components/Pagination.jsx
+import React from "react";
+
+const Pagination = ({ page, totalPages, onChange }) => {
   if (totalPages <= 1) return null;
 
-  const prevDisabled = page <= 1;
-  const nextDisabled = page >= totalPages;
+  const pages = [];
+  for (let p = 1; p <= totalPages; p++) {
+    pages.push(p);
+  }
 
   return (
-    <div className="mt-8 flex items-center justify-center gap-3 text-xs text-slate-600">
+    <div className="flex justify-center items-center gap-2 mt-8 mb-4">
       <button
-        onClick={() => !prevDisabled && onChange(page - 1)}
-        disabled={prevDisabled}
-        className="rounded-full border border-slate-300 bg-white px-3 py-1 disabled:opacity-40 hover:bg-slate-50"
+        onClick={() => onChange(Math.max(1, page - 1)))}
+        disabled={page === 1}
+        className="px-3 py-1.5 rounded-full border text-xs disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Prev
       </button>
-      <span>
-        Page <span className="font-semibold">{page}</span>{" "}
-        <span className="text-slate-400">/ {totalPages}</span>
-      </span>
+      {pages.map((p) => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={`w-8 h-8 rounded-full text-xs font-medium ${
+            p === page
+              ? "bg-violet-600 text-white"
+              : "border border-slate-300 text-slate-700 hover:border-violet-400"
+          }`}
+        >
+          {p}
+        </button>
+      ))}
       <button
-        onClick={() => !nextDisabled && onChange(page + 1)}
-        disabled={nextDisabled}
-        className="rounded-full border border-slate-300 bg-white px-3 py-1 disabled:opacity-40 hover:bg-slate-50"
+        onClick={() => onChange(Math.min(totalPages, page + 1)))}
+        disabled={page === totalPages}
+        className="px-3 py-1.5 rounded-full border text-xs disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Next
       </button>
     </div>
   );
-}
+};
+
+export default Pagination;
