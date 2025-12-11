@@ -11,7 +11,6 @@ const ImageCard = ({ photo, onView, onBuy }) => {
           className="h-full w-full object-cover transform hover:scale-105 transition-transform duration-500"
           loading="lazy"
         />
-        {/* Watermark overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" />
         <span className="absolute bottom-3 left-4 text-[11px] tracking-[0.3em] uppercase text-slate-100 drop-shadow">
           PICSELLART

@@ -23,7 +23,7 @@ const Home = () => {
   return (
     <main className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-slate-50 to-slate-100 px-4 py-10">
       <section className="max-w-6xl mx-auto">
-        {/* Hero text */}
+        {/* Hero */}
         <div className="max-w-3xl">
           <p className="text-sm font-semibold text-violet-600 mb-2">
             Sell once • Earn many times
@@ -68,13 +68,13 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Sample gallery: 3 wrapped images from /public/images */}
+        {/* Local sample gallery */}
         <section className="mt-4">
           <h2 className="text-lg font-semibold text-slate-900 mb-3">
             Sample marketplace images
           </h2>
           <p className="text-sm text-slate-600 mb-4">
-            These are examples from your local <code>/public/images</code>{" "}
+            These examples come from your local <code>/public/images</code>{" "}
             folder. A different set of three will appear on each visit.
           </p>
 

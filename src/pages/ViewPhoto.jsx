@@ -22,8 +22,7 @@ const ViewPhoto = () => {
 
   const fullPath = decodeURIComponent(id);
   const isPlatformSample = fullPath.startsWith("public/");
-
-  const price = 199; // you can change or compute as needed
+  const price = 199; // you can tweak
 
   useEffect(() => {
     async function loadPhoto() {

@@ -4,20 +4,18 @@ import React from "react";
 const Pagination = ({ page, totalPages, onChange }) => {
   if (totalPages <= 1) return null;
 
-  const pages = [];
-  for (let p = 1; p <= totalPages; p++) {
-    pages.push(p);
-  }
+  const pages = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   return (
     <div className="flex justify-center items-center gap-2 mt-8 mb-4">
       <button
-        onClick={() => onChange(Math.max(1, page - 1)))}
+        onClick={() => onChange(Math.max(1, page - 1))}
         disabled={page === 1}
         className="px-3 py-1.5 rounded-full border text-xs disabled:opacity-40 disabled:cursor-not-allowed"
       >
         Prev
       </button>
+
       {pages.map((p) => (
         <button
           key={p}
@@ -31,8 +29,9 @@ const Pagination = ({ page, totalPages, onChange }) => {
           {p}
         </button>
       ))}
+
       <button
-        onClick={() => onChange(Math.min(totalPages, page + 1)))}
+        onClick={() => onChange(Math.min(totalPages, page + 1))}
         disabled={page === totalPages}
         className="px-3 py-1.5 rounded-full border text-xs disabled:opacity-40 disabled:cursor-not-allowed"
       >

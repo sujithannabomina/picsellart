@@ -2,10 +2,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ref, listAll, getDownloadURL } from "firebase/storage";
-import { storage } from "../firebase"; // assumes you export storage
+import { storage } from "../firebase";
+import { useAuth } from "../hooks/useAuth";
 import ImageCard from "../components/ImageCard";
 import Pagination from "../components/Pagination";
-import { useAuth } from "../hooks/useAuth"; // assumes you already have this
 
 const PAGE_SIZE = 12;
 const PRICE_OPTIONS = [199, 249, 299, 349, 399];
@@ -47,8 +47,8 @@ const Explore = () => {
         const photoPromises = allItems.map(async (item) => {
           const url = await getDownloadURL(item);
           const fileName = item.name;
-
           const isFromPublic = item.fullPath.startsWith("public/");
+
           return {
             id: encodeURIComponent(item.fullPath),
             storagePath: item.fullPath,
@@ -62,8 +62,10 @@ const Explore = () => {
 
         const photoList = await Promise.all(photoPromises);
 
-        // Sort newest first by storage path (approximate)
-        photoList.sort((a, b) => (a.storagePath > b.storagePath ? -1 : 1));
+        // sort newest-ish first (by path)
+        photoList.sort((a, b) =>
+          a.storagePath > b.storagePath ? -1 : 1
+        );
 
         setPhotos(photoList);
       } catch (err) {
