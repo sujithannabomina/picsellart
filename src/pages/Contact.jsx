@@ -1,118 +1,72 @@
 // src/pages/Contact.jsx
-import React from "react";
+import React, { useState } from "react";
 
 export default function Contact() {
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+  });
+
   return (
-    <div className="page-wrapper">
-      <h1 className="page-title">Contact Us</h1>
-      <p className="page-subtitle">
-        Send a message – our small team typically replies within 24–48 hours.
+    <div className="max-w-4xl mx-auto px-4 pt-32 pb-20 text-gray-800">
+      <h1 className="text-4xl font-bold mb-6">Contact Us</h1>
+      <p className="text-lg mb-10">
+        Send us a message — our support team typically replies within{" "}
+        <b>24–48 hours</b>.
       </p>
 
-      <div className="card">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            alert("Thank you. This demo form does not send emails yet.");
-          }}
+      <form className="space-y-6">
+        <input
+          type="text"
+          placeholder="Your name"
+          className="w-full p-4 border rounded-xl bg-white"
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+
+        <input
+          type="email"
+          placeholder="your@email.com"
+          className="w-full p-4 border rounded-xl bg-white"
+          value={form.email}
+          onChange={(e) => setForm({ ...form, email: e.target.value })}
+        />
+
+        <input
+          type="text"
+          placeholder="Subject"
+          className="w-full p-4 border rounded-xl bg-white"
+          value={form.subject}
+          onChange={(e) => setForm({ ...form, subject: e.target.value })}
+        />
+
+        <textarea
+          placeholder="Tell us how we can help…"
+          className="w-full p-4 border rounded-xl bg-white h-32"
+          value={form.message}
+          onChange={(e) => setForm({ ...form, message: e.target.value })}
+        />
+
+        <button
+          type="button"
+          className="w-full py-4 rounded-xl text-white text-lg font-semibold bg-gradient-to-r from-purple-500 to-pink-500"
         >
-          <div style={{ marginBottom: "10px" }}>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-              Your name
-            </label>
-            <input
-              type="text"
-              defaultValue="Jane Doe"
-              style={{
-                width: "100%",
-                padding: "8px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(148,163,184,0.8)",
-                fontSize: 14,
-              }}
-            />
-          </div>
+          Send message
+        </button>
+      </form>
 
-          <div style={{ marginBottom: "10px" }}>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-              Email
-            </label>
-            <input
-              type="email"
-              defaultValue="you@example.com"
-              style={{
-                width: "100%",
-                padding: "8px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(148,163,184,0.8)",
-                fontSize: 14,
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: "10px" }}>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-              Subject
-            </label>
-            <input
-              type="text"
-              defaultValue="Question or feedback"
-              style={{
-                width: "100%",
-                padding: "8px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(148,163,184,0.8)",
-                fontSize: 14,
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: "14px" }}>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 4 }}>
-              Message
-            </label>
-            <textarea
-              rows={4}
-              placeholder="Tell us how we can help…"
-              style={{
-                width: "100%",
-                padding: "8px 10px",
-                borderRadius: 12,
-                border: "1px solid rgba(148,163,184,0.8)",
-                fontSize: 14,
-                resize: "vertical",
-              }}
-            />
-          </div>
-
-          <button
-            type="submit"
-            style={{
-              width: "100%",
-              padding: "10px",
-              borderRadius: 999,
-              border: "none",
-              background:
-                "linear-gradient(135deg, #7c3aed, #ec4899)",
-              color: "#fff",
-              fontWeight: 600,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            Send message
-          </button>
-        </form>
-      </div>
-
-      <div className="card">
-        <h2>For urgent payment issues</h2>
-        <p style={{ marginBottom: 6 }}>
-          Include your Razorpay payment ID, buyer email address and the file
-          name you purchased. This helps us locate your order quickly.
+      <div className="mt-16">
+        <h2 className="text-xl font-semibold mb-4">
+          For urgent payment issues
+        </h2>
+        <p className="text-lg">
+          Include your Razorpay payment ID, buyer email, and purchased file
+          name. This helps us locate your order faster.
         </p>
-        <p style={{ fontSize: 13, color: "#6b7280" }}>
-          Support hours: Monday – Friday, 10:00 – 18:00 IST.
+        <p className="mt-4 text-gray-600">
+          Support hours: <b>Monday – Friday, 10:00 – 18:00 IST</b>.
         </p>
       </div>
     </div>
