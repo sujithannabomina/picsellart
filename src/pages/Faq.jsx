@@ -1,11 +1,48 @@
+// src/pages/Faq.jsx
 import React, { useMemo, useState } from "react";
+
+const FAQS = [
+  {
+    q: "What is Picsellart?",
+    a: "Picsellart is a curated marketplace where photographers and creators sell high-quality digital images to designers, agencies, brands, and individual buyers."
+  },
+  {
+    q: "How do I become a seller?",
+    a: "Choose a seller plan, complete the payment, and sign in with your account. Once your seller account is approved, you can upload images within your plan limits and track views, sales, and earnings from your dashboard."
+  },
+  {
+    q: "How are images delivered to buyers?",
+    a: "After successful payment, buyers get instant access to a clean, full-resolution download from their buyer dashboard. Public previews on the Explore page remain watermarked."
+  },
+  {
+    q: "Do images have watermarks?",
+    a: "Yes. Public previews on Explore and View pages include a Picsellart watermark for protection. Purchased downloads are watermark-free."
+  },
+  {
+    q: "What is your refund policy?",
+    a: "Because images are instantly downloadable digital files, refunds are not offered for change-of-mind. Refunds may be considered only if the delivered file is corrupt, incomplete, inaccessible, or clearly does not match the listing description."
+  },
+  {
+    q: "How long do refunds take?",
+    a: "If approved, we typically take 1–2 business days to review and approve a request, plus 3–7 business days for Razorpay/bank processing to reflect the refund in your account."
+  },
+  {
+    q: "Can I use purchased images commercially?",
+    a: "Yes. Unless a listing explicitly states otherwise, each purchase includes a standard commercial license for use in designs, ads, social media, presentations, and client work. Reselling or redistributing the raw files is not allowed."
+  }
+];
+
+function classNames(...xs) {
+  return xs.filter(Boolean).join(" ");
+}
 
 function Chevron({ open }) {
   return (
     <svg
-      className={`h-5 w-5 transition-transform duration-200 ${
+      className={classNames(
+        "h-5 w-5 transition-transform duration-200",
         open ? "rotate-180" : "rotate-0"
-      }`}
+      )}
       viewBox="0 0 20 20"
       fill="currentColor"
       aria-hidden="true"
@@ -19,207 +56,122 @@ function Chevron({ open }) {
   );
 }
 
-function FaqItem({ title, body, defaultOpen = false }) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  return (
-    <div className="rounded-2xl border border-white/60 bg-white/60 backdrop-blur-md shadow-sm">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full text-left px-5 py-4 flex items-center gap-3"
-        aria-expanded={open}
-      >
-        <div className="flex-1">
-          <div className="text-base sm:text-lg font-semibold text-slate-900">
-            {title}
-          </div>
-        </div>
-
-        <div className="h-9 w-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center">
-          <Chevron open={open} />
-        </div>
-      </button>
-
-      <div
-        className={`grid transition-all duration-200 ${
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-        }`}
-      >
-        <div className="overflow-hidden">
-          <div className="px-5 pb-5 text-slate-700 leading-relaxed">
-            {body}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function Faq() {
-  const faqs = useMemo(
-    () => [
-      {
-        title: "What is Picsellart?",
-        body: (
-          <>
-            Picsellart is a curated marketplace where photographers and creators
-            sell high-quality digital images to designers, agencies, brands, and
-            individual buyers. Purchases are delivered as instant digital
-            downloads.
-          </>
-        ),
-      },
-      {
-        title: "How do I become a seller?",
-        body: (
-          <>
-            Choose a seller plan, complete the Razorpay payment, and sign in
-            with your Google account. Once approved, you can upload images
-            within your plan limits, set prices, and track views/sales from your
-            seller dashboard.
-          </>
-        ),
-      },
-      {
-        title: "How are images delivered to buyers?",
-        body: (
-          <>
-            After successful payment, buyers get access to a clean, full-resolution
-            download from their buyer dashboard. Public previews on the website
-            remain watermarked.
-          </>
-        ),
-      },
-      {
-        title: "Do images have watermarks?",
-        body: (
-          <>
-            Yes — previews include a Picsellart watermark for protection.
-            Purchased downloads are watermark-free.
-          </>
-        ),
-      },
-      {
-        title: "What is your refund policy?",
-        body: (
-          <>
-            Because products are instant digital downloads, refunds are only
-            considered if the delivered file is corrupt, incomplete, inaccessible,
-            or clearly does not match the listing description. Refund timelines
-            are shown on the Refunds page.
-          </>
-        ),
-      },
-      {
-        title: "Can I use purchased images commercially?",
-        body: (
-          <>
-            Yes — unless a listing states otherwise, purchases include a standard
-            commercial license for use in designs, ads, social media, presentations,
-            and client work. Reselling or redistributing the original files is
-            not allowed.
-          </>
-        ),
-      },
-    ],
-    []
-  );
-
   const [query, setQuery] = useState("");
+  const [openIndex, setOpenIndex] = useState(0);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return faqs;
-    return faqs.filter(
+    const t = query.trim().toLowerCase();
+    if (!t) return FAQS;
+    return FAQS.filter(
       (x) =>
-        x.title.toLowerCase().includes(q) ||
-        String(x.body?.props?.children ?? "")
-          .toLowerCase()
-          .includes(q)
+        x.q.toLowerCase().includes(t) || x.a.toLowerCase().includes(t)
     );
-  }, [faqs, query]);
+  }, [query]);
+
+  // Keep openIndex valid when filtering
+  React.useEffect(() => {
+    if (filtered.length === 0) return;
+    if (openIndex >= filtered.length) setOpenIndex(0);
+  }, [filtered, openIndex]);
 
   return (
-    <div className="min-h-[calc(100vh-120px)] bg-gradient-to-b from-slate-50 to-white">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
-        <div className="rounded-3xl border border-white/60 bg-white/50 backdrop-blur-md shadow-sm p-6 sm:p-10">
-          <div className="flex items-start justify-between gap-6 flex-col md:flex-row">
-            <div className="max-w-2xl">
-              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
+    <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
+      <div className="rounded-3xl border border-slate-200 bg-white/70 shadow-sm backdrop-blur">
+        <div className="px-6 py-8 sm:px-10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
                 Frequently Asked Questions
               </h1>
-              <p className="mt-3 text-slate-600 leading-relaxed">
-                Quick answers about buying and selling on Picsellart. If you can’t
-                find what you need, use the Contact page and we’ll help you.
+              <p className="mt-2 max-w-2xl text-slate-600">
+                Quick answers about buying and selling on Picsellart. If you can’t find what you need,
+                use the Contact page and we’ll help you.
               </p>
             </div>
 
-            <div className="w-full md:w-[360px]">
+            <div className="w-full sm:w-80">
               <label className="text-sm font-medium text-slate-700">
                 Search FAQs
               </label>
               <div className="mt-2 relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  🔍
+                </span>
                 <input
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search: refunds, watermark, license..."
-                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pl-11 outline-none focus:ring-4 focus:ring-violet-100 focus:border-violet-300"
+                  placeholder="Search: refunds, watermark, seller..."
+                  className="w-full rounded-xl border border-slate-200 bg-white px-10 py-2.5 text-sm text-slate-900 shadow-sm outline-none ring-0 transition focus:border-slate-300 focus:shadow"
                 />
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <svg
-                    className="h-5 w-5"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M8.5 3a5.5 5.5 0 104.25 9.06l2.6 2.6a.75.75 0 101.06-1.06l-2.6-2.6A5.5 5.5 0 008.5 3zm-4 5.5a4 4 0 117.999.001A4 4 0 014.5 8.5z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
               </div>
             </div>
           </div>
 
-          <div className="mt-8 grid gap-4">
+          <div className="mt-8">
             {filtered.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-700">
-                No results for <span className="font-semibold">“{query}”</span>.
-                Try a different keyword.
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-slate-700">
+                No results found. Try a different keyword.
               </div>
             ) : (
-              filtered.map((f, idx) => (
-                <FaqItem
-                  key={f.title}
-                  title={f.title}
-                  body={f.body}
-                  defaultOpen={idx === 0 && !query}
-                />
-              ))
+              <div className="divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
+                {filtered.map((item, idx) => {
+                  const open = idx === openIndex;
+                  return (
+                    <div key={item.q} className="p-0">
+                      <button
+                        type="button"
+                        className="w-full px-5 py-4 text-left transition hover:bg-slate-50 focus:outline-none"
+                        onClick={() => setOpenIndex(open ? -1 : idx)}
+                        aria-expanded={open}
+                      >
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="text-base font-semibold text-slate-900">
+                            {item.q}
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-500">
+                            <span className="text-xs font-medium">
+                              {open ? "Hide" : "Show"}
+                            </span>
+                            <Chevron open={open} />
+                          </div>
+                        </div>
+                      </button>
+
+                      {open && (
+                        <div className="px-5 pb-5 -mt-1">
+                          <div className="rounded-xl bg-slate-50 p-4 text-sm leading-relaxed text-slate-700">
+                            {item.a}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
 
-          <div className="mt-10 rounded-2xl border border-slate-200 bg-white p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <div className="font-semibold text-slate-900">
-                Still have questions?
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-lg font-bold text-slate-900">
+                  Still have questions?
+                </div>
+                <div className="text-slate-600">
+                  Visit the Contact page and our team will get back to you within 24–48 hours.
+                </div>
               </div>
-              <div className="text-slate-600">
-                Visit the Contact page and our team will reply within 24–48 hours.
-              </div>
+              <a
+                href="/contact"
+                className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
+              >
+                Contact support →
+              </a>
             </div>
-            <a
-              href="/contact"
-              className="inline-flex items-center justify-center rounded-2xl px-5 py-3 font-semibold text-white bg-gradient-to-r from-violet-600 to-fuchsia-500 shadow-sm hover:opacity-95"
-            >
-              Contact support
-            </a>
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
