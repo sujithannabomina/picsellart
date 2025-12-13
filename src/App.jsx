@@ -3,6 +3,8 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
+import RequireAuth from "./components/RequireAuth";
+
 import Home from "./pages/Home";
 import Explore from "./pages/Explore";
 import ViewPhoto from "./pages/ViewPhoto";
@@ -10,8 +12,6 @@ import Faq from "./pages/Faq";
 import Contact from "./pages/Contact";
 import Refunds from "./pages/Refunds";
 
-// These imports assume you already have these pages.
-// If the filenames are slightly different, keep YOUR filenames.
 import BuyerLogin from "./pages/BuyerLogin";
 import SellerLogin from "./pages/SellerLogin";
 import BuyerDashboard from "./pages/BuyerDashboard";
@@ -30,11 +30,25 @@ function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/refunds" element={<Refunds />} />
 
-        {/* Existing auth + dashboard routes */}
         <Route path="/buyer-login" element={<BuyerLogin />} />
         <Route path="/seller-login" element={<SellerLogin />} />
-        <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
-        <Route path="/seller/dashboard" element={<SellerDashboard />} />
+
+        <Route
+          path="/buyer/dashboard"
+          element={
+            <RequireAuth role="buyer">
+              <BuyerDashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/seller/dashboard"
+          element={
+            <RequireAuth role="seller">
+              <SellerDashboard />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </div>
   );

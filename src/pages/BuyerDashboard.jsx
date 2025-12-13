@@ -1,93 +1,51 @@
 // src/pages/BuyerDashboard.jsx
-import { useEffect, useState } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import { getPurchasesForBuyer } from "../utils/purchases";
+import { useAuth } from "../hooks/useAuth";
 
-const BuyerDashboard = () => {
-  const { user, isBuyer } = useAuth();
-  const [purchases, setPurchases] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function BuyerDashboard() {
   const navigate = useNavigate();
-
-  // Redirect if not logged-in as buyer
-  useEffect(() => {
-    if (!user || !isBuyer) {
-      navigate("/buyer-login", { replace: true });
-    }
-  }, [user, isBuyer, navigate]);
-
-  useEffect(() => {
-    const load = async () => {
-      if (!user) return;
-      try {
-        const data = await getPurchasesForBuyer(user.uid);
-        setPurchases(data);
-      } catch (err) {
-        console.error("Failed to load purchases:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
-  }, [user]);
-
-  if (!user || !isBuyer) {
-    return <div className="page-loading">Loading...</div>;
-  }
+  const { user, logout } = useAuth();
 
   return (
-    <main className="page-shell">
-      <section className="dashboard-card">
-        <h1 className="page-title">My Downloads</h1>
-        <p className="page-subtitle">
-          Welcome, {user.displayName || user.email}. View and download your
-          purchased files any time.
-        </p>
+    <main className="page">
+      <section style={{ maxWidth: 1120, margin: "0 auto" }}>
+        <div
+          style={{
+            borderRadius: 22,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: "rgba(255,255,255,0.92)",
+            boxShadow: "0 18px 50px rgba(15,23,42,0.10)",
+            padding: 18,
+          }}
+        >
+          <h1 style={{ fontSize: "1.9rem", fontWeight: 800, margin: 0 }}>Buyer Dashboard</h1>
+          <p style={{ marginTop: 8, color: "#4b5563", lineHeight: 1.7 }}>
+            Welcome, <b>{user?.displayName || "Buyer"}</b> ({user?.email})
+          </p>
 
-        {loading && <div className="page-loading">Loading purchases…</div>}
-
-        {!loading && purchases.length === 0 && (
-          <div className="empty-state">
-            <p>You haven’t purchased any images yet.</p>
+          <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button
-              className="btn-primary"
               onClick={() => navigate("/explore")}
+              className="btn btn-primary"
+              style={{ padding: "10px 16px" }}
             >
-              Browse images
+              Explore Pictures
+            </button>
+            <button
+              onClick={logout}
+              className="btn btn-nav"
+              style={{ padding: "10px 16px" }}
+            >
+              Logout
             </button>
           </div>
-        )}
 
-        {!loading && purchases.length > 0 && (
-          <div className="purchase-grid">
-            {purchases.map((purchase) => (
-              <article key={purchase.id} className="purchase-card">
-                <img
-                  src={purchase.previewUrl}
-                  alt={purchase.fileName}
-                  className="purchase-thumb"
-                />
-                <div className="purchase-body">
-                  <h3>{purchase.title || purchase.fileName}</h3>
-                  <p className="purchase-meta">
-                    ₹{purchase.amount / 100} ·{" "}
-                    {new Date(purchase.createdAt).toLocaleDateString()}
-                  </p>
-                  <a
-                    href={purchase.downloadUrl}
-                    className="btn-secondary small"
-                  >
-                    Download
-                  </a>
-                </div>
-              </article>
-            ))}
+          <div style={{ marginTop: 18, color: "#64748b", lineHeight: 1.7 }}>
+            Purchases/Downloads will appear here once Razorpay + download delivery is wired.
           </div>
-        )}
+        </div>
       </section>
     </main>
   );
-};
-
-export default BuyerDashboard;
+}
