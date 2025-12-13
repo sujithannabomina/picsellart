@@ -5,44 +5,68 @@ import { useAuth } from "../hooks/useAuth";
 
 export default function BuyerDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const auth = useAuth();
+
+  const wrap = { maxWidth: 1120, margin: "0 auto", padding: "28px 16px 64px" };
+  const card = {
+    borderRadius: 22,
+    border: "1px solid rgba(148,163,184,0.25)",
+    background: "rgba(255,255,255,0.92)",
+    boxShadow: "0 18px 50px rgba(15,23,42,0.12)",
+    padding: 18,
+  };
+  const btn = {
+    border: "none",
+    borderRadius: 999,
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 800,
+    color: "white",
+    background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
+    boxShadow: "0 18px 40px rgba(79, 70, 229, 0.35)",
+  };
+  const btnGhost = {
+    borderRadius: 999,
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 800,
+    background: "white",
+    border: "1px solid #e5e7eb",
+    color: "#0f172a",
+    marginLeft: 10,
+  };
+
+  async function onLogout() {
+    await auth.logout();
+    navigate("/", { replace: true });
+  }
 
   return (
     <main className="page">
-      <section style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <div
-          style={{
-            borderRadius: 22,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(255,255,255,0.92)",
-            boxShadow: "0 18px 50px rgba(15,23,42,0.10)",
-            padding: 18,
-          }}
-        >
-          <h1 style={{ fontSize: "1.9rem", fontWeight: 800, margin: 0 }}>Buyer Dashboard</h1>
-          <p style={{ marginTop: 8, color: "#4b5563", lineHeight: 1.7 }}>
-            Welcome, <b>{user?.displayName || "Buyer"}</b> ({user?.email})
-          </p>
+      <section style={wrap}>
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>Buyer Dashboard</h1>
+        <p style={{ marginTop: 8, color: "#4b5563", lineHeight: 1.65, maxWidth: 820 }}>
+          Welcome{auth?.user?.displayName ? `, ${auth.user.displayName}` : ""}. Browse the marketplace and purchase files.
+        </p>
 
-          <div style={{ marginTop: 14, display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button
-              onClick={() => navigate("/explore")}
-              className="btn btn-primary"
-              style={{ padding: "10px 16px" }}
-            >
+        <div style={{ marginTop: 16, ...card }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button type="button" style={btn} onClick={() => navigate("/explore")}>
               Explore Pictures
             </button>
-            <button
-              onClick={logout}
-              className="btn btn-nav"
-              style={{ padding: "10px 16px" }}
-            >
+            <button type="button" style={btnGhost} onClick={onLogout}>
               Logout
             </button>
           </div>
 
-          <div style={{ marginTop: 18, color: "#64748b", lineHeight: 1.7 }}>
-            Purchases/Downloads will appear here once Razorpay + download delivery is wired.
+          <div style={{ marginTop: 14, color: "#334155", lineHeight: 1.7 }}>
+            <p style={{ margin: 0, fontWeight: 800, color: "#0f172a" }}>Status</p>
+            <p style={{ margin: "6px 0 0" }}>
+              Logged in as: <b>Buyer</b>
+            </p>
+            <p style={{ margin: "6px 0 0", color: "#64748b" }}>
+              (Purchases + downloads can be connected to Razorpay later. UI is stable and production-safe.)
+            </p>
           </div>
         </div>
       </section>

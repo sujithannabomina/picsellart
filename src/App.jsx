@@ -3,8 +3,6 @@ import React from "react";
 import { Routes, Route } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
-import RequireAuth from "./components/RequireAuth";
-
 import Home from "./pages/Home";
 import Explore from "./pages/Explore";
 import ViewPhoto from "./pages/ViewPhoto";
@@ -16,6 +14,8 @@ import BuyerLogin from "./pages/BuyerLogin";
 import SellerLogin from "./pages/SellerLogin";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
+
+import RequireAuth from "./components/RequireAuth";
 
 function App() {
   return (
@@ -36,7 +36,7 @@ function App() {
         <Route
           path="/buyer/dashboard"
           element={
-            <RequireAuth role="buyer">
+            <RequireAuth allowRole="buyer">
               <BuyerDashboard />
             </RequireAuth>
           }
@@ -44,7 +44,7 @@ function App() {
         <Route
           path="/seller/dashboard"
           element={
-            <RequireAuth role="seller">
+            <RequireAuth allowRole="seller">
               <SellerDashboard />
             </RequireAuth>
           }

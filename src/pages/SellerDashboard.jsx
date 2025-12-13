@@ -1,194 +1,247 @@
 // src/pages/SellerDashboard.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { ref, listAll, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../firebase";
+import { useNavigate } from "react-router-dom";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { db, storage } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 
-const PLAN_RULES = {
-  starter: { name: "Starter", maxUploads: 25, maxPrice: 199, durationDays: 180 },
-  pro: { name: "Pro", maxUploads: 30, maxPrice: 249, durationDays: 180 },
-  elite: { name: "Elite", maxUploads: 50, maxPrice: 249, durationDays: 180 },
-};
+const PLANS = [
+  { id: "starter", name: "Starter", price: 100, maxUploads: 25, maxPrice: 199, durationDays: 180 },
+  { id: "pro", name: "Pro", price: 300, maxUploads: 30, maxPrice: 249, durationDays: 180 },
+  { id: "elite", name: "Elite", price: 800, maxUploads: 50, maxPrice: 249, durationDays: 180 },
+];
 
 export default function SellerDashboard() {
-  const { user, sellerPlan, logout } = useAuth();
+  const navigate = useNavigate();
+  const auth = useAuth();
 
-  const rules = useMemo(() => PLAN_RULES[sellerPlan] || PLAN_RULES.starter, [sellerPlan]);
+  const [loading, setLoading] = useState(true);
+  const [planId, setPlanId] = useState(null);
+  const [uploadCount, setUploadCount] = useState(0);
 
-  const [items, setItems] = useState([]);
-  const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState(null);
   const [price, setPrice] = useState("");
-  const [msg, setMsg] = useState("");
+  const [title, setTitle] = useState("Street Photography");
+  const [status, setStatus] = useState("");
 
-  const folderPath = useMemo(() => `seller/${user?.uid || "unknown"}`, [user?.uid]);
-
-  const loadMyUploads = async () => {
-    if (!user) return;
-    try {
-      const folderRef = ref(storage, folderPath);
-      const res = await listAll(folderRef);
-      const files = await Promise.all(
-        res.items.map(async (it) => ({ name: it.name, url: await getDownloadURL(it) }))
-      );
-      setItems(files);
-    } catch (e) {
-      console.warn("Seller folder not ready yet:", e);
-      setItems([]);
-    }
-  };
+  const plan = useMemo(() => PLANS.find((p) => p.id === planId) || null, [planId]);
 
   useEffect(() => {
-    loadMyUploads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.uid]);
+    async function loadSeller() {
+      try {
+        setLoading(true);
+        setStatus("");
+        if (!auth?.user?.uid) return;
 
-  const remaining = Math.max(0, rules.maxUploads - items.length);
+        const userRef = doc(db, "users", auth.user.uid);
+        const snap = await getDoc(userRef);
+        const data = snap.exists() ? snap.data() : null;
 
-  const onUpload = async (e) => {
+        setPlanId(data?.planId || null);
+        setUploadCount(Number(data?.uploadCount || 0));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSeller();
+  }, [auth?.user?.uid]);
+
+  async function onLogout() {
+    await auth.logout();
+    navigate("/", { replace: true });
+  }
+
+  async function choosePlan(id) {
+    if (!auth?.user?.uid) return;
+    const selected = PLANS.find((p) => p.id === id);
+    if (!selected) return;
+
+    await setDoc(
+      doc(db, "users", auth.user.uid),
+      {
+        role: "seller",
+        planId: selected.id,
+        planName: selected.name,
+        planMaxUploads: selected.maxUploads,
+        planMaxPrice: selected.maxPrice,
+        planDurationDays: selected.durationDays,
+        planActivatedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+
+    setPlanId(selected.id);
+    setStatus("✅ Plan activated.");
+  }
+
+  async function onUpload(e) {
     e.preventDefault();
-    setMsg("");
+    setStatus("");
 
-    const file = e.target.file?.files?.[0];
-    const p = Number(price);
+    if (!auth?.user?.uid) return;
 
-    if (!file) return setMsg("Please choose an image file.");
-    if (!Number.isFinite(p) || p <= 0) return setMsg("Enter a valid price.");
-    if (p > rules.maxPrice) return setMsg(`Your plan allows max ₹${rules.maxPrice} per image.`);
-    if (items.length >= rules.maxUploads) return setMsg(`Upload limit reached (${rules.maxUploads}).`);
+    if (!plan) {
+      setStatus("❗ Please select a plan first.");
+      return;
+    }
+
+    const numericPrice = Number(price);
+    if (!file) return setStatus("❗ Please choose a file.");
+    if (!numericPrice || numericPrice < 1) return setStatus("❗ Enter a valid price.");
+    if (numericPrice > plan.maxPrice) return setStatus(`❗ Max allowed price for ${plan.name} is ₹${plan.maxPrice}.`);
+    if (uploadCount >= plan.maxUploads) return setStatus(`❗ Upload limit reached (${plan.maxUploads}).`);
 
     try {
-      setBusy(true);
+      setStatus("Uploading…");
 
-      // Upload to seller/{uid}/filename
-      const safeName = `${Date.now()}-${file.name}`.replace(/\s+/g, "_");
-      const fileRef = ref(storage, `${folderPath}/${safeName}`);
+      // Storage path: seller/{uid}/{timestamp}-{filename}
+      const safeName = file.name.replace(/[^\w.\-]+/g, "_");
+      const storagePath = `seller/${auth.user.uid}/${Date.now()}-${safeName}`;
+      const fileRef = ref(storage, storagePath);
 
       await uploadBytes(fileRef, file);
+      const url = await getDownloadURL(fileRef);
 
-      setMsg("✅ Uploaded successfully.");
-      e.target.reset();
+      // Update user upload count
+      const newCount = uploadCount + 1;
+      await setDoc(
+        doc(db, "users", auth.user.uid),
+        {
+          uploadCount: newCount,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setUploadCount(newCount);
+      setFile(null);
       setPrice("");
-      await loadMyUploads();
+      setTitle("Street Photography");
+      setStatus("✅ Uploaded successfully. (Explore page can display seller folder when rules allow it)");
     } catch (err) {
       console.error(err);
-      setMsg("Upload failed. Check Storage rules and try again.");
-    } finally {
-      setBusy(false);
+      setStatus("❌ Upload failed. (Storage rules or auth domain setup may be blocking uploads)");
     }
+  }
+
+  const wrap = { maxWidth: 1120, margin: "0 auto", padding: "28px 16px 64px" };
+  const card = {
+    borderRadius: 22,
+    border: "1px solid rgba(148,163,184,0.25)",
+    background: "rgba(255,255,255,0.92)",
+    boxShadow: "0 18px 50px rgba(15,23,42,0.12)",
+    padding: 18,
   };
+  const btnPrimary = {
+    border: "none",
+    borderRadius: 999,
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 800,
+    color: "white",
+    background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
+    boxShadow: "0 18px 40px rgba(79, 70, 229, 0.35)",
+  };
+  const btnGhost = {
+    borderRadius: 999,
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 800,
+    background: "white",
+    border: "1px solid #e5e7eb",
+    color: "#0f172a",
+  };
+
+  if (loading) {
+    return (
+      <main className="page">
+        <section style={wrap}>
+          <p style={{ padding: 20 }}>Loading…</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="page">
-      <section style={{ maxWidth: 1120, margin: "0 auto" }}>
-        <div
-          style={{
-            borderRadius: 22,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(255,255,255,0.92)",
-            boxShadow: "0 18px 50px rgba(15,23,42,0.10)",
-            padding: 18,
-          }}
-        >
-          <h1 style={{ fontSize: "1.9rem", fontWeight: 800, margin: 0 }}>Seller Dashboard</h1>
-          <p style={{ marginTop: 8, color: "#4b5563", lineHeight: 1.7 }}>
-            Welcome, <b>{user?.displayName || "Seller"}</b> ({user?.email})
-          </p>
+      <section style={wrap}>
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>Seller Dashboard</h1>
+        <p style={{ marginTop: 8, color: "#4b5563", lineHeight: 1.65, maxWidth: 900 }}>
+          Welcome{auth?.user?.displayName ? `, ${auth.user.displayName}` : ""}. Select a plan and upload within limits.
+        </p>
 
-          <div
-            style={{
-              marginTop: 12,
-              borderRadius: 18,
-              padding: 14,
-              border: "1px solid rgba(148,163,184,0.25)",
-              background: "rgba(239,246,255,0.55)",
-              color: "#0f172a",
-              lineHeight: 1.7,
-            }}
-          >
-            <b>Plan:</b> {rules.name} • <b>Max uploads:</b> {rules.maxUploads} •{" "}
-            <b>Max price:</b> ₹{rules.maxPrice}/image • <b>Remaining:</b> {remaining}
-          </div>
+        <div style={{ marginTop: 16, display: "grid", gap: 14 }}>
+          {/* PLAN */}
+          <div style={card}>
+            <p style={{ margin: 0, fontWeight: 900, color: "#0f172a" }}>Your plan</p>
+            <p style={{ margin: "6px 0 0", color: "#334155" }}>
+              Current: <b>{plan ? `${plan.name}` : "Not selected"}</b> • Uploads: <b>{uploadCount}</b>
+              {plan ? ` / ${plan.maxUploads}` : ""} • Max price: <b>{plan ? `₹${plan.maxPrice}` : "—"}</b>
+            </p>
 
-          <form onSubmit={onUpload} style={{ marginTop: 14, display: "grid", gap: 10 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              <label style={{ fontWeight: 800, color: "#0f172a" }}>Upload image</label>
-              <input name="file" type="file" accept="image/*" />
-            </div>
-
-            <div style={{ display: "grid", gap: 6, maxWidth: 260 }}>
-              <label style={{ fontWeight: 800, color: "#0f172a" }}>Set price (₹)</label>
-              <input
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder={`Max ₹${rules.maxPrice}`}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 12,
-                  border: "1px solid #e5e7eb",
-                  outline: "none",
-                  background: "white",
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="submit"
-                disabled={busy}
-                style={{
-                  border: "none",
-                  borderRadius: 999,
-                  padding: "10px 16px",
-                  cursor: busy ? "not-allowed" : "pointer",
-                  fontWeight: 800,
-                  color: "white",
-                  background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
-                  boxShadow: "0 18px 40px rgba(79, 70, 229, 0.35)",
-                  opacity: busy ? 0.75 : 1,
-                }}
-              >
-                {busy ? "Uploading…" : "Upload"}
-              </button>
-
-              <button
-                type="button"
-                onClick={logout}
-                className="btn btn-nav"
-                style={{ padding: "10px 16px" }}
-              >
-                Logout
-              </button>
-            </div>
-
-            {msg && <div style={{ color: msg.startsWith("✅") ? "#065f46" : "#7f1d1d" }}>{msg}</div>}
-          </form>
-
-          <div style={{ marginTop: 18 }}>
-            <h3 style={{ margin: "0 0 8px", fontSize: "1.05rem", fontWeight: 900, color: "#0f172a" }}>
-              Your uploads ({items.length})
-            </h3>
-
-            {items.length === 0 ? (
-              <div style={{ color: "#64748b" }}>No uploads yet.</div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
-                {items.map((it) => (
-                  <div
-                    key={it.name}
-                    style={{
-                      borderRadius: 18,
-                      overflow: "hidden",
-                      border: "1px solid rgba(148,163,184,0.25)",
-                      background: "rgba(255,255,255,0.9)",
-                      boxShadow: "0 14px 32px rgba(15,23,42,0.08)",
-                    }}
-                  >
-                    <img src={it.url} alt={it.name} style={{ width: "100%", height: 180, objectFit: "cover" }} />
-                    <div style={{ padding: 10, color: "#334155", fontSize: "0.9rem" }}>{it.name}</div>
+            {!plan && (
+              <div style={{ marginTop: 12, display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+                {PLANS.map((p) => (
+                  <div key={p.id} style={{ border: "1px solid rgba(148,163,184,0.25)", borderRadius: 18, padding: 14, background: "rgba(239,246,255,0.55)" }}>
+                    <div style={{ fontWeight: 900, color: "#0f172a" }}>{p.name}</div>
+                    <div style={{ marginTop: 6, color: "#334155", lineHeight: 1.6 }}>
+                      ₹{p.price} • {p.maxUploads} uploads • max ₹{p.maxPrice} per image • {p.durationDays} days
+                    </div>
+                    <button style={{ ...btnPrimary, marginTop: 10 }} onClick={() => choosePlan(p.id)}>
+                      Activate {p.name}
+                    </button>
                   </div>
                 ))}
               </div>
             )}
+          </div>
+
+          {/* UPLOAD */}
+          <div style={card}>
+            <p style={{ margin: 0, fontWeight: 900, color: "#0f172a" }}>Upload new image</p>
+            <p style={{ margin: "6px 0 0", color: "#64748b", lineHeight: 1.6 }}>
+              Upload will be blocked automatically if you exceed plan limits.
+            </p>
+
+            <form onSubmit={onUpload} style={{ marginTop: 12, display: "grid", gap: 10, maxWidth: 720 }}>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                style={{ padding: 10, borderRadius: 12, border: "1px solid #e5e7eb", background: "white" }}
+              />
+
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Title"
+                style={{ padding: 10, borderRadius: 12, border: "1px solid #e5e7eb", background: "white" }}
+              />
+
+              <input
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder={plan ? `Price (max ₹${plan.maxPrice})` : "Price"}
+                inputMode="numeric"
+                style={{ padding: 10, borderRadius: 12, border: "1px solid #e5e7eb", background: "white" }}
+              />
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button type="submit" style={btnPrimary}>Upload</button>
+                <button type="button" style={btnGhost} onClick={() => navigate("/explore")}>View Marketplace</button>
+                <button type="button" style={btnGhost} onClick={onLogout}>Logout</button>
+              </div>
+
+              {status && (
+                <div style={{ marginTop: 4, color: status.startsWith("❌") || status.startsWith("❗") ? "#b91c1c" : "#0f172a", fontWeight: 700 }}>
+                  {status}
+                </div>
+              )}
+            </form>
           </div>
         </div>
       </section>

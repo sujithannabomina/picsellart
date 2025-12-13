@@ -1,120 +1,73 @@
 // src/pages/SellerLogin.jsx
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-
-const PLANS = [
-  { id: "starter", name: "Starter", price: 100, maxUploads: 25, maxPrice: 199, durationDays: 180 },
-  { id: "pro", name: "Pro", price: 300, maxUploads: 30, maxPrice: 249, durationDays: 180 },
-  { id: "elite", name: "Elite", price: 800, maxUploads: 50, maxPrice: 249, durationDays: 180 },
-];
 
 export default function SellerLogin() {
   const navigate = useNavigate();
-  const { loginAsSeller, sellerPlan, setSellerPlan } = useAuth();
+  const location = useLocation();
+  const auth = useAuth();
 
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const [error, setError] = useState("");
 
-  const selected = PLANS.find((p) => p.id === sellerPlan) || PLANS[0];
+  const nextPath = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get("next") || "/seller/dashboard";
+  }, [location.search]);
 
-  const onLogin = async () => {
+  useEffect(() => {
+    if (auth?.user && auth.role === "seller") navigate("/seller/dashboard", { replace: true });
+    if (auth?.user && auth.role === "buyer") navigate("/buyer/dashboard", { replace: true });
+  }, [auth?.user, auth?.role, navigate]);
+
+  async function onSellerGoogle() {
     try {
-      setErr("");
-      setBusy(true);
-      await loginAsSeller(selected.id);
-      navigate("/seller/dashboard", { replace: true });
+      setError("");
+      await auth.loginAsSeller();
+      navigate(nextPath, { replace: true });
     } catch (e) {
       console.error(e);
-      setErr("Seller login failed. Please try again.");
-    } finally {
-      setBusy(false);
+      setError("Login failed. Please try again.");
     }
+  }
+
+  const wrap = { maxWidth: 980, margin: "0 auto", padding: "28px 16px 64px" };
+  const card = {
+    borderRadius: 22,
+    border: "1px solid rgba(148,163,184,0.25)",
+    background: "rgba(255,255,255,0.92)",
+    boxShadow: "0 18px 50px rgba(15,23,42,0.12)",
+    padding: 18,
+  };
+  const btn = {
+    border: "none",
+    borderRadius: 999,
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 800,
+    color: "white",
+    background: "linear-gradient(90deg, rgba(112,63,247,1) 0%, rgba(236,72,153,1) 100%)",
+    boxShadow: "0 18px 40px rgba(236, 72, 153, 0.25)",
   };
 
   return (
-    <main className="page" style={{ display: "grid", placeItems: "center" }}>
-      <section style={{ width: "100%", maxWidth: 720 }}>
-        <div
-          style={{
-            borderRadius: 22,
-            border: "1px solid rgba(148,163,184,0.25)",
-            background: "rgba(255,255,255,0.92)",
-            boxShadow: "0 18px 50px rgba(15,23,42,0.12)",
-            padding: 18,
-          }}
-        >
-          <h1 style={{ fontSize: "1.9rem", fontWeight: 800, margin: 0 }}>Seller Login</h1>
-          <p style={{ marginTop: 10, color: "#4b5563", lineHeight: 1.7 }}>
-            Choose your plan and sign in. Upload limits and price caps are enforced inside Seller Dashboard.
-          </p>
+    <main className="page">
+      <section style={wrap}>
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>Seller Login</h1>
+        <p style={{ marginTop: 8, color: "#4b5563", lineHeight: 1.65, maxWidth: 820 }}>
+          Login to manage your plan, upload images within limits, and track your sales.
+        </p>
 
-          <div style={{ marginTop: 14, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
-            {PLANS.map((p) => {
-              const active = p.id === selected.id;
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setSellerPlan(p.id)}
-                  style={{
-                    textAlign: "left",
-                    borderRadius: 18,
-                    padding: 14,
-                    cursor: "pointer",
-                    border: active ? "2px solid #7c3aed" : "1px solid rgba(148,163,184,0.25)",
-                    background: active ? "rgba(237,233,254,0.7)" : "rgba(255,255,255,0.9)",
-                    boxShadow: "0 14px 32px rgba(15,23,42,0.08)",
-                  }}
-                >
-                  <div style={{ fontWeight: 900, color: "#0f172a" }}>{p.name}</div>
-                  <div style={{ marginTop: 6, color: "#334155", lineHeight: 1.6, fontSize: "0.92rem" }}>
-                    ₹{p.price} • {p.maxUploads} uploads • Max ₹{p.maxPrice}/image • {p.durationDays} days
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-
-          <button
-            type="button"
-            onClick={onLogin}
-            disabled={busy}
-            style={{
-              marginTop: 14,
-              width: "100%",
-              border: "none",
-              borderRadius: 999,
-              padding: "12px 16px",
-              cursor: busy ? "not-allowed" : "pointer",
-              fontWeight: 800,
-              color: "white",
-              background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
-              boxShadow: "0 18px 40px rgba(79, 70, 229, 0.35)",
-              opacity: busy ? 0.75 : 1,
-            }}
-          >
-            {busy ? "Signing in…" : "Continue with Google"}
+        <div style={{ marginTop: 16, ...card }}>
+          <button type="button" style={btn} onClick={onSellerGoogle}>
+            Continue with Google
           </button>
 
-          {err && (
-            <div
-              style={{
-                marginTop: 12,
-                borderRadius: 14,
-                padding: 12,
-                border: "1px solid rgba(248,113,113,0.35)",
-                background: "rgba(254,226,226,0.65)",
-                color: "#7f1d1d",
-              }}
-            >
-              {err}
+          {error && (
+            <div style={{ marginTop: 12, color: "#b91c1c", fontWeight: 600 }}>
+              {error}
             </div>
           )}
-
-          <div style={{ marginTop: 12, color: "#64748b", fontSize: "0.92rem", lineHeight: 1.6 }}>
-            Razorpay plan payment can be connected later. Right now this sets plan rules for upload + pricing.
-          </div>
         </div>
       </section>
     </main>
