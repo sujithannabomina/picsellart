@@ -1,223 +1,271 @@
-// src/pages/Contact.jsx
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 
-const SUPPORT_HOURS = "Monday – Friday, 10:00 – 18:00 IST";
-const RESPONSE_TIME = "24–48 hours";
+const styles = {
+  page: { maxWidth: 1120, margin: "0 auto", padding: "28px 16px 64px" },
+  grid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(0, 1.1fr) minmax(0, 0.9fr)",
+    gap: 18,
+    alignItems: "start"
+  },
+  card: {
+    borderRadius: 22,
+    border: "1px solid rgba(148,163,184,0.25)",
+    background: "rgba(255,255,255,0.92)",
+    boxShadow: "0 18px 50px rgba(15,23,42,0.12)"
+  },
+  cardPad: { padding: 18 },
+  h1: { fontSize: "2rem", fontWeight: 800, margin: 0 },
+  sub: { marginTop: 8, color: "#4b5563", lineHeight: 1.65, maxWidth: 820 },
+  small: { color: "#64748b", fontSize: "0.92rem", lineHeight: 1.6 },
+
+  label: { display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#0f172a" },
+  input: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid #e5e7eb",
+    outline: "none",
+    background: "white"
+  },
+  textarea: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: 12,
+    border: "1px solid #e5e7eb",
+    outline: "none",
+    background: "white",
+    minHeight: 120,
+    resize: "vertical"
+  },
+  row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
+  field: { display: "grid", gap: 6, marginTop: 12 },
+
+  btnRow: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 },
+  btnPrimary: {
+    border: "none",
+    borderRadius: 999,
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 700,
+    color: "white",
+    background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
+    boxShadow: "0 18px 40px rgba(79, 70, 229, 0.35)"
+  },
+  btnGhost: {
+    borderRadius: 999,
+    padding: "10px 16px",
+    cursor: "pointer",
+    fontWeight: 700,
+    background: "white",
+    border: "1px solid #e5e7eb",
+    color: "#0f172a"
+  },
+  alert: {
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 12,
+    border: "1px solid rgba(148,163,184,0.25)",
+    background: "rgba(239,246,255,0.6)",
+    color: "#0f172a",
+    lineHeight: 1.6
+  },
+
+  sideTitle: { fontSize: "1.05rem", fontWeight: 800, margin: "0 0 6px", color: "#0f172a" },
+  ul: { margin: 0, paddingLeft: "1.2rem", color: "#334155", lineHeight: 1.7 },
+  pill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 12px",
+    borderRadius: 999,
+    border: "1px solid rgba(148,163,184,0.25)",
+    background: "rgba(255,255,255,0.8)",
+    color: "#0f172a",
+    fontWeight: 700,
+    fontSize: "0.9rem"
+  },
+  link: { color: "#4f46e5", textDecoration: "underline" }
+};
 
 export default function Contact() {
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    subject: "",
-    message: ""
-  });
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [status, setStatus] = useState(null); // 'ok' | 'error'
 
-  const [status, setStatus] = useState({ type: "idle", msg: "" });
+  const isEmailValid = useMemo(() => {
+    const v = email.trim();
+    if (!v) return true; // only validate if typed
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+  }, [email]);
 
-  function onChange(e) {
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
-  }
-
-  function validateEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  }
+  const canSubmit = name.trim() && email.trim() && isEmailValid && subject.trim() && message.trim();
 
   function onSubmit(e) {
     e.preventDefault();
 
-    const name = form.name.trim();
-    const email = form.email.trim();
-    const subject = form.subject.trim();
-    const message = form.message.trim();
-
-    if (!name || !email || !subject || !message) {
-      setStatus({ type: "error", msg: "Please fill all required fields." });
-      return;
-    }
-    if (!validateEmail(email)) {
-      setStatus({ type: "error", msg: "Please enter a valid email address." });
+    // This is UI-only. Hook this to your backend/email service later.
+    if (!canSubmit) {
+      setStatus("error");
       return;
     }
 
-    // No backend yet: use mailto so it still works in production.
-    // Replace support@picsellart.com with your real support email later.
-    const to = "support@picsellart.com";
-    const body = `Name: ${name}\nEmail: ${email}\n\n${message}`;
-    const mailto = `mailto:${to}?subject=${encodeURIComponent(
-      `[Picsellart] ${subject}`
-    )}&body=${encodeURIComponent(body)}`;
+    setStatus("ok");
 
-    setStatus({ type: "success", msg: "Opening your email app to send the message…" });
-    window.location.href = mailto;
+    // optional: clear after success
+    setName("");
+    setEmail("");
+    setSubject("");
+    setMessage("");
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-      <div className="rounded-3xl border border-slate-200 bg-white/70 shadow-sm backdrop-blur">
-        <div className="px-6 py-8 sm:px-10">
-          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-                Contact Us
-              </h1>
-              <p className="mt-2 max-w-2xl text-slate-600">
-                Send us a message — we typically reply within <span className="font-semibold">{RESPONSE_TIME}</span>.
-                We can help with account questions, file issues, licensing doubts, and seller onboarding.
-              </p>
-            </div>
+    <main className="page page-contact">
+      <section style={styles.page}>
+        <h1 style={styles.h1}>Contact Us</h1>
+        <p style={styles.sub}>
+          Send us a message — we typically reply within <b>24–48 hours</b>. We can help with account
+          questions, file issues, licensing doubts, and seller onboarding.
+        </p>
 
-            <a
-              href="/refunds"
-              className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 md:w-auto"
-            >
-              View refund policy →
-            </a>
+        <div style={{ marginTop: 16, ...styles.grid }}>
+          {/* LEFT: FORM */}
+          <div style={styles.card}>
+            <div style={styles.cardPad}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div style={styles.pill}>Support</div>
+                <div style={styles.small}>
+                  Support hours: <b>Mon–Fri</b>, 10:00–18:00 IST
+                </div>
+              </div>
+
+              <form onSubmit={onSubmit} style={{ marginTop: 10 }}>
+                <div style={styles.row2}>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Your name *</label>
+                    <input
+                      style={styles.input}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Your full name"
+                      autoComplete="name"
+                    />
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Email *</label>
+                    <input
+                      style={styles.input}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@email.com"
+                      autoComplete="email"
+                      inputMode="email"
+                    />
+                    {!isEmailValid && (
+                      <div style={{ color: "#b91c1c", fontSize: "0.85rem" }}>
+                        Please enter a valid email.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={styles.field}>
+                  <label style={styles.label}>Subject *</label>
+                  <input
+                    style={styles.input}
+                    value={subject}
+                    onChange={(e) => setSubject(e.target.value)}
+                    placeholder="Order issue / Licensing / Account / Seller onboarding"
+                  />
+                </div>
+
+                <div style={styles.field}>
+                  <label style={styles.label}>Message *</label>
+                  <textarea
+                    style={styles.textarea}
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    placeholder="Tell us what happened. If this is about a purchase, include your Razorpay payment ID/reference, buyer email used at checkout, and the file name."
+                  />
+                </div>
+
+                <div style={styles.btnRow}>
+                  <button type="submit" style={styles.btnPrimary} disabled={!canSubmit}>
+                    Send message
+                  </button>
+                  <a href="/refunds" style={{ ...styles.btnGhost, display: "inline-flex", alignItems: "center" }}>
+                    View refund policy →
+                  </a>
+                </div>
+
+                {status === "ok" && (
+                  <div style={styles.alert}>
+                    ✅ Message saved (UI). Connect this form to your email/back-end later. For payment issues,
+                    include the details from the right panel for faster support.
+                  </div>
+                )}
+                {status === "error" && (
+                  <div style={{ ...styles.alert, background: "rgba(254,226,226,0.6)" }}>
+                    ❗ Please fill all required fields correctly before submitting.
+                  </div>
+                )}
+
+                <p style={{ ...styles.small, marginTop: 10 }}>
+                  By submitting this form, you agree that we may use the information you provide to respond to your
+                  enquiry and improve our services.
+                </p>
+              </form>
+            </div>
           </div>
 
-          <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* LEFT: info cards */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="text-sm font-semibold text-slate-900">Urgent payment / purchase issues</div>
-                <p className="mt-2 text-sm text-slate-600">
-                  To help us locate your order faster, include:
+          {/* RIGHT: INFO */}
+          <div style={{ display: "grid", gap: 14 }}>
+            <div style={styles.card}>
+              <div style={styles.cardPad}>
+                <p style={styles.sideTitle}>For urgent payment / purchase issues</p>
+                <p style={styles.small}>
+                  Include these details so we can locate your order faster:
                 </p>
-                <ul className="mt-3 list-disc pl-5 text-sm text-slate-700 space-y-1">
+                <ul style={styles.ul}>
                   <li>Razorpay payment ID / reference</li>
                   <li>Buyer email used at checkout</li>
                   <li>Purchased file name / order reference</li>
                 </ul>
-                <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
-                  <div className="font-semibold text-slate-900">Support hours</div>
-                  <div className="mt-1">{SUPPORT_HOURS}</div>
-                  <div className="mt-2 text-slate-600">
-                    Requests outside hours are processed on the next working day.
-                  </div>
+                <div style={{ marginTop: 12, ...styles.alert }}>
+                  Refund timeline (if approved): <b>1–2 business days</b> review + <b>3–7 business days</b>{" "}
+                  Razorpay/bank processing. See{" "}
+                  <a href="/refunds" style={styles.link}>
+                    Refunds & Cancellations
+                  </a>
+                  .
                 </div>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="text-sm font-semibold text-slate-900">Security & account safety</div>
-                <p className="mt-2 text-sm text-slate-700 leading-relaxed">
-                  Picsellart will never ask for your password or OTP over email or chat.
-                  If you receive suspicious messages claiming to be from Picsellart, do not share credentials.
-                </p>
-              </div>
-
-              <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 to-white p-6 shadow-sm">
-                <div className="text-sm font-semibold text-slate-900">Refund timeline</div>
-                <p className="mt-2 text-sm text-slate-700">
-                  If approved, refunds typically take{" "}
-                  <span className="font-semibold">1–2 business days</span> for review +
-                  <span className="font-semibold"> 3–7 business days</span> for Razorpay/bank processing.
-                </p>
               </div>
             </div>
 
-            {/* RIGHT: form */}
-            <div className="lg:col-span-2">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-xl font-bold text-slate-900">Send us a message</div>
-                    <div className="mt-1 text-sm text-slate-600">
-                      Required fields are marked with <span className="font-semibold">*</span>
-                    </div>
-                  </div>
-                  <div className="hidden sm:block text-xs text-slate-500">
-                    Tip: include order details for faster help
-                  </div>
-                </div>
-
-                {status.type !== "idle" && (
-                  <div
-                    className={
-                      "mt-4 rounded-xl px-4 py-3 text-sm " +
-                      (status.type === "success"
-                        ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
-                        : "border border-rose-200 bg-rose-50 text-rose-800")
-                    }
-                  >
-                    {status.msg}
-                  </div>
-                )}
-
-                <form className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={onSubmit}>
-                  <div className="sm:col-span-1">
-                    <label className="text-sm font-semibold text-slate-700">
-                      Your name <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      name="name"
-                      value={form.name}
-                      onChange={onChange}
-                      placeholder="Your full name"
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:shadow"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-1">
-                    <label className="text-sm font-semibold text-slate-700">
-                      Email <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      name="email"
-                      value={form.email}
-                      onChange={onChange}
-                      placeholder="you@email.com"
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:shadow"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="text-sm font-semibold text-slate-700">
-                      Subject <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      name="subject"
-                      value={form.subject}
-                      onChange={onChange}
-                      placeholder="Order issue / Licensing / Account / Seller onboarding"
-                      className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:shadow"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2">
-                    <label className="text-sm font-semibold text-slate-700">
-                      Message <span className="text-rose-500">*</span>
-                    </label>
-                    <textarea
-                      name="message"
-                      value={form.message}
-                      onChange={onChange}
-                      rows={6}
-                      placeholder="Tell us the issue in detail. If relevant, include order ID / payment reference / file name."
-                      className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition focus:border-slate-300 focus:shadow"
-                    />
-                  </div>
-
-                  <div className="sm:col-span-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-xs text-slate-500">
-                      By submitting, you agree that we may use the information you provide to respond to your enquiry and improve our services.
-                    </p>
-                    <button
-                      type="submit"
-                      className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:opacity-90"
-                    >
-                      Send message →
-                    </button>
-                  </div>
-                </form>
-
-                <div className="mt-6 text-xs text-slate-500">
-                  Note: This form opens your email app (mailto) until a server/email API is connected.
-                </div>
+            <div style={styles.card}>
+              <div style={styles.cardPad}>
+                <p style={styles.sideTitle}>Security & account safety</p>
+                <p style={styles.small}>
+                  Picsellart will never ask for your password or OTP over email or chat. If you receive suspicious
+                  messages claiming to be from Picsellart, do not share credentials.
+                </p>
               </div>
             </div>
           </div>
-
         </div>
-      </div>
+
+        {/* Responsive fallback */}
+        <style>{`
+          @media (max-width: 980px) {
+            .page-contact section > div[style*="grid-template-columns"] { 
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
+      </section>
     </main>
   );
 }
