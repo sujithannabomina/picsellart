@@ -1,31 +1,24 @@
 // src/components/RequireAuth.jsx
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { useAuth } from "../hooks/useAuth.jsx";
 
-export default function RequireAuth({ allowRole, children }) {
-  const auth = useAuth();
+export default function RequireAuth({ children }) {
+  const { user, initializing } = useAuth();
   const location = useLocation();
 
-  if (!auth || auth.loading) {
+  if (initializing) {
     return (
-      <div className="page">
-        <section>
-          <p style={{ padding: 20 }}>Loading…</p>
+      <main className="page">
+        <section style={{ maxWidth: 980, margin: "0 auto", paddingTop: 24 }}>
+          <p>Loading…</p>
         </section>
-      </div>
+      </main>
     );
   }
 
-  if (!auth.user) {
-    const target = allowRole === "seller" ? "/seller-login" : "/buyer-login";
-    return <Navigate to={`${target}?next=${encodeURIComponent(location.pathname)}`} replace />;
-  }
-
-  if (allowRole && auth.role !== allowRole) {
-    // logged in, but wrong role
-    const target = auth.role === "seller" ? "/seller/dashboard" : "/buyer/dashboard";
-    return <Navigate to={target} replace />;
+  if (!user) {
+    return <Navigate to="/buyer-login" state={{ from: location }} replace />;
   }
 
   return children;

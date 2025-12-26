@@ -1,77 +1,84 @@
 // src/pages/BuyerLogin.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import React, { useEffect, useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth.jsx";
 
 export default function BuyerLogin() {
   const navigate = useNavigate();
   const location = useLocation();
-  const auth = useAuth();
+  const { user, initializing, authError, setAuthError, loginWithGoogle } = useAuth();
 
-  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const nextPath = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get("next") || "/buyer/dashboard";
-  }, [location.search]);
-
+  // If user becomes logged in, go to buyer dashboard
   useEffect(() => {
-    // If already logged-in buyer, go dashboard
-    if (auth?.user && auth.role === "buyer") navigate("/buyer/dashboard", { replace: true });
-    // If logged-in seller tries buyer login, route them to seller dashboard
-    if (auth?.user && auth.role === "seller") navigate("/seller/dashboard", { replace: true });
-  }, [auth?.user, auth?.role, navigate]);
+    if (!initializing && user) {
+      const redirectTo =
+        location.state?.from?.pathname ||
+        location.state?.redirectTo ||
+        "/buyer/dashboard";
+      navigate(redirectTo, { replace: true });
+    }
+  }, [user, initializing, navigate, location.state]);
 
-  async function onBuyerGoogle() {
+  async function handleGoogle() {
+    setAuthError("");
+    setBusy(true);
     try {
-      setError("");
-      await auth.loginAsBuyer();
-      navigate(nextPath, { replace: true });
-    } catch (e) {
-      console.error(e);
-      setError("Login failed. Please try again.");
+      const res = await loginWithGoogle();
+      // If redirect is triggered, page navigates away automatically.
+      if (!res?.ok) {
+        // error already stored in authError
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
-  const wrap = { maxWidth: 980, margin: "0 auto", padding: "28px 16px 64px" };
-  const card = {
-    borderRadius: 22,
-    border: "1px solid rgba(148,163,184,0.25)",
-    background: "rgba(255,255,255,0.92)",
-    boxShadow: "0 18px 50px rgba(15,23,42,0.12)",
-    padding: 18,
-  };
-  const btn = {
-    border: "none",
-    borderRadius: 999,
-    padding: "10px 16px",
-    cursor: "pointer",
-    fontWeight: 800,
-    color: "white",
-    background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
-    boxShadow: "0 18px 40px rgba(79, 70, 229, 0.35)",
-  };
-
   return (
     <main className="page">
-      <section style={wrap}>
-        <h1 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>Buyer Login</h1>
-        <p style={{ marginTop: 8, color: "#4b5563", lineHeight: 1.65, maxWidth: 820 }}>
+      <section style={{ maxWidth: 980, margin: "0 auto", paddingTop: 24 }}>
+        <h1 style={{ fontSize: "2rem", fontWeight: 800, marginBottom: 6 }}>Buyer Login</h1>
+        <p style={{ color: "#4b5563", marginTop: 0 }}>
           Login to purchase and download watermark-free files. Your buyer dashboard will show your activity.
         </p>
 
-        <div style={{ marginTop: 16, ...card }}>
-          <button type="button" style={btn} onClick={onBuyerGoogle}>
-            Continue with Google
+        <div
+          style={{
+            marginTop: 18,
+            borderRadius: 22,
+            border: "1px solid rgba(148,163,184,0.25)",
+            background: "rgba(255,255,255,0.92)",
+            boxShadow: "0 18px 50px rgba(15,23,42,0.10)",
+            padding: 18,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleGoogle}
+            disabled={busy || initializing}
+            style={{
+              border: "none",
+              borderRadius: 999,
+              padding: "10px 16px",
+              cursor: busy ? "not-allowed" : "pointer",
+              fontWeight: 800,
+              color: "white",
+              background: "linear-gradient(135deg, #8b5cf6, #4f46e5)",
+              boxShadow: "0 18px 40px rgba(79, 70, 229, 0.35)",
+              opacity: busy ? 0.85 : 1,
+            }}
+          >
+            {busy ? "Signing in..." : "Continue with Google"}
           </button>
 
-          {error && (
-            <div style={{ marginTop: 12, color: "#b91c1c", fontWeight: 600 }}>
-              {error}
-            </div>
-          )}
+          {authError ? (
+            <p style={{ marginTop: 12, color: "#b91c1c", fontWeight: 600 }}>
+              {authError}
+            </p>
+          ) : null}
 
-          <p style={{ marginTop: 12, color: "#64748b", lineHeight: 1.6, fontSize: "0.92rem" }}>
+          <p style={{ marginTop: 12, color: "#64748b" }}>
             Security note: Picsellart will never ask your password/OTP via email or chat.
           </p>
         </div>
