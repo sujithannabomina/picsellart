@@ -1,100 +1,164 @@
-// src/hooks/useAuth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
-  GoogleAuthProvider,
-  getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   signOut,
 } from "firebase/auth";
-import { auth } from "../firebase";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, googleProvider, db } from "../firebase";
 
 const AuthContext = createContext(null);
 
+async function ensureUserProfile(user, role) {
+  if (!user?.uid) return;
+
+  const ref = doc(db, "users", user.uid);
+  const snap = await getDoc(ref);
+
+  if (!snap.exists()) {
+    await setDoc(
+      ref,
+      {
+        uid: user.uid,
+        email: user.email || "",
+        name: user.displayName || "",
+        photoURL: user.photoURL || "",
+        role: role || "buyer", // buyer | seller
+        sellerPlanId: null, // for sellers later
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return;
+  }
+
+  // Keep role consistent if user is newly using buyer/seller flow
+  const existing = snap.data();
+  const mergedRole = role || existing.role || "buyer";
+
+  await setDoc(
+    ref,
+    {
+      email: user.email || existing.email || "",
+      name: user.displayName || existing.name || "",
+      photoURL: user.photoURL || existing.photoURL || "",
+      role: mergedRole,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+function getRoleHintFromLocalStorage() {
+  const v = (localStorage.getItem("picsellart_role_hint") || "").toLowerCase();
+  if (v === "seller") return "seller";
+  return "buyer";
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [initializing, setInitializing] = useState(true);
-  const [authError, setAuthError] = useState("");
+  const [profile, setProfile] = useState(null); // user doc from firestore
+  const [loading, setLoading] = useState(true);
 
-  // Handle redirect sign-in results (for Safari/Brave popup-block cases)
+  // Handle redirect flow results (for Brave / popup blocked cases)
   useEffect(() => {
     let mounted = true;
 
-    (async () => {
+    async function handleRedirect() {
       try {
         const result = await getRedirectResult(auth);
-        if (!mounted) return;
-
-        if (result?.user) {
-          // redirect login success
-          setAuthError("");
+        if (result?.user && mounted) {
+          const role = getRoleHintFromLocalStorage();
+          await ensureUserProfile(result.user, role);
         }
       } catch (e) {
-        if (!mounted) return;
-        setAuthError(formatAuthError(e));
+        // Redirect failures will be surfaced by login page as well,
+        // but we keep this silent here to avoid breaking UI.
+        console.warn("Redirect result error:", e);
       }
-    })();
+    }
+
+    handleRedirect();
 
     return () => {
       mounted = false;
     };
   }, []);
 
-  // Subscribe to auth state changes (works for popup + redirect)
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
-      setInitializing(false);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      try {
+        setUser(u || null);
+
+        if (!u) {
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        const role = getRoleHintFromLocalStorage();
+        await ensureUserProfile(u, role);
+
+        const ref = doc(db, "users", u.uid);
+        const snap = await getDoc(ref);
+        setProfile(snap.exists() ? snap.data() : null);
+      } catch (e) {
+        console.error("Auth state handling error:", e);
+        setProfile(null);
+      } finally {
+        setLoading(false);
+      }
     });
+
     return () => unsub();
   }, []);
-
-  async function loginWithGoogle() {
-    setAuthError("");
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-      prompt: "select_account",
-    });
-
-    try {
-      // Try popup first (best UX on desktop)
-      await signInWithPopup(auth, provider);
-      return { ok: true };
-    } catch (e) {
-      // Popup blocked / closed → fallback to redirect
-      const code = e?.code || "";
-      const shouldRedirect =
-        code === "auth/popup-blocked" ||
-        code === "auth/popup-closed-by-user" ||
-        code === "auth/cancelled-popup-request" ||
-        code === "auth/operation-not-supported-in-this-environment";
-
-      if (shouldRedirect) {
-        await signInWithRedirect(auth, provider);
-        return { ok: true }; // browser will redirect away
-      }
-
-      setAuthError(formatAuthError(e));
-      return { ok: false, error: formatAuthError(e) };
-    }
-  }
-
-  async function logout() {
-    setAuthError("");
-    await signOut(auth);
-  }
 
   const value = useMemo(
     () => ({
       user,
-      initializing,
-      authError,
-      setAuthError,
-      loginWithGoogle,
-      logout,
+      profile,
+      loading,
+
+      // Set role hint BEFORE login (buyer page sets buyer, seller page sets seller)
+      setRoleHint: (role) => {
+        localStorage.setItem("picsellart_role_hint", role === "seller" ? "seller" : "buyer");
+      },
+
+      // Google login with popup + redirect fallback
+      loginWithGoogle: async () => {
+        const role = getRoleHintFromLocalStorage();
+
+        try {
+          const res = await signInWithPopup(auth, googleProvider);
+          await ensureUserProfile(res.user, role);
+          return { ok: true };
+        } catch (e) {
+          const code = e?.code || "";
+
+          // Popup blocked or not supported → fallback to redirect
+          const shouldRedirect =
+            code === "auth/popup-blocked" ||
+            code === "auth/popup-closed-by-user" ||
+            code === "auth/cancelled-popup-request" ||
+            code === "auth/operation-not-supported-in-this-environment";
+
+          if (shouldRedirect) {
+            await signInWithRedirect(auth, googleProvider);
+            return { ok: true, redirected: true };
+          }
+
+          return { ok: false, error: e };
+        }
+      },
+
+      logout: async () => {
+        await signOut(auth);
+      },
     }),
-    [user, initializing, authError]
+    [user, profile, loading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -102,16 +166,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used inside <AuthProvider />");
-  }
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
-}
-
-function formatAuthError(e) {
-  const code = e?.code ? String(e.code) : "";
-  const message = e?.message ? String(e.message) : "Login failed. Please try again.";
-  // Keep it user-friendly but also show dev clue (code)
-  if (code) return `${message} (${code})`;
-  return message;
 }

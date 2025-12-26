@@ -1,4 +1,3 @@
-// src/App.jsx
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 
@@ -33,18 +32,23 @@ function App() {
         <Route path="/buyer-login" element={<BuyerLogin />} />
         <Route path="/seller-login" element={<SellerLogin />} />
 
-        {/* Protect buyer dashboard */}
         <Route
           path="/buyer/dashboard"
           element={
-            <RequireAuth>
+            <RequireAuth role="buyer">
               <BuyerDashboard />
             </RequireAuth>
           }
         />
 
-        {/* Seller dashboard we will protect after seller auth is fixed */}
-        <Route path="/seller/dashboard" element={<SellerDashboard />} />
+        <Route
+          path="/seller/dashboard"
+          element={
+            <RequireAuth role="seller">
+              <SellerDashboard />
+            </RequireAuth>
+          }
+        />
       </Routes>
     </div>
   );
