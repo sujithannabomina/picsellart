@@ -14,7 +14,7 @@ import SellerLogin from "./pages/SellerLogin";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
 
-import RequireAuth from "./components/RequireAuth";
+import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
   return (
@@ -35,18 +35,17 @@ function App() {
         <Route
           path="/buyer/dashboard"
           element={
-            <RequireAuth role="buyer">
+            <ProtectedRoute>
               <BuyerDashboard />
-            </RequireAuth>
+            </ProtectedRoute>
           }
         />
-
         <Route
           path="/seller/dashboard"
           element={
-            <RequireAuth role="seller">
+            <ProtectedRoute>
               <SellerDashboard />
-            </RequireAuth>
+            </ProtectedRoute>
           }
         />
       </Routes>

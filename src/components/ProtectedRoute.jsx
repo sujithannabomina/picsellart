@@ -1,25 +1,18 @@
-// src/components/ProtectedRoute.jsx
 import React from "react";
-import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "../context/AuthContext.jsx";
+import { Navigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
-const ProtectedRoute = ({ role }) => {
-  const { user, role: userRole, loading } = useAuth();
+export default function ProtectedRoute({ children }) {
+  const { user, authLoading } = useAuth();
 
-  if (loading) {
-    return null; // or a spinner if you want
+  if (authLoading) {
+    return (
+      <div style={{ padding: "28px 16px", maxWidth: 1120, margin: "0 auto" }}>
+        Loading…
+      </div>
+    );
   }
 
-  if (!user) {
-    return <Navigate to="/buyer-login" replace />;
-  }
-
-  if (role && userRole !== role) {
-    // logged in but wrong type (buyer vs seller)
-    return <Navigate to="/" replace />;
-  }
-
-  return <Outlet />;
-};
-
-export default ProtectedRoute;
+  if (!user) return <Navigate to="/buyer-login" replace />;
+  return children;
+}
