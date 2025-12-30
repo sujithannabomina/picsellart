@@ -1,6 +1,8 @@
 // src/pages/SellerDashboard.jsx
-import React, { useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 
 const PLANS = [
@@ -9,163 +11,126 @@ const PLANS = [
   { id: "elite", name: "Elite", price: 800, maxUploads: 50, maxPrice: 249, durationDays: 180 },
 ];
 
-export default function SellerDashboard() {
+const SellerDashboard = () => {
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { user, role, loading, logout } = useAuth();
+  const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    if (!loading && (!user || role !== "seller")) {
-      navigate("/seller-login", { replace: true });
+  const uid = user?.uid;
+
+  const selectPlan = async (planId) => {
+    if (!uid) return;
+    setSaving(true);
+
+    try {
+      const plan = PLANS.find((p) => p.id === planId);
+      const sellerRef = doc(db, "sellers", uid);
+      const snap = await getDoc(sellerRef);
+
+      // Keep existing plan if already chosen (avoid accidental overwrite)
+      if (snap.exists() && snap.data()?.planId) {
+        navigate("/seller/upload");
+        return;
+      }
+
+      const now = Date.now();
+      const expiresAtMs = now + plan.durationDays * 24 * 60 * 60 * 1000;
+
+      await setDoc(
+        sellerRef,
+        {
+          uid,
+          email: user?.email || "",
+          name: user?.displayName || "",
+          planId: plan.id,
+          planName: plan.name,
+          planPrice: plan.price,
+          maxUploads: plan.maxUploads,
+          maxPrice: plan.maxPrice,
+          durationDays: plan.durationDays,
+          activatedAt: serverTimestamp(),
+          expiresAtMs,
+          // paymentStatus will be wired later with Razorpay + webhook
+          paymentStatus: "pending",
+        },
+        { merge: true }
+      );
+
+      navigate("/seller/upload");
+    } finally {
+      setSaving(false);
     }
-  }, [loading, user, role, navigate]);
+  };
 
-  if (loading) {
-    return (
-      <main className="page">
-        <section style={{ maxWidth: 1100, margin: "0 auto" }}>
-          <p>Loading…</p>
-        </section>
-      </main>
-    );
-  }
-
-  if (!user) return null;
-
-  const name = user.displayName || "Seller";
-
-  function choosePlan(planId) {
-    // ✅ Professional placeholder (no yellow note)
-    alert(
-      "Plan selection is ready. Razorpay checkout will be connected next with secure server-side verification."
-    );
-    console.log("Selected plan:", planId);
-  }
+  const cards = useMemo(() => PLANS, []);
 
   return (
-    <main className="page">
-      <section
-        style={{
-          maxWidth: 1100,
-          margin: "0 auto",
-          borderRadius: 26,
-          background: "rgba(255,255,255,0.92)",
-          border: "1px solid rgba(148,163,184,0.25)",
-          boxShadow: "0 22px 60px rgba(15,23,42,0.14)",
-          padding: 22,
-        }}
-      >
-        <h1 style={{ margin: 0, fontSize: "2rem", fontWeight: 900 }}>Seller Dashboard</h1>
-        <p style={{ marginTop: 8, color: "#4b5563" }}>
-          Welcome, <b>{name}</b>. Manage your plan, uploads and pricing limits here.
+    <div className="page">
+      <div className="card">
+        <h1>Seller Dashboard</h1>
+        <p style={{ color: "#4b5563" }}>
+          Welcome, <b>{user?.displayName || "Seller"}</b>. Manage your plan, uploads and pricing limits here.
         </p>
 
-        <div style={{ marginTop: 12, color: "#475569", lineHeight: 1.7 }}>
-          <div><b>Email:</b> {user.email || "-"}</div>
-          <div><b>UID:</b> {user.uid}</div>
+        <div style={{ marginTop: 10, color: "#6b7280" }}>
+          <div>
+            <b style={{ color: "#374151" }}>Email:</b> {user?.email}
+          </div>
+          <div>
+            <b style={{ color: "#374151" }}>UID:</b> {user?.uid}
+          </div>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 }}>
-          <button
-            type="button"
-            onClick={() => navigate("/explore")}
-            style={{
-              borderRadius: 999,
-              padding: "10px 16px",
-              cursor: "pointer",
-              fontWeight: 800,
-              background: "white",
-              border: "1px solid #e5e7eb",
-              color: "#0f172a",
-            }}
-          >
+        <div style={{ display: "flex", gap: 12, marginTop: 14 }}>
+          <button className="btn btn-nav" onClick={() => navigate("/explore")}>
             View Marketplace
           </button>
-
-          <button
-            type="button"
-            onClick={async () => {
-              await logout();
-              navigate("/", { replace: true });
-            }}
-            style={{
-              borderRadius: 999,
-              padding: "10px 16px",
-              cursor: "pointer",
-              fontWeight: 800,
-              background: "white",
-              border: "1px solid #e5e7eb",
-              color: "#0f172a",
-            }}
-          >
+          <button className="btn btn-nav" onClick={logout}>
             Logout
           </button>
         </div>
 
         <div style={{ marginTop: 18 }}>
-          <h2 style={{ margin: "10px 0 6px", fontSize: "1.15rem", fontWeight: 900, color: "#0f172a" }}>
-            Your Seller Plan
-          </h2>
-          <p style={{ margin: 0, color: "#64748b" }}>
-            Select a plan to start uploading.
+          <h3 style={{ marginBottom: 6 }}>Your Seller Plan</h3>
+          <p style={{ color: "#6b7280", marginTop: 0 }}>
+            Choose a plan to start uploading. (Razorpay activation will be connected via webhook next.)
           </p>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              gap: 14,
-              marginTop: 14,
-            }}
-          >
-            {PLANS.map((p) => (
-              <div
-                key={p.id}
-                style={{
-                  borderRadius: 20,
-                  border: "1px solid rgba(148,163,184,0.25)",
-                  background: "rgba(255,255,255,0.95)",
-                  boxShadow: "0 14px 32px rgba(15,23,42,0.10)",
-                  padding: 16,
-                }}
-              >
-                <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 900 }}>{p.name}</h3>
-                <div style={{ marginTop: 8, color: "#334155", lineHeight: 1.7 }}>
-                  <div><b>Price:</b> ₹{p.price} • <b>Duration:</b> {p.durationDays} days</div>
-                  <div><b>Max uploads:</b> {p.maxUploads}</div>
-                  <div><b>Max price/image:</b> ₹{p.maxPrice}</div>
-                </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+            {cards.map((p) => (
+              <div key={p.id} className="image-card">
+                <div className="image-card-body">
+                  <div className="image-card-title" style={{ fontSize: "1.05rem" }}>{p.name}</div>
+                  <div style={{ marginTop: 6, color: "#4b5563" }}>
+                    Price: <b>₹{p.price}</b> • Duration: <b>{p.durationDays} days</b>
+                  </div>
+                  <div style={{ marginTop: 8, color: "#4b5563" }}>
+                    Max uploads: <b>{p.maxUploads}</b>
+                  </div>
+                  <div style={{ marginTop: 6, color: "#4b5563" }}>
+                    Max price/image: <b>₹{p.maxPrice}</b>
+                  </div>
 
-                <button
-                  type="button"
-                  onClick={() => choosePlan(p.id)}
-                  style={{
-                    width: "100%",
-                    marginTop: 12,
-                    border: "none",
-                    borderRadius: 999,
-                    padding: "10px 16px",
-                    cursor: "pointer",
-                    fontWeight: 900,
-                    color: "white",
-                    background:
-                      p.id === "starter"
-                        ? "linear-gradient(90deg, rgba(236,72,153,1) 0%, rgba(139,92,246,1) 100%)"
-                        : p.id === "pro"
-                        ? "linear-gradient(90deg, rgba(99,102,241,1) 0%, rgba(236,72,153,1) 100%)"
-                        : "linear-gradient(90deg, rgba(15,23,42,1) 0%, rgba(99,102,241,1) 100%)",
-                  }}
-                >
-                  Choose Plan
-                </button>
+                  <button
+                    className="btn btn-nav-primary"
+                    disabled={saving}
+                    onClick={() => selectPlan(p.id)}
+                    style={{ marginTop: 12, width: "100%" }}
+                  >
+                    {saving ? "Please wait..." : "Choose Plan"}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
 
-          <p style={{ marginTop: 12, color: "#64748b" }}>
-            Razorpay checkout will be connected with secure verification (server-side) before enabling plan activation.
+          <p style={{ marginTop: 12, color: "#6b7280" }}>
+            Next step: connect Razorpay payment so plan activation becomes real + secure (server-side verification).
           </p>
         </div>
-      </section>
-    </main>
+      </div>
+    </div>
   );
-}
+};
+
+export default SellerDashboard;

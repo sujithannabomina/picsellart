@@ -1,87 +1,116 @@
 // src/hooks/usePhotos.js
-import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-import { getDownloadURL, ref } from "firebase/storage";
-import { db, storage } from "../firebase";
+import { useEffect, useMemo, useState } from "react";
+import { listAll, ref, getDownloadURL } from "firebase/storage";
+import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
+import { storage, db } from "../firebase";
 
-/**
- * Loads all photos (sample + seller) from Firestore + Storage.
- * Assumes a "photos" collection where each document has at least:
- * - storagePath: path inside Storage, e.g. "public/sample1.jpg" or "Buyer/uid/file.jpg"
- * - title (optional)
- * - filename (optional)
- * - price (optional)
- * - ownerType or type: "sample" or "seller" (used by your Cloud Functions)
- */
-export function usePhotos() {
-  const [photos, setPhotos] = useState([]);
+// 1) Loads sample images from Storage: public/images
+// 2) Loads seller listings from Firestore: listings (recommended production approach)
+// 3) DEDUPES results so laptop never shows double items
+
+export default function usePhotos() {
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+
+  const value = useMemo(() => ({ items, loading }), [items, loading]);
 
   useEffect(() => {
-    const q = query(collection(db, "photos"), orderBy("createdAt", "desc"));
+    let alive = true;
 
-    const unsubscribe = onSnapshot(
-      q,
-      async (snapshot) => {
-        try {
-          const docs = snapshot.docs;
+    (async () => {
+      setLoading(true);
 
-          const items = await Promise.all(
-            docs.map(async (doc) => {
-              const data = doc.data();
+      const sample = await loadSampleImages().catch(() => []);
+      const listings = await loadListings().catch(() => []);
 
-              // 1. Build image URL
-              let imageUrl = data.thumbnailUrl || null;
-              if (!imageUrl && data.storagePath) {
-                const storageRef = ref(storage, data.storagePath);
-                imageUrl = await getDownloadURL(storageRef);
-              }
+      // merge + dedupe by stable key (storagePath or url)
+      const merged = [...listings, ...sample];
+      const map = new Map();
+      for (const it of merged) {
+        const key = it.storagePath || it.url || it.id;
+        if (!key) continue;
+        if (!map.has(key)) map.set(key, it);
+      }
 
-              // 2. Infer filename
-              const filename =
-                data.filename ||
-                (data.storagePath
-                  ? data.storagePath.split("/").slice(-1)[0]
-                  : "");
+      const final = Array.from(map.values()).sort((a, b) => {
+        const ta = a.createdAtMs || 0;
+        const tb = b.createdAtMs || 0;
+        return tb - ta;
+      });
 
-              // 3. Owner type – used by backend to route money
-              const ownerType =
-                data.ownerType ||
-                data.type ||
-                (data.storagePath && data.storagePath.startsWith("public/")
-                  ? "sample"
-                  : "seller");
-
-              return {
-                id: doc.id,
-                title: data.title || data.name || "Street Photography",
-                filename,
-                price: data.price || 199,
-                ownerType,
-                imageUrl,
-              };
-            })
-          );
-
-          setPhotos(items);
-          setLoading(false);
-          setError(null);
-        } catch (err) {
-          console.error("Error building photo list:", err);
-          setError("Failed to load images.");
-          setLoading(false);
-        }
-      },
-      (err) => {
-        console.error("Firestore onSnapshot error:", err);
-        setError("Failed to load images.");
+      if (alive) {
+        setItems(final);
         setLoading(false);
       }
-    );
+    })();
 
-    return () => unsubscribe();
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  return { photos, loading, error };
+  return value;
+}
+
+async function loadSampleImages() {
+  const folder = ref(storage, "public/images");
+  const res = await listAll(folder);
+
+  const urls = await Promise.all(
+    res.items.map(async (itemRef) => {
+      const url = await getDownloadURL(itemRef);
+      const filename = itemRef.name;
+
+      // sample pricing (stable + realistic)
+      const base = hashNumber(filename);
+      const price = 100 + (base % 150); // 100–249
+
+      return {
+        id: `sample_${filename}`,
+        storagePath: itemRef.fullPath,
+        url,
+        filename,
+        title: "Street Photography",
+        price,
+        source: "sample",
+        createdAtMs: 1, // keep samples below listings
+        license: "Standard digital license",
+      };
+    })
+  );
+
+  return urls;
+}
+
+async function loadListings() {
+  // Firestore collection: listings
+  // docs: { title, price, url, storagePath, sellerUid, createdAt, status }
+  const q = query(
+    collection(db, "listings"),
+    where("status", "==", "active"),
+    orderBy("createdAt", "desc")
+  );
+
+  const snap = await getDocs(q);
+
+  return snap.docs.map((d) => {
+    const data = d.data() || {};
+    return {
+      id: d.id,
+      storagePath: data.storagePath || `listing_${d.id}`,
+      url: data.url,
+      filename: data.filename || "",
+      title: data.title || "Seller Upload",
+      price: Number(data.price || 0),
+      source: "seller",
+      createdAtMs: data.createdAt?.toMillis?.() || Date.now(),
+      license: "Standard digital license",
+    };
+  });
+}
+
+function hashNumber(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
 }
