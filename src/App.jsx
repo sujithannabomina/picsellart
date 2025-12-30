@@ -1,3 +1,4 @@
+// src/App.jsx
 import React from "react";
 import { Routes, Route } from "react-router-dom";
 
@@ -14,8 +15,6 @@ import SellerLogin from "./pages/SellerLogin";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
 
-import ProtectedRoute from "./components/ProtectedRoute";
-
 function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -31,23 +30,8 @@ function App() {
 
         <Route path="/buyer-login" element={<BuyerLogin />} />
         <Route path="/seller-login" element={<SellerLogin />} />
-
-        <Route
-          path="/buyer/dashboard"
-          element={
-            <ProtectedRoute>
-              <BuyerDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/seller/dashboard"
-          element={
-            <ProtectedRoute>
-              <SellerDashboard />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/buyer/dashboard" element={<BuyerDashboard />} />
+        <Route path="/seller/dashboard" element={<SellerDashboard />} />
       </Routes>
     </div>
   );

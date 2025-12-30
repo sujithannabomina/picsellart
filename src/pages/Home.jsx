@@ -13,7 +13,6 @@ const LOCAL_HOME_IMAGES = [
 
 function getRandomThreeImages() {
   const pool = [...LOCAL_HOME_IMAGES];
-  // Simple shuffle
   for (let i = pool.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [pool[i], pool[j]] = [pool[j], pool[i]];
@@ -113,7 +112,7 @@ export default function Home() {
   const sampleImgWrapper = {
     position: "relative",
     width: "100%",
-    paddingTop: "66%", // 3:2 aspect ratio
+    paddingTop: "66%",
     overflow: "hidden",
   };
 
@@ -157,16 +156,11 @@ export default function Home() {
         </p>
 
         <ul style={bulletListStyle}>
+          <li style={bulletItemStyle}>Set your own price within your selected seller plan.</li>
           <li style={bulletItemStyle}>
-            Set your own price within your selected seller plan.
+            Picsellart watermark on previews — clean, full-resolution file after purchase.
           </li>
-          <li style={bulletItemStyle}>
-            Picsellart watermark on previews — clean, full-resolution file after
-            purchase.
-          </li>
-          <li style={bulletItemStyle}>
-            Track views, sales and earnings from your dashboard.
-          </li>
+          <li style={bulletItemStyle}>Track views, sales and earnings from your dashboard.</li>
         </ul>
 
         <div style={ctaRowStyle}>
@@ -182,41 +176,21 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SAMPLE IMAGES FROM LOCAL PUBLIC FOLDER */}
+      {/* PREVIEWS (NO “SAMPLE MARKETPLACE IMAGES” TEXT) */}
       <section style={samplesSectionStyle}>
-        <h2 style={{ fontSize: "1.4rem", fontWeight: 600, marginBottom: "0.3rem" }}>
-          Sample marketplace images
-        </h2>
-        <p style={{ fontSize: "0.9rem", color: "#6b7280" }}>
-          These previews come from your local <code>/public/images</code> folder.
-          A different set of three will appear on each visit.
-        </p>
-
         <div style={samplesGridStyle}>
           {randomImages.map((src) => (
             <div key={src} style={sampleCardStyle}>
               <div style={sampleImgWrapper}>
-                <img src={src} alt="Picsellart sample" style={sampleImgStyle} />
+                <img src={src} alt="Picsellart preview" style={sampleImgStyle} />
                 <div style={sampleWatermarkStyle}>Picsellart</div>
               </div>
               <div style={sampleMetaStyle}>
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: "0.9rem",
-                    fontWeight: 600,
-                  }}
-                >
-                  Street Photography
+                <p style={{ margin: 0, fontSize: "0.9rem", fontWeight: 600 }}>
+                  Featured Preview
                 </p>
-                <p
-                  style={{
-                    margin: "0.15rem 0 0",
-                    fontSize: "0.8rem",
-                    color: "#6b7280",
-                  }}
-                >
-                  Example preview from the marketplace
+                <p style={{ margin: "0.15rem 0 0", fontSize: "0.8rem", color: "#6b7280" }}>
+                  Browse more inside Explore
                 </p>
               </div>
             </div>
