@@ -1,83 +1,60 @@
 // src/pages/ViewPhoto.jsx
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import usePhotos from "../hooks/usePhotos";
-import { useAuth } from "../hooks/useAuth";
 
-const ViewPhoto = () => {
+export default function ViewPhoto() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { user } = useAuth();
-  const { items, loading } = usePhotos();
 
   const item = useMemo(() => {
-    const decoded = decodeURIComponent(id || "");
-    return items.find((x) => x.id === decoded) || null;
-  }, [items, id]);
-
-  const onBuy = () => {
-    if (!item) return;
-
-    if (!user) {
-      const redirectTo = `/checkout/${encodeURIComponent(item.id)}`;
-      navigate(`/buyer-login?redirect=${encodeURIComponent(redirectTo)}`);
-      return;
+    try {
+      const raw = sessionStorage.getItem("psa:selectedItem");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (parsed?.id === id) return parsed;
+      return parsed; // still show if user refreshed
+    } catch {
+      return null;
     }
-
-    navigate(`/checkout/${encodeURIComponent(item.id)}`);
-  };
-
-  if (loading) {
-    return (
-      <div className="page">
-        <div className="card">Loading…</div>
-      </div>
-    );
-  }
+  }, [id]);
 
   if (!item) {
     return (
-      <div className="page">
-        <div className="card">
-          <h1>Photo not found</h1>
-          <button className="btn btn-nav" onClick={() => navigate("/explore")} style={{ marginTop: 12 }}>
-            Back to Explore
-          </button>
-        </div>
-      </div>
+      <main className="page">
+        <h1>Photo</h1>
+        <p className="muted">We couldn’t load this photo. Please return to Explore and open again.</p>
+        <button className="btn btn-primary" onClick={() => navigate("/explore")}>
+          Back to Explore
+        </button>
+      </main>
     );
   }
 
   return (
-    <div className="page">
-      <div className="card">
-        <h1>{item.title || "Photo"}</h1>
-        <p style={{ color: "#6b7280" }}>{item.filename || ""}</p>
+    <main className="page">
+      <section className="page-head">
+        <h1 style={{ marginBottom: 6 }}>{item.title || "Photo"}</h1>
+        <div className="muted">{item.filename}</div>
+      </section>
 
-        <div style={{ marginTop: 12 }}>
-          <img
-            src={item.url}
-            alt={item.title || "Photo"}
-            style={{ width: "100%", maxHeight: 520, objectFit: "cover", borderRadius: 16 }}
-          />
+      <section className="viewer">
+        <div className="viewer-card">
+          <img src={item.imageUrl} alt={item.title || "Photo"} />
         </div>
 
-        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: "1.1rem", fontWeight: 900 }}>₹{item.price}</div>
-          <div style={{ color: "#6b7280" }}>{item.license}</div>
+        <div className="viewer-bar">
+          <div className="price">₹{item.price}</div>
+          <div className="muted">{item.license || "Standard digital license"}</div>
+          <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
+            <button className="btn btn-small" onClick={() => navigate(-1)}>
+              Back
+            </button>
+            <button className="btn btn-small btn-primary" onClick={() => navigate(`/checkout/${encodeURIComponent(item.id)}`)}>
+              Buy Now
+            </button>
+          </div>
         </div>
-
-        <div style={{ marginTop: 14, display: "flex", gap: 12 }}>
-          <button className="btn btn-nav" onClick={() => navigate("/explore")}>
-            Back
-          </button>
-          <button className="btn btn-nav-primary" onClick={onBuy}>
-            Buy Now
-          </button>
-        </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
-};
-
-export default ViewPhoto;
+}

@@ -1,49 +1,53 @@
 // src/pages/BuyerLogin.jsx
-import React, { useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
-const BuyerLogin = () => {
+export default function BuyerLogin() {
   const navigate = useNavigate();
-  const { loginWithGoogle } = useAuth();
-  const [error, setError] = useState("");
-  const [searchParams] = useSearchParams();
+  const { loginWithGoogleAs } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
-  const redirectTo = useMemo(() => {
-    const r = searchParams.get("redirect");
-    return r ? decodeURIComponent(r) : "/buyer/dashboard";
-  }, [searchParams]);
+  async function handleLogin() {
+    setErr("");
+    setLoading(true);
+    try {
+      await loginWithGoogleAs("buyer");
 
-  const onLogin = async () => {
-    setError("");
-    const res = await loginWithGoogle("buyer");
-    if (!res.ok) {
-      setError(res.error || "Login failed. Please try again.");
-      return;
+      const returnTo = sessionStorage.getItem("psa:returnTo");
+      if (returnTo) {
+        sessionStorage.removeItem("psa:returnTo");
+        navigate(returnTo);
+      } else {
+        navigate("/buyer/dashboard");
+      }
+    } catch (e) {
+      console.error(e);
+      setErr("Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    navigate(redirectTo);
-  };
+  }
 
   return (
-    <div className="page">
-      <div className="card">
+    <main className="page">
+      <section className="auth">
         <h1>Buyer Login</h1>
-        <p style={{ color: "#4b5563" }}>
-          Login to purchase and download watermark-free files. Your buyer dashboard will show your activity.
-        </p>
+        <p className="muted">Login to purchase and download watermark-free files. Your buyer dashboard will show your activity.</p>
 
-        <button className="btn btn-nav-primary" onClick={onLogin} style={{ marginTop: 14 }}>
-          Continue with Google
-        </button>
+        <div className="auth-card">
+          <button className="btn btn-primary" disabled={loading} onClick={handleLogin}>
+            {loading ? "Signing in…" : "Continue with Google"}
+          </button>
 
-        {error ? <p style={{ marginTop: 10, color: "#dc2626", fontWeight: 700 }}>{error}</p> : null}
+          {err ? <div className="auth-error">{err}</div> : null}
 
-        <p style={{ marginTop: 10, color: "#6b7280", fontSize: "0.9rem" }}>
-          Security note: Picsellart will never ask your password/OTP via email or chat.
-        </p>
-      </div>
-    </div>
+          <div className="muted" style={{ marginTop: 10, fontSize: 13 }}>
+            Security note: Picsellart will never ask your password/OTP via email or chat.
+          </div>
+        </div>
+      </section>
+    </main>
   );
-};
-
-export default BuyerLogin;
+}

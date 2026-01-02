@@ -1,41 +1,42 @@
 // src/pages/SellerLogin.jsx
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
-const SellerLogin = () => {
+export default function SellerLogin() {
   const navigate = useNavigate();
-  const { loginWithGoogle } = useAuth();
-  const [error, setError] = useState("");
+  const { loginWithGoogleAs } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
-  const onLogin = async () => {
-    setError("");
-    const res = await loginWithGoogle("seller");
-    if (!res.ok) {
-      setError(res.error || "Login failed. Please try again.");
-      return;
+  async function handleLogin() {
+    setErr("");
+    setLoading(true);
+    try {
+      await loginWithGoogleAs("seller");
+      navigate("/seller/dashboard");
+    } catch (e) {
+      console.error(e);
+      setErr("Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    navigate("/seller/dashboard");
-  };
+  }
 
   return (
-    <div className="page">
-      <div className="card">
+    <main className="page">
+      <section className="auth">
         <h1>Seller Login</h1>
-        <p style={{ color: "#4b5563" }}>
-          Login to manage your plan, upload images within limits, and track your sales.
-        </p>
+        <p className="muted">Login to manage your plan, upload images within limits, and track your sales.</p>
 
-        <button className="btn btn-nav-primary" onClick={onLogin} style={{ marginTop: 14 }}>
-          Continue with Google
-        </button>
+        <div className="auth-card">
+          <button className="btn btn-primary" disabled={loading} onClick={handleLogin}>
+            {loading ? "Signing in…" : "Continue with Google"}
+          </button>
 
-        {error ? (
-          <p style={{ marginTop: 10, color: "#dc2626", fontWeight: 600 }}>{error}</p>
-        ) : null}
-      </div>
-    </div>
+          {err ? <div className="auth-error">{err}</div> : null}
+        </div>
+      </section>
+    </main>
   );
-};
-
-export default SellerLogin;
+}

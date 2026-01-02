@@ -1,98 +1,91 @@
 // src/pages/Checkout.jsx
-import React, { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import usePhotos from "../hooks/usePhotos";
 import { useAuth } from "../hooks/useAuth";
 
-const Checkout = () => {
+export default function Checkout() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuth();
-  const { items, loading } = usePhotos();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
   const item = useMemo(() => {
-    const decoded = decodeURIComponent(id || "");
-    return items.find((x) => x.id === decoded) || null;
-  }, [items, id]);
+    try {
+      const raw = sessionStorage.getItem("psa:selectedItem");
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }, [id]);
 
   if (!user) {
-    return (
-      <div className="page">
-        <div className="card">
-          <h1>Please login</h1>
-          <p style={{ color: "#6b7280" }}>Login as a buyer to continue checkout.</p>
-          <button
-            className="btn btn-nav-primary"
-            onClick={() =>
-              navigate(`/buyer-login?redirect=${encodeURIComponent(`/checkout/${encodeURIComponent(id || "")}`)}`)
-            }
-            style={{ marginTop: 12 }}
-          >
-            Buyer Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="page">
-        <div className="card">Loading…</div>
-      </div>
-    );
+    // if someone directly came here, force buyer login
+    sessionStorage.setItem("psa:returnTo", `/checkout/${encodeURIComponent(id)}`);
+    navigate("/buyer-login");
+    return null;
   }
 
   if (!item) {
     return (
-      <div className="page">
-        <div className="card">
-          <h1>Item not found</h1>
-          <button className="btn btn-nav" onClick={() => navigate("/explore")} style={{ marginTop: 12 }}>
-            Back to Explore
-          </button>
-        </div>
-      </div>
+      <main className="page">
+        <h1>Checkout</h1>
+        <p className="muted">We couldn’t load this item. Please return to Explore and click Buy again.</p>
+        <button className="btn btn-primary" onClick={() => navigate("/explore")}>
+          Back to Explore
+        </button>
+      </main>
     );
   }
 
+  async function payNow() {
+    setErr("");
+    setBusy(true);
+
+    // ✅ For now: safe placeholder (does NOT break your site)
+    // Next step: connect /api/create-order and open Razorpay checkout smoothly.
+    try {
+      alert("Razorpay checkout will be connected next (webhook + verification).");
+    } catch (e) {
+      setErr("Payment could not start. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div className="page">
-      <div className="card">
+    <main className="page">
+      <section className="page-head">
         <h1>Checkout</h1>
-        <p style={{ color: "#6b7280" }}>
+        <p className="muted">
           You are purchasing: <b>{item.title}</b>
         </p>
+      </section>
 
-        <div style={{ marginTop: 10 }}>
-          <img
-            src={item.url}
-            alt={item.title}
-            style={{ width: "100%", maxHeight: 360, objectFit: "cover", borderRadius: 16 }}
-          />
+      <section className="checkout">
+        <div className="checkout-card">
+          <img src={item.imageUrl} alt={item.title} />
         </div>
 
-        <div style={{ marginTop: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: "1.1rem", fontWeight: 900 }}>Total: ₹{item.price}</div>
-          <div style={{ color: "#6b7280" }}>{item.license}</div>
+        <div className="checkout-bar">
+          <div className="price">Total: ₹{item.price}</div>
+          <div className="muted" style={{ marginLeft: "auto" }}>
+            {item.license || "Standard digital license"}
+          </div>
         </div>
 
-        <div style={{ marginTop: 14, display: "flex", gap: 12 }}>
-          <button className="btn btn-nav" onClick={() => navigate(`/photo/${encodeURIComponent(item.id)}`)}>
+        <div className="checkout-actions">
+          <button className="btn btn-small" onClick={() => navigate(-1)}>
             Back
           </button>
-
-          {/* Razorpay wiring comes next step (webhook + verification) */}
-          <button
-            className="btn btn-nav-primary"
-            onClick={() => alert("Razorpay checkout will be connected next (webhook + verification).")}
-          >
-            Pay with Razorpay
+          <button className="btn btn-small btn-primary" disabled={busy} onClick={payNow}>
+            {busy ? "Starting…" : "Pay with Razorpay"}
           </button>
         </div>
-      </div>
-    </div>
-  );
-};
 
-export default Checkout;
+        {err ? <div className="auth-error" style={{ marginTop: 10 }}>{err}</div> : null}
+      </section>
+    </main>
+  );
+}

@@ -1,65 +1,57 @@
 // src/hooks/useAuth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import {
-  onAuthStateChanged,
-  signOut,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-} from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db, googleProvider } from "../firebase";
+import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 
 const AuthContext = createContext(null);
 
-const ROLE_KEY = "picsellart_pending_role";
+async function ensureUserProfile(uid, payload) {
+  const ref = doc(db, "users", uid);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    await setDoc(ref, { ...payload, createdAt: serverTimestamp() }, { merge: true });
+    return { ...payload, createdAt: null };
+  }
+  return snap.data();
+}
 
-export const AuthProvider = ({ children }) => {
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); // "buyer" | "seller"
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Handle redirect results (important for browsers blocking popups)
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await getRedirectResult(auth);
-        if (res?.user) {
-          // role we stored before redirect
-          const pendingRole = localStorage.getItem(ROLE_KEY) || "buyer";
-          await ensureUserDoc(res.user, pendingRole);
-        }
-      } catch (e) {
-        // Ignore silently — UI will show login error on next action
-      } finally {
-        localStorage.removeItem(ROLE_KEY);
-      }
-    })();
-  }, []);
-
-  // Keep auth state in sync
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u || null);
 
       if (!u) {
-        setRole(null);
+        setProfile(null);
         setLoading(false);
         return;
       }
 
       try {
-        const snap = await getDoc(doc(db, "users", u.uid));
+        const ref = doc(db, "users", u.uid);
+        const snap = await getDoc(ref);
+
         if (snap.exists()) {
-          setRole(snap.data()?.role || null);
+          setProfile(snap.data());
         } else {
-          // default role if missing
-          await ensureUserDoc(u, "buyer");
-          setRole("buyer");
+          // create minimal profile (role will be set by buyer/seller login page)
+          const base = {
+            uid: u.uid,
+            email: u.email || "",
+            displayName: u.displayName || "",
+            photoURL: u.photoURL || "",
+            role: "guest",
+          };
+          await setDoc(ref, { ...base, createdAt: serverTimestamp() }, { merge: true });
+          setProfile(base);
         }
       } catch (e) {
-        // If Firestore blocked, still allow session, role fallback:
-        setRole(null);
+        console.error("Auth profile load error:", e);
+        setProfile(null);
       } finally {
         setLoading(false);
       }
@@ -68,72 +60,40 @@ export const AuthProvider = ({ children }) => {
     return () => unsub();
   }, []);
 
-  const loginWithGoogle = async (asRole) => {
-    // Save desired role for redirect fallback
-    localStorage.setItem(ROLE_KEY, asRole);
-
-    try {
-      const res = await signInWithPopup(auth, googleProvider);
-      await ensureUserDoc(res.user, asRole);
-      setUser(res.user);
-      setRole(asRole);
-      return { ok: true };
-    } catch (err) {
-      // Fallback to redirect (more reliable on some browsers)
-      try {
-        await signInWithRedirect(auth, googleProvider);
-        return { ok: true };
-      } catch (e2) {
-        localStorage.removeItem(ROLE_KEY);
-        return { ok: false, error: humanAuthError(err) };
-      }
-    }
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-    setUser(null);
-    setRole(null);
-  };
-
-  const value = useMemo(
-    () => ({
+  const api = useMemo(() => {
+    return {
       user,
-      role,
+      profile,
       loading,
-      loginWithGoogle,
-      logout,
-    }),
-    [user, role, loading]
-  );
+      async loginWithGoogleAs(role) {
+        // role must be "buyer" or "seller"
+        const res = await signInWithPopup(auth, googleProvider);
+        const u = res.user;
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+        const payload = {
+          uid: u.uid,
+          email: u.email || "",
+          displayName: u.displayName || "",
+          photoURL: u.photoURL || "",
+          role,
+          updatedAt: serverTimestamp(),
+        };
 
-async function ensureUserDoc(firebaseUser, asRole) {
-  if (!firebaseUser?.uid) return;
-  const ref = doc(db, "users", firebaseUser.uid);
-  const snap = await getDoc(ref);
+        const saved = await ensureUserProfile(u.uid, payload);
+        setProfile(saved);
+        return u;
+      },
+      async logout() {
+        await signOut(auth);
+      },
+    };
+  }, [user, profile, loading]);
 
-  // Don’t overwrite existing role (security)
-  if (snap.exists()) return;
-
-  await setDoc(ref, {
-    uid: firebaseUser.uid,
-    email: firebaseUser.email || "",
-    name: firebaseUser.displayName || "",
-    photoURL: firebaseUser.photoURL || "",
-    role: asRole, // buyer | seller
-    createdAt: serverTimestamp(),
-  });
+  return <AuthContext.Provider value={api}>{children}</AuthContext.Provider>;
 }
 
-function humanAuthError(err) {
-  const code = err?.code || "";
-  if (code.includes("popup-closed-by-user")) return "Popup closed. Please try again.";
-  if (code.includes("popup-blocked")) return "Popup blocked. Please allow popups and try again.";
-  if (code.includes("network-request-failed")) return "Network error. Check internet and try again.";
-  return "Login failed. Please try again.";
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider />");
+  return ctx;
 }
-
-export const useAuth = () => useContext(AuthContext);
