@@ -1,11 +1,16 @@
 // src/pages/Explore.jsx
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import usePhotos from "../hooks/usePhotos";
+import { useAuth } from "../hooks/useAuth";
 
 const ITEMS_PER_PAGE = 12;
 
 const Explore = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const { items, loading } = usePhotos();
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
@@ -26,10 +31,23 @@ const Explore = () => {
     return filtered.slice(start, start + ITEMS_PER_PAGE);
   }, [filtered, page]);
 
-  // keep page in range
-  React.useEffect(() => {
+  useEffect(() => {
     if (page > totalPages) setPage(1);
-  }, [totalPages]);
+  }, [totalPages, page]);
+
+  const onView = (item) => {
+    navigate(`/photo/${encodeURIComponent(item.id)}`);
+  };
+
+  const onBuy = (item) => {
+    // Not logged in -> go to buyer login with redirect back to checkout
+    if (!user) {
+      const redirectTo = `/checkout/${encodeURIComponent(item.id)}`;
+      navigate(`/buyer-login?redirect=${encodeURIComponent(redirectTo)}`);
+      return;
+    }
+    navigate(`/checkout/${encodeURIComponent(item.id)}`);
+  };
 
   return (
     <div className="page page-explore">
@@ -58,19 +76,23 @@ const Explore = () => {
               <div className="image-card" key={it.id}>
                 <img src={it.url} alt={it.title || "Image"} loading="lazy" />
                 <div className="image-card-body">
-                  {/* NO "Picsellart sample" / "Seller upload" labels */}
                   <div className="image-card-title">{it.title || "Photo"}</div>
                   <div style={{ marginTop: 4, color: "#6b7280", fontSize: "0.85rem" }}>
                     {it.filename || ""}
                   </div>
+
                   <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between" }}>
-                    <div style={{ fontWeight: 700 }}>₹{it.price}</div>
+                    <div style={{ fontWeight: 800 }}>₹{it.price}</div>
                     <div style={{ color: "#6b7280", fontSize: "0.85rem" }}>{it.license}</div>
                   </div>
 
                   <div style={{ marginTop: 10, display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                    <button className="btn btn-nav">View</button>
-                    <button className="btn btn-nav-primary">Buy</button>
+                    <button className="btn btn-nav" onClick={() => onView(it)}>
+                      View
+                    </button>
+                    <button className="btn btn-nav-primary" onClick={() => onBuy(it)}>
+                      Buy
+                    </button>
                   </div>
                 </div>
               </div>
