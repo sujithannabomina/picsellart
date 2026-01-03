@@ -1,66 +1,30 @@
-// src/pages/BuyerDashboard.jsx
-import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import React from "react";
+import { useAuth } from "../context/AuthContext";
 
 export default function BuyerDashboard() {
-  const navigate = useNavigate();
-  const { user, profile, loading, logout } = useAuth();
-
-  useEffect(() => {
-    if (loading) return;
-    if (!user) navigate("/buyer-login");
-  }, [user, loading, navigate]);
-
-  if (loading) {
-    return (
-      <main className="page">
-        <div className="muted">Loading…</div>
-      </main>
-    );
-  }
-
-  if (!user) return null;
-
-  if (profile?.role !== "buyer") {
-    return (
-      <main className="page">
-        <h1>Buyer Dashboard</h1>
-        <p className="muted">This account is not set as a Buyer. Please login as Buyer.</p>
-        <button className="btn btn-primary" onClick={() => navigate("/buyer-login")}>
-          Go to Buyer Login
-        </button>
-      </main>
-    );
-  }
+  const { user } = useAuth();
 
   return (
-    <main className="page">
-      <section className="dash">
-        <h1>Buyer Dashboard</h1>
-        <p className="muted">Welcome, {profile?.displayName || "Buyer"}. Your purchases and downloads will appear here.</p>
+    <div>
+      <h1 className="text-4xl font-semibold">Buyer Dashboard</h1>
+      <p className="mt-2 text-black/70">
+        Welcome, <span className="font-medium">{user?.email}</span>
+      </p>
 
-        <div className="dash-box">
-          <div><b>Email:</b> {profile?.email || user.email}</div>
-          <div><b>UID:</b> {user.uid}</div>
-
-          <div className="dash-actions">
-            <button className="btn btn-primary" onClick={() => navigate("/explore")}>
-              Explore Pictures
-            </button>
-            <button className="btn" onClick={logout}>
-              Logout
-            </button>
-          </div>
-
-          <div style={{ marginTop: 18 }}>
-            <b>Your Purchases</b> <span className="muted">(Coming Next):</span>
-            <div className="muted" style={{ marginTop: 6 }}>
-              Once Razorpay purchase is connected, we'll list your bought items here with download buttons.
-            </div>
-          </div>
+      <div className="mt-6 grid md:grid-cols-2 gap-4">
+        <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold">Purchases</h2>
+          <p className="mt-1 text-sm text-black/60">
+            Your purchases history will appear here.
+          </p>
         </div>
-      </section>
-    </main>
+        <div className="rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold">Downloads</h2>
+          <p className="mt-1 text-sm text-black/60">
+            After payment verification, download links will appear here.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }

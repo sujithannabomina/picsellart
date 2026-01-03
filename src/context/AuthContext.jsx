@@ -1,68 +1,104 @@
-// src/context/AuthContext.jsx
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged,
-} from "firebase/auth";
-import { auth } from "../firebase"; // if you already export auth from firebase.js
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db, googleProvider } from "../firebase";
 
 const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
+function safeNextPath(next) {
+  if (!next) return null;
+  // Only allow internal routes
+  if (next.startsWith("/") && !next.startsWith("//")) return next;
+  return null;
+}
+
+async function upsertRole(uid, role) {
+  const ref = doc(db, "users", uid);
+  const snap = await getDoc(ref);
+
+  const base = {
+    updatedAt: serverTimestamp(),
+  };
+
+  if (!snap.exists()) {
+    await setDoc(ref, {
+      roles: { buyer: role === "buyer", seller: role === "seller" },
+      createdAt: serverTimestamp(),
+      ...base,
+    });
+    return { roles: { buyer: role === "buyer", seller: role === "seller" } };
+  }
+
+  const data = snap.data() || {};
+  const roles = data.roles || {};
+  const newRoles = { ...roles, [role]: true };
+
+  await setDoc(ref, { ...data, roles: newRoles, ...base }, { merge: true });
+  return { roles: newRoles };
+}
+
+export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null); // "buyer" | "seller" | null
+  const [roles, setRoles] = useState({ buyer: false, seller: false });
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (!firebaseUser) {
-        setUser(null);
-        setRole(null);
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setUser(u || null);
+      if (!u) {
+        setRoles({ buyer: false, seller: false });
         setLoading(false);
         return;
       }
-      // later you can load role from Firestore; for now keep simple:
-      setUser(firebaseUser);
-      setRole(localStorage.getItem("picsellartRole") || null);
-      setLoading(false);
+      try {
+        const snap = await getDoc(doc(db, "users", u.uid));
+        const data = snap.exists() ? snap.data() : {};
+        setRoles(data?.roles || { buyer: false, seller: false });
+      } catch {
+        setRoles({ buyer: false, seller: false });
+      } finally {
+        setLoading(false);
+      }
     });
-
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  const loginWithGoogle = async (selectedRole) => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-    localStorage.setItem("picsellartRole", selectedRole);
-    setRole(selectedRole);
+  const loginAsBuyer = async () => {
+    const res = await signInWithPopup(auth, googleProvider);
+    const { roles: newRoles } = await upsertRole(res.user.uid, "buyer");
+    setRoles(newRoles);
+    return res.user;
+  };
+
+  const loginAsSeller = async () => {
+    const res = await signInWithPopup(auth, googleProvider);
+    const { roles: newRoles } = await upsertRole(res.user.uid, "seller");
+    setRoles(newRoles);
+    return res.user;
   };
 
   const logout = async () => {
     await signOut(auth);
-    localStorage.removeItem("picsellartRole");
-    setUser(null);
-    setRole(null);
   };
 
-  const value = {
-    user,
-    role,
-    loginWithGoogle,
-    logout,
-    loading,
-  };
+  const value = useMemo(
+    () => ({
+      user,
+      roles,
+      loading,
+      loginAsBuyer,
+      loginAsSeller,
+      logout,
+      safeNextPath,
+    }),
+    [user, roles, loading]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+}
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
+}

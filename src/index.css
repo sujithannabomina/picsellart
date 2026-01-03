@@ -1,108 +1,13 @@
-/* === Additions for Explore/View/Checkout/Auth (append at end) === */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-.page { max-width: 1200px; margin: 0 auto; padding: 28px 16px 64px; }
-.page-head h1 { margin: 0; }
-.muted { color: rgba(20, 25, 35, 0.65); }
-
-.search-row { margin-top: 14px; }
-.search {
-  width: min(520px, 100%);
-  padding: 12px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(20, 25, 35, 0.15);
-  outline: none;
-  background: white;
+/* Stop old global CSS from blowing up images */
+img {
+  max-width: 100%;
+  height: auto;
 }
 
-.grid {
-  display: grid;
-  gap: 18px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+html, body, #root {
+  height: 100%;
 }
-@media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
-
-.card {
-  background: white;
-  border-radius: 18px;
-  overflow: hidden;
-  border: 1px solid rgba(20, 25, 35, 0.08);
-  box-shadow: 0 10px 30px rgba(20, 25, 35, 0.06);
-}
-.card-img { position: relative; height: 220px; overflow: hidden; }
-.card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.watermark {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(0,0,0,0.55);
-  color: white;
-}
-.card-body { padding: 14px 14px 16px; }
-.card-title { margin: 2px 0 4px; font-size: 16px; }
-.card-sub { font-size: 13px; margin-bottom: 10px; }
-.card-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-.price { font-weight: 800; }
-.license { font-size: 13px; }
-
-.card-actions { display: flex; justify-content: flex-end; gap: 10px; }
-
-.pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; }
-
-.viewer .viewer-card,
-.checkout .checkout-card {
-  background: white;
-  border-radius: 18px;
-  overflow: hidden;
-  border: 1px solid rgba(20, 25, 35, 0.08);
-  box-shadow: 0 10px 30px rgba(20, 25, 35, 0.06);
-}
-.viewer .viewer-card img,
-.checkout .checkout-card img { width: 100%; display: block; max-height: 520px; object-fit: cover; }
-
-.viewer-bar,
-.checkout-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 10px;
-}
-
-.checkout-actions { display: flex; gap: 10px; margin-top: 12px; }
-
-.auth { padding-top: 20px; }
-.auth-card {
-  margin-top: 18px;
-  background: white;
-  border-radius: 18px;
-  border: 1px solid rgba(20, 25, 35, 0.08);
-  box-shadow: 0 10px 30px rgba(20, 25, 35, 0.06);
-  padding: 18px;
-  width: min(720px, 100%);
-}
-.auth-error { color: #b42318; margin-top: 10px; font-weight: 600; }
-
-.dash-box {
-  margin-top: 18px;
-  background: white;
-  border-radius: 18px;
-  border: 1px solid rgba(20, 25, 35, 0.08);
-  box-shadow: 0 10px 30px rgba(20, 25, 35, 0.06);
-  padding: 18px;
-  width: min(980px, 100%);
-}
-.dash-actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-.pill { background: rgba(120, 90, 255, 0.16); padding: 4px 10px; border-radius: 999px; }
-
-.plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
-@media (max-width: 1000px) { .plan-grid { grid-template-columns: 1fr; } }
-.plan {
-  border: 1px solid rgba(20, 25, 35, 0.08);
-  border-radius: 16px;
-  padding: 14px;
-}
-.plan h3 { margin: 0 0 8px; }

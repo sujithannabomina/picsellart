@@ -1,60 +1,82 @@
-// src/pages/ViewPhoto.jsx
-import { useMemo } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { getDownloadURL, ref } from "firebase/storage";
+import { storage } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
 export default function ViewPhoto() {
-  const navigate = useNavigate();
-  const { id } = useParams();
+  const { fileName } = useParams();
+  const decoded = decodeURIComponent(fileName || "");
+  const nav = useNavigate();
+  const { user, roles } = useAuth();
 
-  const item = useMemo(() => {
-    try {
-      const raw = sessionStorage.getItem("psa:selectedItem");
-      if (!raw) return null;
-      const parsed = JSON.parse(raw);
-      if (parsed?.id === id) return parsed;
-      return parsed; // still show if user refreshed
-    } catch {
-      return null;
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    async function load() {
+      setLoading(true);
+      try {
+        const r = ref(storage, `public/images/${decoded}`);
+        const u = await getDownloadURL(r);
+        if (alive) setUrl(u);
+      } catch {
+        if (alive) setUrl("");
+      } finally {
+        if (alive) setLoading(false);
+      }
     }
-  }, [id]);
+    if (decoded) load();
+    return () => { alive = false; };
+  }, [decoded]);
 
-  if (!item) {
-    return (
-      <main className="page">
-        <h1>Photo</h1>
-        <p className="muted">We couldn’t load this photo. Please return to Explore and open again.</p>
-        <button className="btn btn-primary" onClick={() => navigate("/explore")}>
-          Back to Explore
-        </button>
-      </main>
-    );
-  }
+  const onBuy = () => {
+    if (!user || !roles.buyer) {
+      nav(`/buyer-login?next=${encodeURIComponent(`/checkout/${encodeURIComponent(decoded)}`)}`);
+      return;
+    }
+    nav(`/checkout/${encodeURIComponent(decoded)}`);
+  };
 
   return (
-    <main className="page">
-      <section className="page-head">
-        <h1 style={{ marginBottom: 6 }}>{item.title || "Photo"}</h1>
-        <div className="muted">{item.filename}</div>
-      </section>
+    <div>
+      <h1 className="text-4xl font-semibold">Street Photography</h1>
+      <p className="mt-1 text-black/60">{decoded}</p>
 
-      <section className="viewer">
-        <div className="viewer-card">
-          <img src={item.imageUrl} alt={item.title || "Photo"} />
-        </div>
+      {loading ? (
+        <p className="mt-6 text-black/60">Loading…</p>
+      ) : !url ? (
+        <p className="mt-6 text-red-600">Image not found.</p>
+      ) : (
+        <div className="mt-6 rounded-2xl border border-black/10 bg-white shadow-sm overflow-hidden">
+          <div className="aspect-[16/9] bg-black/5">
+            <img src={url} alt={decoded} className="h-full w-full object-cover" />
+          </div>
 
-        <div className="viewer-bar">
-          <div className="price">₹{item.price}</div>
-          <div className="muted">{item.license || "Standard digital license"}</div>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 10 }}>
-            <button className="btn btn-small" onClick={() => navigate(-1)}>
+          <div className="p-4 flex items-center justify-between">
+            <div className="font-semibold">₹168</div>
+            <div className="text-sm text-black/60">Standard digital license</div>
+          </div>
+
+          <div className="px-4 pb-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => nav(-1)}
+              className="px-5 py-2 rounded-full border border-black/10 text-sm hover:bg-black/5"
+            >
               Back
             </button>
-            <button className="btn btn-small btn-primary" onClick={() => navigate(`/checkout/${encodeURIComponent(item.id)}`)}>
+            <button
+              type="button"
+              onClick={onBuy}
+              className="px-5 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm shadow hover:opacity-95"
+            >
               Buy Now
             </button>
           </div>
         </div>
-      </section>
-    </main>
+      )}
+    </div>
   );
 }

@@ -1,109 +1,85 @@
-// src/components/Navbar.jsx
 import React from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
-const Navbar = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
+const linkBase =
+  "px-3 py-2 text-sm rounded-full transition hover:bg-black/5";
+const active =
+  "bg-black/5 font-medium";
 
-  // Detect if user is already on login pages (so we can avoid confusing "Login" clicks)
-  const isBuyerLogin = location.pathname.startsWith("/buyer-login");
-  const isSellerLogin = location.pathname.startsWith("/seller-login");
+export default function Navbar() {
+  const { user, roles, logout } = useAuth();
+  const nav = useNavigate();
 
   return (
-    <header className="navbar">
-      <div className="navbar-inner">
-        {/* Logo + brand */}
+    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-black/5">
+      <div className="mx-auto max-w-6xl px-4 py-3 flex items-center justify-between gap-4">
         <button
-          className="nav-logo"
-          onClick={() => navigate("/")}
-          aria-label="Go to home"
           type="button"
+          onClick={() => nav("/")}
+          className="flex items-center gap-3"
         >
-          <img src="/logo.png" alt="Picsellart logo" />
-          <span>Picsellart</span>
+          <img
+            src="/logo.png"
+            alt="Picsellart"
+            className="h-9 w-9 rounded-full object-cover border border-black/10"
+          />
+          <span className="font-semibold">Picsellart</span>
         </button>
 
-        {/* Center navigation */}
-        <nav className="nav-links" aria-label="Main navigation">
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              "nav-link" + (isActive ? " nav-link-active" : "")
-            }
-          >
-            Home
-          </NavLink>
-
-          <NavLink
-            to="/explore"
-            className={({ isActive }) =>
-              "nav-link" + (isActive ? " nav-link-active" : "")
-            }
-          >
-            Explore
-          </NavLink>
-
-          <NavLink
-            to="/faq"
-            className={({ isActive }) =>
-              "nav-link" + (isActive ? " nav-link-active" : "")
-            }
-          >
-            FAQ
-          </NavLink>
-
-          <NavLink
-            to="/contact"
-            className={({ isActive }) =>
-              "nav-link" + (isActive ? " nav-link-active" : "")
-            }
-          >
-            Contact
-          </NavLink>
-
-          <NavLink
-            to="/refunds"
-            className={({ isActive }) =>
-              "nav-link" + (isActive ? " nav-link-active" : "")
-            }
-          >
-            Refunds
-          </NavLink>
+        <nav className="hidden md:flex items-center gap-1">
+          <NavLink to="/" className={({ isActive }) => `${linkBase} ${isActive ? active : ""}`}>Home</NavLink>
+          <NavLink to="/explore" className={({ isActive }) => `${linkBase} ${isActive ? active : ""}`}>Explore</NavLink>
+          <NavLink to="/faq" className={({ isActive }) => `${linkBase} ${isActive ? active : ""}`}>FAQ</NavLink>
+          <NavLink to="/contact" className={({ isActive }) => `${linkBase} ${isActive ? active : ""}`}>Contact</NavLink>
+          <NavLink to="/refunds" className={({ isActive }) => `${linkBase} ${isActive ? active : ""}`}>Refunds</NavLink>
         </nav>
 
-        {/* Right side actions */}
-        <div className="nav-actions">
-          <button
-            className="btn btn-nav"
-            type="button"
-            onClick={() => {
-              if (!isBuyerLogin) navigate("/buyer-login");
-            }}
-            aria-current={isBuyerLogin ? "page" : undefined}
-            disabled={isBuyerLogin}
-            style={isBuyerLogin ? { opacity: 0.7, cursor: "default" } : undefined}
-          >
-            Buyer Login
-          </button>
-
-          <button
-            className="btn btn-nav-primary"
-            type="button"
-            onClick={() => {
-              if (!isSellerLogin) navigate("/seller-login");
-            }}
-            aria-current={isSellerLogin ? "page" : undefined}
-            disabled={isSellerLogin}
-            style={isSellerLogin ? { opacity: 0.75, cursor: "default" } : undefined}
-          >
-            Seller Login
-          </button>
+        <div className="flex items-center gap-2">
+          {!user ? (
+            <>
+              <button
+                type="button"
+                onClick={() => nav("/buyer-login")}
+                className="px-4 py-2 rounded-full border border-black/10 text-sm hover:bg-black/5"
+              >
+                Buyer Login
+              </button>
+              <button
+                type="button"
+                onClick={() => nav("/seller-login")}
+                className="px-4 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm shadow hover:opacity-95"
+              >
+                Seller Login
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => nav(roles.seller ? "/seller-dashboard" : "/seller-login")}
+                className="px-4 py-2 rounded-full border border-black/10 text-sm hover:bg-black/5"
+              >
+                Seller Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => nav(roles.buyer ? "/buyer-dashboard" : "/buyer-login")}
+                className="px-4 py-2 rounded-full border border-black/10 text-sm hover:bg-black/5"
+              >
+                Buyer Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="px-4 py-2 rounded-full bg-black text-white text-sm hover:opacity-90"
+              >
+                Logout
+              </button>
+            </>
+          )}
         </div>
       </div>
     </header>
   );
-};
-
-export default Navbar;
+}

@@ -1,42 +1,48 @@
-// src/pages/SellerLogin.jsx
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import React, { useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function SellerLogin() {
-  const navigate = useNavigate();
-  const { loginWithGoogleAs } = useAuth();
-  const [loading, setLoading] = useState(false);
+  const { loginAsSeller, safeNextPath } = useAuth();
+  const nav = useNavigate();
+  const [sp] = useSearchParams();
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  async function handleLogin() {
+  const next = safeNextPath(sp.get("next")) || "/seller-dashboard";
+
+  const onLogin = async () => {
     setErr("");
-    setLoading(true);
+    setBusy(true);
     try {
-      await loginWithGoogleAs("seller");
-      navigate("/seller/dashboard");
+      await loginAsSeller();
+      nav(next, { replace: true });
     } catch (e) {
-      console.error(e);
-      setErr("Login failed. Please try again.");
+      setErr(e?.message || "Login failed. Please try again.");
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
-  }
+  };
 
   return (
-    <main className="page">
-      <section className="auth">
-        <h1>Seller Login</h1>
-        <p className="muted">Login to manage your plan, upload images within limits, and track your sales.</p>
+    <div className="max-w-xl">
+      <h1 className="text-4xl font-semibold">Seller Login</h1>
+      <p className="mt-2 text-black/70">
+        Login to manage your plan, upload images within limits, and track your sales.
+      </p>
 
-        <div className="auth-card">
-          <button className="btn btn-primary" disabled={loading} onClick={handleLogin}>
-            {loading ? "Signing in…" : "Continue with Google"}
-          </button>
+      <div className="mt-6 rounded-2xl border border-black/10 bg-white p-6 shadow-sm">
+        <button
+          type="button"
+          onClick={onLogin}
+          disabled={busy}
+          className="px-5 py-3 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow hover:opacity-95 disabled:opacity-60"
+        >
+          {busy ? "Signing in..." : "Continue with Google"}
+        </button>
 
-          {err ? <div className="auth-error">{err}</div> : null}
-        </div>
-      </section>
-    </main>
+        {err ? <p className="mt-3 text-sm text-red-600">{err}</p> : null}
+      </div>
+    </div>
   );
 }

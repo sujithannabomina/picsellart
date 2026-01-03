@@ -1,215 +1,144 @@
-// src/pages/Explore.jsx
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { listAll, ref, getDownloadURL } from "firebase/storage";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs, orderBy, query, where } from "firebase/firestore";
-import { ref, listAll, getDownloadURL } from "firebase/storage";
-import { db, storage } from "../firebase";
-import { useAuth } from "../hooks/useAuth";
+import { storage } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
-// Builds sample items from storage public/images
-async function loadSamplePublicImages() {
-  const folderRef = ref(storage, "public/images");
-  const res = await listAll(folderRef);
-
-  const urls = await Promise.all(
-    res.items.map(async (itemRef) => {
-      const url = await getDownloadURL(itemRef);
-      return {
-        id: `sample_${itemRef.name}`,
-        source: "sample",
-        title: "Street Photography",
-        filename: itemRef.name,
-        price: 100 + Math.floor(Math.random() * 150),
-        license: "Standard digital license",
-        imageUrl: url,
-      };
-    })
-  );
-
-  return urls;
-}
-
-// Loads seller listings from Firestore
-async function loadSellerListings() {
-  const q = query(collection(db, "listings"), where("active", "==", true), orderBy("createdAt", "desc"));
-  const snap = await getDocs(q);
-
-  return snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      source: "seller",
-      title: data.title || "Untitled",
-      filename: data.filename || "",
-      price: Number(data.price || 0),
-      license: "Standard digital license",
-      imageUrl: data.previewUrl || data.imageUrl || "",
-      sellerId: data.sellerId || "",
-    };
-  });
+function priceFromName(name) {
+  // Stable demo pricing: 151 - 199
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+  return 151 + (hash % 49);
 }
 
 export default function Explore() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
+  const nav = useNavigate();
+  const { user, roles } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState([]);
-  const [qText, setQText] = useState("");
-  const [page, setPage] = useState(1);
-
-  const pageSize = 12;
+  const [files, setFiles] = useState([]); // {name, url}
+  const [q, setQ] = useState("");
 
   useEffect(() => {
     let alive = true;
 
-    (async () => {
+    async function load() {
       setLoading(true);
       try {
-        const [samples, sellers] = await Promise.all([loadSamplePublicImages(), loadSellerListings()]);
+        const folderRef = ref(storage, "public/images");
+        const res = await listAll(folderRef);
 
-        // ✅ DEDUPE by id
-        const map = new Map();
-        for (const it of [...samples, ...sellers]) {
-          if (!it?.id) continue;
-          if (!map.has(it.id)) map.set(it.id, it);
-        }
+        const urls = await Promise.all(
+          res.items.map(async (item) => ({
+            name: item.name,
+            url: await getDownloadURL(item),
+          }))
+        );
 
-        const merged = Array.from(map.values());
-        if (alive) setItems(merged);
+        // Sort sample1..sample112 correctly
+        urls.sort((a, b) => {
+          const an = parseInt(a.name.replace(/\D/g, ""), 10);
+          const bn = parseInt(b.name.replace(/\D/g, ""), 10);
+          return (an || 0) - (bn || 0);
+        });
+
+        if (alive) setFiles(urls);
       } catch (e) {
-        console.error("Explore load error:", e);
-        if (alive) setItems([]);
+        console.error(e);
+        if (alive) setFiles([]);
       } finally {
         if (alive) setLoading(false);
       }
-    })();
+    }
 
+    load();
     return () => {
       alive = false;
     };
   }, []);
 
   const filtered = useMemo(() => {
-    const t = qText.trim().toLowerCase();
-    if (!t) return items;
+    const s = q.trim().toLowerCase();
+    if (!s) return files;
+    return files.filter((f) => f.name.toLowerCase().includes(s));
+  }, [files, q]);
 
-    return items.filter((it) => {
-      const hay = `${it.title || ""} ${it.filename || ""}`.toLowerCase();
-      return hay.includes(t);
-    });
-  }, [items, qText]);
+  const onView = (fileName) => {
+    nav(`/photo/${encodeURIComponent(fileName)}`);
+  };
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-
-  const pageItems = useMemo(() => {
-    const start = (safePage - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, safePage]);
-
-  function saveSelected(item) {
-    try {
-      sessionStorage.setItem("psa:selectedItem", JSON.stringify(item));
-    } catch {}
-  }
-
-  function onView(item) {
-    saveSelected(item);
-    navigate(`/photo/${encodeURIComponent(item.id)}`);
-  }
-
-  function onBuy(item) {
-    saveSelected(item);
-
-    if (!user) {
-      // remember where to return
-      try {
-        sessionStorage.setItem("psa:returnTo", `/checkout/${encodeURIComponent(item.id)}`);
-      } catch {}
-      navigate("/buyer-login");
+  const onBuy = (fileName) => {
+    // If not logged-in buyer → login first and come back
+    if (!user || !roles.buyer) {
+      nav(`/buyer-login?next=${encodeURIComponent(`/checkout/${encodeURIComponent(fileName)}`)}`);
       return;
     }
-
-    navigate(`/checkout/${encodeURIComponent(item.id)}`);
-  }
+    nav(`/checkout/${encodeURIComponent(fileName)}`);
+  };
 
   return (
-    <main className="page">
-      <section className="page-head">
-        <h1>Explore Marketplace</h1>
-        <p className="muted">
-          Curated images from our public gallery and verified sellers. Login as a buyer to purchase and download
-          watermark-free files.
-        </p>
+    <div>
+      <h1 className="text-4xl font-semibold">Explore Marketplace</h1>
+      <p className="mt-2 text-black/70">
+        Curated images from our public gallery and verified sellers. Login as a buyer to purchase and download watermark-free files.
+      </p>
 
-        <div className="search-row">
-          <input
-            className="search"
-            placeholder="Search street, interior, food..."
-            value={qText}
-            onChange={(e) => {
-              setQText(e.target.value);
-              setPage(1);
-            }}
-          />
-        </div>
-      </section>
+      <div className="mt-6">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search by filename… (sample1.jpg)"
+          className="w-full max-w-xl px-4 py-3 rounded-full border border-black/10 bg-white shadow-sm outline-none focus:ring-2 focus:ring-indigo-200"
+        />
+      </div>
 
       {loading ? (
-        <div className="muted" style={{ padding: 16 }}>
-          Loading marketplace…
-        </div>
+        <p className="mt-8 text-black/60">Loading images…</p>
+      ) : filtered.length === 0 ? (
+        <p className="mt-8 text-black/60">No images found.</p>
       ) : (
-        <>
-          <section className="grid">
-            {pageItems.map((it) => (
-              <article key={it.id} className="card">
-                <div className="card-img">
-                  <img src={it.imageUrl} alt={it.title || "Photo"} loading="lazy" />
-                  <div className="watermark">PICSELLART</div>
+        <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {filtered.map((f) => {
+            const price = priceFromName(f.name);
+            return (
+              <div key={f.name} className="rounded-2xl border border-black/10 bg-white shadow-sm overflow-hidden">
+                <div className="aspect-[4/3] bg-black/5">
+                  <img src={f.url} alt={f.name} className="h-full w-full object-cover" />
                 </div>
 
-                <div className="card-body">
-                  {/* ✅ Removed “Picsellart sample / Seller upload” labels */}
-                  <h3 className="card-title">{it.title || "Photo"}</h3>
-                  <div className="card-sub muted">{it.filename}</div>
+                <div className="p-4">
+                  <div className="font-semibold">Street Photography</div>
+                  <div className="text-sm text-black/60">{f.name}</div>
 
-                  <div className="card-meta">
-                    <div className="price">₹{it.price}</div>
-                    <div className="license muted">{it.license}</div>
-                  </div>
+                  <div className="mt-3 flex items-end justify-between">
+                    <div>
+                      <div className="font-semibold">₹{price}</div>
+                      <div className="text-xs text-black/50">Standard digital license</div>
+                    </div>
 
-                  <div className="card-actions">
-                    <button className="btn btn-small" onClick={() => onView(it)}>
-                      View
-                    </button>
-                    <button className="btn btn-small btn-primary" onClick={() => onBuy(it)}>
-                      Buy
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onView(f.name)}
+                        className="px-4 py-2 rounded-full border border-black/10 text-sm hover:bg-black/5"
+                      >
+                        View
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onBuy(f.name)}
+                        className="px-4 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-sm shadow hover:opacity-95"
+                      >
+                        Buy
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </article>
-            ))}
-          </section>
-
-          <section className="pager">
-            <button className="btn btn-small" disabled={safePage <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-              Prev
-            </button>
-            <div className="muted">
-              Page {safePage} of {totalPages}
-            </div>
-            <button
-              className="btn btn-small"
-              disabled={safePage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next
-            </button>
-          </section>
-        </>
+              </div>
+            );
+          })}
+        </div>
       )}
-    </main>
+    </div>
   );
 }
