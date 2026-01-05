@@ -1,33 +1,41 @@
 // src/utils/plans.js
 
-// Picsellart seller plans
 export const PLANS = [
   {
     id: "starter",
     name: "Starter",
-    price: 100,           // INR
+    priceINR: 100,
     maxUploads: 25,
-    maxPrice: 199,        // per image
+    maxPricePerImageINR: 199,
     durationDays: 180,
+    bestFor: "New sellers testing the platform",
   },
   {
     id: "pro",
     name: "Pro",
-    price: 300,
+    priceINR: 300,
     maxUploads: 30,
-    maxPrice: 249,
+    maxPricePerImageINR: 249,
     durationDays: 180,
+    bestFor: "Active sellers uploading regularly",
   },
   {
     id: "elite",
     name: "Elite",
-    price: 800,
+    priceINR: 800,
     maxUploads: 50,
-    maxPrice: 249,
+    maxPricePerImageINR: 249,
     durationDays: 180,
+    bestFor: "Power sellers with a bigger catalog",
   },
 ];
 
-export function getPlanById(id) {
-  return PLANS.find((p) => p.id === id) || null;
+export function getPlan(planId) {
+  return PLANS.find((p) => p.id === planId) || null;
+}
+
+export function computePlanExpiryISO(durationDays = 180) {
+  const d = new Date();
+  d.setDate(d.getDate() + Number(durationDays || 180));
+  return d.toISOString();
 }
