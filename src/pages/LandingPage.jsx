@@ -149,7 +149,7 @@ export default function LandingPage() {
                   />
                   <div>
                     <div className="text-sm font-semibold text-black">Start in 2 minutes</div>
-                    <div className="text-xs text-black/60">Login as buyer or seller.</div>
+                    <div className="text-xs text-black/60">Become a Seller and Earn.</div>
                   </div>
                 </div>
 
@@ -158,15 +158,15 @@ export default function LandingPage() {
                   <ul className="mt-2 space-y-2 text-sm text-black/70">
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      Browse public gallery with tags & search
+                      International Bloogers and Website Buyers
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      View photo page and buy with secure checkout
+                      Sell your Phone Gallery
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      Seller plans: upload limits & upgrade options
+                      Affordable Selling plans for begginers
                     </li>
                   </ul>
                 </div>
@@ -187,7 +187,7 @@ export default function LandingPage() {
                 </div>
 
                 <div className="mt-4 text-xs text-black/50">
-                  Hero image rotates on every refresh / visit (your request).
+                  Photography-Architects-Designers-Models
                 </div>
               </div>
             </div>
@@ -250,7 +250,7 @@ export default function LandingPage() {
             <div>
               <div className="text-lg font-bold text-black">Ready to start?</div>
               <div className="text-sm text-black/60">
-                Browse photos now — or become a seller and list your work.
+                Become Seller now and Earn each time someone downloads your work.
               </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -273,4 +273,5 @@ export default function LandingPage() {
     </div>
   );
 }
+
 
