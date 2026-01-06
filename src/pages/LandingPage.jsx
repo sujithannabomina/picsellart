@@ -158,7 +158,7 @@ export default function LandingPage() {
                   <ul className="mt-2 space-y-2 text-sm text-black/70">
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      International Bloogers and Website Buyers
+                      International Bloggers and Website Buyers
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
@@ -201,7 +201,7 @@ export default function LandingPage() {
           <div>
             <h2 className="text-2xl font-bold text-black">Featured previews</h2>
             <p className="mt-1 text-sm text-black/60">
-              These come from your local <span className="font-semibold">/public/images</span> folder.
+              These come from your local <span className="font-semibold">/public/images</span> artists.
             </p>
           </div>
           <Link
@@ -273,5 +273,6 @@ export default function LandingPage() {
     </div>
   );
 }
+
 
 
