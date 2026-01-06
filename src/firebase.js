@@ -1,10 +1,10 @@
 // src/firebase.js
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
-// Your Firebase config (already shared earlier in this chat)
+// Your Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyCb5xW55HWh9op3BERJdFmvTyfgIoWbzEQ",
   authDomain: "picsellart-619a7.firebaseapp.com",
@@ -18,8 +18,10 @@ const firebaseConfig = {
 // Prevent duplicate init (important for Vercel + React strict mode)
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
-// Exports used across your project
+// Core Firebase services used in your app
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 
