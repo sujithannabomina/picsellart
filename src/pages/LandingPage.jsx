@@ -81,7 +81,7 @@ export default function LandingPage() {
               </div>
 
               <h1 className="mt-5 text-4xl font-bold tracking-tight text-black sm:text-5xl">
-                PicSellArt — Buy & Sell Stunning Photos
+                PicSellArt — Turn Your Photos into Income
               </h1>
 
               <p className="mt-4 max-w-2xl text-base leading-7 text-black/70">
@@ -273,3 +273,4 @@ export default function LandingPage() {
     </div>
   );
 }
+
