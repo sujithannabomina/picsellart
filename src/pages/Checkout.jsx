@@ -1,145 +1,137 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+// FILE: src/pages/Checkout.jsx
+import React, { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext.jsx";
+import { openRazorpayCheckout } from "../lib/razorpay.js";
+import { doc, serverTimestamp, setDoc, collection } from "firebase/firestore";
+import { db } from "../firebase";
+import { formatINR } from "../utils/plans.js";
 
-function priceFromName(name) {
-  const match = name.match(/\d+/);
-  const n = match ? parseInt(match[0], 10) : 1;
-  return 120 + (n % 80);
-}
-
-function loadRazorpayScript() {
-  return new Promise((resolve) => {
-    const existing = document.getElementById("razorpay-sdk");
-    if (existing) return resolve(true);
-
-    const script = document.createElement("script");
-    script.id = "razorpay-sdk";
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
-  });
+function useQueryString() {
+  const { search } = useLocation();
+  return useMemo(() => new URLSearchParams(search), [search]);
 }
 
 export default function Checkout() {
-  const { fileName } = useParams();
-  const decoded = decodeURIComponent(fileName || "");
-  const amount = useMemo(() => priceFromName(decoded), [decoded]);
-
+  const nav = useNavigate();
+  const loc = useLocation();
+  const qs = useQueryString();
   const { user } = useAuth();
-  const navigate = useNavigate();
-  const [busy, setBusy] = useState(false);
+  const [paying, setPaying] = useState(false);
 
-  useEffect(() => {
-    if (!import.meta.env.VITE_RAZORPAY_KEY_ID) {
-      console.warn("Missing VITE_RAZORPAY_KEY_ID in .env");
-    }
-  }, []);
-
-  const payNow = async () => {
-    setBusy(true);
-
-    const ok = await loadRazorpayScript();
-    if (!ok) {
-      alert("Razorpay SDK failed to load. Please try again.");
-      setBusy(false);
-      return;
-    }
-
-    // 1) Create order on server
-    const orderRes = await fetch("/api/razorpay/create-order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amountInr: amount,
-        itemId: decoded,
-        buyerEmail: user?.email || "",
-      }),
-    });
-
-    if (!orderRes.ok) {
-      alert("Failed to create Razorpay order.");
-      setBusy(false);
-      return;
-    }
-
-    const orderData = await orderRes.json();
-
-    const options = {
-      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-      amount: orderData.amount, // in paise
-      currency: orderData.currency,
-      name: "Picsellart",
-      description: `Purchase: ${decoded}`,
-      order_id: orderData.orderId,
-      prefill: {
-        name: user?.displayName || "",
-        email: user?.email || "",
-      },
-      handler: async (response) => {
-        // 2) Verify payment on server
-        const verifyRes = await fetch("/api/razorpay/verify-payment", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            orderId: response.razorpay_order_id,
-            paymentId: response.razorpay_payment_id,
-            signature: response.razorpay_signature,
-            itemId: decoded,
-            buyerEmail: user?.email || "",
-          }),
-        });
-
-        if (verifyRes.ok) {
-          alert("Payment verified ✅ (Next: deliver original file)");
-          navigate("/buyer-dashboard");
-        } else {
-          alert("Payment verification failed.");
-        }
-      },
-      theme: { color: "#7c3aed" },
+  // item is passed from Explore / View
+  const item =
+    loc.state?.item || {
+      type: qs.get("type") || "",
+      id: qs.get("id") || "",
+      title: qs.get("title") || "",
+      priceINR: Number(qs.get("priceINR") || 0),
+      sellerId: qs.get("sellerId") || null,
+      downloadUrl: qs.get("downloadUrl") || "",
     };
 
-    const rz = new window.Razorpay(options);
-    rz.on("payment.failed", () => alert("Payment failed. Please try again."));
-    rz.open();
+  const valid = item && item.type && item.id && item.priceINR > 0;
 
-    setBusy(false);
-  };
+  async function payNow() {
+    if (!user) {
+      nav("/buyer-login", { state: { returnTo: loc.pathname + loc.search } });
+      return;
+    }
+    if (!valid) return alert("Invalid item");
+
+    setPaying(true);
+    try {
+      const resp = await fetch(`/api/razorpay?action=createOrder`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: item.priceINR * 100,
+          currency: "INR",
+          receipt: `buy_${user.uid}_${Date.now()}`,
+          notes: { buyerId: user.uid, itemId: item.id, type: item.type, sellerId: item.sellerId || "" },
+        }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data?.error ? JSON.stringify(data.error) : "Order create failed");
+      const order = data.order;
+
+      const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID");
+
+      const payRes = await openRazorpayCheckout({
+        key,
+        amount: order.amount,
+        currency: order.currency,
+        name: "PicSellart",
+        description: item.title || "Image purchase",
+        order_id: order.id,
+        prefill: { email: user.email || "" },
+        notes: { itemId: item.id, type: item.type, sellerId: item.sellerId || "" },
+        theme: { color: "#7c3aed" },
+      });
+
+      const v = await fetch(`/api/razorpay?action=verifyPayment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payRes),
+      });
+      const vData = await v.json();
+      if (!v.ok || !vData.verified) throw new Error("Payment verification failed");
+
+      // Save purchase record
+      const pRef = doc(collection(db, "purchases"));
+      await setDoc(pRef, {
+        buyerId: user.uid,
+        sellerId: item.type === "seller" ? item.sellerId : null,
+        itemType: item.type,
+        itemId: item.id,
+        title: item.title,
+        amountINR: item.priceINR,
+        currency: "INR",
+        downloadUrl: item.downloadUrl || "",
+        paymentId: payRes.razorpay_payment_id,
+        orderId: payRes.razorpay_order_id,
+        status: "paid",
+        createdAt: serverTimestamp(),
+      });
+
+      alert("Payment successful!");
+      nav("/buyer-dashboard");
+    } catch (e) {
+      alert(e.message || "Payment failed");
+    } finally {
+      setPaying(false);
+    }
+  }
 
   return (
-    <main className="max-w-6xl mx-auto px-4 py-10">
-      <h1 className="text-3xl font-bold text-gray-900">Checkout</h1>
-      <p className="text-gray-600 mt-2">
-        You are purchasing: <span className="font-semibold">Street Photography</span>
+    <div style={{ maxWidth: 1000, margin: "0 auto", padding: "36px 18px 60px" }}>
+      <h1 style={{ fontSize: 34, margin: 0, fontWeight: 900, color: "#111" }}>Checkout</h1>
+      <p style={{ color: "#555", marginTop: 10, lineHeight: 1.6 }}>
+        Secure payment via Razorpay. After successful payment, the purchase appears in Buyer Dashboard.
       </p>
 
-      <div className="mt-6 bg-white border rounded-2xl p-6">
-        <div className="text-sm text-gray-600">File</div>
-        <div className="font-semibold">{decoded}</div>
+      <div style={{ marginTop: 18, border: "1px solid #eee", borderRadius: 18, background: "#fff", padding: 18, boxShadow: "0 12px 30px rgba(0,0,0,0.06)" }}>
+        {!valid ? (
+          <div style={{ color: "#b00020", fontWeight: 900 }}>Invalid item. Please go back and select an image again.</div>
+        ) : (
+          <>
+            <div style={{ fontWeight: 900, fontSize: 18, color: "#111" }}>{item.title}</div>
+            <div style={{ marginTop: 8, color: "#666" }}>
+              Type: <b>{item.type}</b>
+            </div>
+            <div style={{ marginTop: 8, fontWeight: 900, fontSize: 20 }}>{formatINR(item.priceINR)}</div>
 
-        <div className="mt-6 flex items-center justify-between">
-          <div className="text-xl font-bold">Total: ₹{amount}</div>
-          <div className="text-sm text-gray-500">Standard digital license</div>
-        </div>
-
-        <div className="mt-6 flex gap-3">
-          <button
-            onClick={() => navigate(-1)}
-            className="px-5 py-2 rounded-full border bg-white hover:bg-gray-50"
-          >
-            Back
-          </button>
-          <button
-            disabled={busy}
-            onClick={payNow}
-            className="px-6 py-2 rounded-full bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-60"
-          >
-            {busy ? "Starting..." : "Pay with Razorpay"}
-          </button>
-        </div>
+            <button
+              onClick={payNow}
+              disabled={paying}
+              style={{ marginTop: 14, background: "#7c3aed", color: "#fff", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: 900, cursor: paying ? "not-allowed" : "pointer", opacity: paying ? 0.7 : 1 }}
+            >
+              {paying ? "Processing..." : "Pay Now"}
+            </button>
+          </>
+        )}
       </div>
-    </main>
+    </div>
   );
 }

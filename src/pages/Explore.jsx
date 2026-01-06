@@ -1,134 +1,194 @@
-// src/pages/Explore.jsx
+// FILE: src/pages/Explore.jsx
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { storage, db } from "../firebase";
+import { getDownloadURL, listAll, ref as sref } from "firebase/storage";
+import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { formatINR } from "../utils/plans.js";
 
-import React, { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import usePhotos from "../hooks/usePhotos"; // if your hook exists, this will work
+function dedupe(arr) {
+  const seen = new Set();
+  const out = [];
+  for (const x of arr) {
+    const k = x.uniqueKey || x.id;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(x);
+  }
+  return out;
+}
 
 export default function Explore() {
-  const { photos = [], loading } = usePhotos?.() || { photos: [], loading: false };
+  const nav = useNavigate();
+  const [q, setQ] = useState("");
+  const [sample, setSample] = useState([]);
+  const [seller, setSeller] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
-  const PER_PAGE = 8;
+  // Load sample images ONLY from: storage/public/images
+  useEffect(() => {
+    async function loadSamples() {
+      setLoading(true);
+      try {
+        const folder = sref(storage, "public/images");
+        const res = await listAll(folder);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return photos;
-    return photos.filter((p) => {
-      const name = (p?.name || p?.filename || "").toLowerCase();
-      const title = (p?.title || "").toLowerCase();
-      return name.includes(q) || title.includes(q);
+        const urls = await Promise.all(
+          res.items.map(async (itemRef, idx) => {
+            const url = await getDownloadURL(itemRef);
+            const filename = itemRef.name;
+
+            // sample id = sample-public/images/sample1.jpg (safe for view page)
+            const storagePath = `public/images/${filename}`;
+            return {
+              type: "sample",
+              id: `sample-${encodeURIComponent(storagePath)}`,
+              uniqueKey: storagePath,
+              title: "Street Photography",
+              filename,
+              priceINR: 120 + (idx % 130), // simple stable pricing
+              previewUrl: url,
+              downloadUrl: url,
+              sellerId: null,
+            };
+          })
+        );
+
+        setSample(urls);
+      } catch (e) {
+        console.error(e);
+        setSample([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSamples();
+  }, []);
+
+  // Live seller listings
+  useEffect(() => {
+    const q1 = query(collection(db, "listings"), orderBy("createdAt", "desc"));
+    const unsub = onSnapshot(q1, (snap) => {
+      const rows = snap.docs.map((d) => {
+        const x = d.data();
+        return {
+          type: "seller",
+          id: d.id,
+          uniqueKey: d.id,
+          title: x.title,
+          filename: x.storagePath?.split("/").pop() || "seller-image",
+          priceINR: x.priceINR,
+          previewUrl: x.previewUrl,
+          downloadUrl: x.previewUrl,
+          sellerId: x.sellerId,
+        };
+      });
+      setSeller(rows);
     });
-  }, [photos, query]);
+    return () => unsub();
+  }, []);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
-  const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * PER_PAGE;
-  const pageItems = filtered.slice(start, start + PER_PAGE);
+  const all = useMemo(() => {
+    const merged = dedupe([...seller, ...sample]); // seller first, then sample
+    const qq = q.trim().toLowerCase();
+    if (!qq) return merged;
+    return merged.filter((x) => (x.title || "").toLowerCase().includes(qq) || (x.filename || "").toLowerCase().includes(qq));
+  }, [sample, seller, q]);
 
-  const go = (n) => setPage(Math.min(totalPages, Math.max(1, n)));
+  // Simple pagination (front-end)
+  const perPage = 12;
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(all.length / perPage));
+  useEffect(() => setPage(1), [q]);
+
+  const pageItems = useMemo(() => all.slice((page - 1) * perPage, page * perPage), [all, page]);
+
+  function goView(item) {
+    // Use /view/:id
+    nav(`/view/${encodeURIComponent(item.id)}`, { state: { item } });
+  }
+
+  function goBuy(item) {
+    const qs =
+      `?type=${encodeURIComponent(item.type)}` +
+      `&id=${encodeURIComponent(item.id)}` +
+      `&title=${encodeURIComponent(item.title || "")}` +
+      `&priceINR=${encodeURIComponent(item.priceINR || 0)}` +
+      `&sellerId=${encodeURIComponent(item.sellerId || "")}` +
+      `&downloadUrl=${encodeURIComponent(item.downloadUrl || "")}`;
+    nav(`/checkout${qs}`, { state: { item } });
+  }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      <h1 className="text-4xl font-bold text-gray-900">Explore Marketplace</h1>
-      <p className="mt-2 text-gray-600">
-        Curated images from our public gallery and verified sellers. Login as a buyer to
-        purchase and download watermark-free files.
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "30px 18px 60px" }}>
+      <h1 style={{ margin: 0, fontWeight: 900, fontSize: 34, color: "#111" }}>Explore Marketplace</h1>
+      <p style={{ color: "#666", marginTop: 8, lineHeight: 1.6 }}>
+        Curated sample gallery + verified sellers. Buy securely and manage downloads in your Buyer Dashboard.
       </p>
 
-      <div className="mt-6">
-        <input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          placeholder="Search street, interior, food..."
-          className="w-full max-w-xl rounded-full border px-5 py-3 outline-none focus:ring-2 focus:ring-purple-200"
-        />
-      </div>
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search street, interior, food..."
+        style={{ width: "100%", maxWidth: 520, padding: 12, borderRadius: 999, border: "1px solid #eee", marginTop: 14 }}
+      />
 
-      {loading ? (
-        <div className="mt-10 text-gray-600">Loading images…</div>
-      ) : (
-        <>
-          <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {pageItems.map((p) => {
-              const file = p?.name || p?.filename || p?.fileName || "";
-              const title = p?.title || "Street Photography";
-              const price = p?.priceINR || p?.price || 120;
+      {loading && <div style={{ marginTop: 16, color: "#666" }}>Loading images...</div>}
 
-              return (
-                <div
-                  key={p?.id || file}
-                  className="rounded-3xl border bg-white overflow-hidden"
-                >
-                  <div className="aspect-[4/3] bg-gray-50">
-                    <img
-                      src={p?.url || p?.watermarkedUrl || `/photo/${file}`}
-                      alt={title}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  </div>
+      <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+        {pageItems.map((x) => (
+          <div key={x.uniqueKey} style={{ border: "1px solid #eee", borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 12px 30px rgba(0,0,0,0.06)" }}>
+            <div style={{ height: 180, background: "#f7f7f7" }}>
+              <img src={x.previewUrl} alt={x.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            </div>
 
-                  <div className="p-5">
-                    <div className="font-semibold text-gray-900">{title}</div>
-                    <div className="text-sm text-gray-500">{file}</div>
+            <div style={{ padding: 14 }}>
+              <div style={{ fontWeight: 900, color: "#111" }}>{x.title}</div>
+              <div style={{ color: "#666", marginTop: 4, fontSize: 13 }}>{x.filename}</div>
+              <div style={{ marginTop: 8, fontWeight: 900 }}>{formatINR(x.priceINR || 0)}</div>
 
-                    <div className="mt-2 font-bold text-gray-900">₹{price}</div>
-
-                    <div className="mt-4 flex gap-3">
-                      <Link
-                        to={`/photo/${file}`}
-                        className="flex-1 text-center rounded-full border px-4 py-2 font-semibold hover:bg-gray-50 transition"
-                      >
-                        View
-                      </Link>
-                      <Link
-                        to={`/checkout?photo=${encodeURIComponent(file)}`}
-                        className="flex-1 text-center rounded-full bg-purple-600 text-white px-4 py-2 font-semibold hover:bg-purple-700 transition"
-                      >
-                        Buy
-                      </Link>
-                    </div>
-
-                    <div className="mt-3 text-xs text-gray-500">
-                      Standard digital license
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Pagination */}
-          {filtered.length > PER_PAGE && (
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={() => go(safePage - 1)}
-                disabled={safePage === 1}
-                className="px-4 py-2 rounded-full border font-semibold disabled:opacity-40"
-              >
-                Prev
-              </button>
-
-              <div className="text-sm text-gray-600">
-                Page <span className="font-semibold">{safePage}</span> of{" "}
-                <span className="font-semibold">{totalPages}</span>
+              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                <button onClick={() => goView(x)} style={{ flex: 1, background: "#fff", border: "1px solid #eee", padding: "10px 12px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}>
+                  View
+                </button>
+                <button onClick={() => goBuy(x)} style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", padding: "10px 12px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}>
+                  Buy
+                </button>
               </div>
 
-              <button
-                onClick={() => go(safePage + 1)}
-                disabled={safePage === totalPages}
-                className="px-4 py-2 rounded-full border font-semibold disabled:opacity-40"
-              >
-                Next
-              </button>
+              <div style={{ marginTop: 10, color: "#999", fontSize: 12 }}>
+                {x.type === "sample" ? "Standard digital license" : "Verified seller listing"}
+              </div>
             </div>
-          )}
-        </>
-      )}
+          </div>
+        ))}
+      </div>
+
+      {/* Pagination */}
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 18, flexWrap: "wrap" }}>
+        <button
+          disabled={page <= 1}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          style={{ background: "#fff", border: "1px solid #eee", padding: "10px 14px", borderRadius: 12, fontWeight: 900, cursor: page <= 1 ? "not-allowed" : "pointer", opacity: page <= 1 ? 0.6 : 1 }}
+        >
+          Prev
+        </button>
+        <div style={{ padding: "10px 14px", fontWeight: 900, color: "#111" }}>
+          Page {page} / {totalPages}
+        </div>
+        <button
+          disabled={page >= totalPages}
+          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+          style={{ background: "#fff", border: "1px solid #eee", padding: "10px 14px", borderRadius: 12, fontWeight: 900, cursor: page >= totalPages ? "not-allowed" : "pointer", opacity: page >= totalPages ? 0.6 : 1 }}
+        >
+          Next
+        </button>
+      </div>
+
+      <style>{`
+        @media (max-width: 1050px){ div[style*="grid-template-columns: repeat(4, 1fr)"]{ grid-template-columns: repeat(2, 1fr) !important; } }
+        @media (max-width: 520px){ div[style*="grid-template-columns: repeat(4, 1fr)"]{ grid-template-columns: 1fr !important; } }
+      `}</style>
     </div>
   );
 }

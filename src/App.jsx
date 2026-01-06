@@ -1,30 +1,32 @@
+// FILE: src/App.jsx
 import React from "react";
 import { Routes, Route } from "react-router-dom";
-import Navbar from "./components/Navbar";
-import ProtectedRoute from "./components/ProtectedRoute";
 
-import Home from "./pages/Home";
-import Explore from "./pages/Explore";
-import Faq from "./pages/Faq";
-import Contact from "./pages/Contact";
-import Refunds from "./pages/Refunds";
+import Navbar from "./components/Navbar.jsx";
 
-import BuyerLogin from "./pages/BuyerLogin";
-import SellerLogin from "./pages/SellerLogin";
-import BuyerDashboard from "./pages/BuyerDashboard";
-import SellerDashboard from "./pages/SellerDashboard";
+import Home from "./pages/Home.jsx";
+import Explore from "./pages/Explore.jsx";
+import ViewPhoto from "./pages/ViewPhoto.jsx";
+import Faq from "./pages/Faq.jsx";
+import Contact from "./pages/Contact.jsx";
+import Refunds from "./pages/Refunds.jsx";
 
-import ViewPhoto from "./pages/ViewPhoto";
-import Checkout from "./pages/Checkout";
-import NotFound from "./pages/NotFound";
+import BuyerLogin from "./pages/BuyerLogin.jsx";
+import SellerLogin from "./pages/SellerLogin.jsx";
+import BuyerDashboard from "./pages/BuyerDashboard.jsx";
+import SellerDashboard from "./pages/SellerDashboard.jsx";
+import Checkout from "./pages/Checkout.jsx";
+
+import NotFound from "./pages/NotFound.jsx";
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
+    <div className="min-h-screen bg-white">
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/explore" element={<Explore />} />
+        <Route path="/view/:id" element={<ViewPhoto />} />
         <Route path="/faq" element={<Faq />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/refunds" element={<Refunds />} />
@@ -32,33 +34,10 @@ export default function App() {
         <Route path="/buyer-login" element={<BuyerLogin />} />
         <Route path="/seller-login" element={<SellerLogin />} />
 
-        <Route
-          path="/buyer-dashboard"
-          element={
-            <ProtectedRoute requireRole="buyer">
-              <BuyerDashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/seller-dashboard"
-          element={
-            <ProtectedRoute requireRole="seller">
-              <SellerDashboard />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
+        <Route path="/seller-dashboard" element={<SellerDashboard />} />
 
-        <Route path="/photo/:fileName" element={<ViewPhoto />} />
-
-        <Route
-          path="/checkout/:fileName"
-          element={
-            <ProtectedRoute requireRole="buyer">
-              <Checkout />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/checkout" element={<Checkout />} />
 
         <Route path="*" element={<NotFound />} />
       </Routes>

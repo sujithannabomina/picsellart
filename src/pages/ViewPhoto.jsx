@@ -1,100 +1,134 @@
-// src/pages/ViewPhoto.jsx
-
+// FILE: src/pages/ViewPhoto.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { db, storage } from "../firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { getDownloadURL, ref } from "firebase/storage";
-import { storage } from "../firebase";
-
-function parseIndex(file) {
-  const m = String(file || "").match(/sample(\d+)\.jpg/i);
-  return m ? Number(m[1]) : null;
-}
+import { formatINR } from "../utils/plans.js";
 
 export default function ViewPhoto() {
-  const params = useParams();
-  const fileName =
-    params?.filename || params?.file || params?.name || params?.id || params?.photoId;
+  const nav = useNavigate();
+  const { id } = useParams();
+  const loc = useLocation();
 
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [item, setItem] = useState(loc.state?.item || null);
+  const [loading, setLoading] = useState(!loc.state?.item);
 
-  const idx = useMemo(() => parseIndex(fileName), [fileName]);
-  const price = useMemo(() => (idx ? 120 + idx : 149), [idx]);
+  // id can be: sample-public/images/sample16.jpg   OR listing Firestore id
+  const isSample = useMemo(() => (id || "").startsWith("sample-"), [id]);
 
   useEffect(() => {
-    let alive = true;
-
     async function load() {
+      if (item) return;
+      setLoading(true);
+
       try {
-        setLoading(true);
-
-        // sample images are stored in Firebase Storage: public/images/sampleX.jpg
-        const fileRef = ref(storage, `public/images/${fileName}`);
-        const dl = await getDownloadURL(fileRef);
-
-        if (alive) setUrl(dl);
+        if (isSample) {
+          const storagePath = decodeURIComponent(id.replace("sample-", ""));
+          const url = await getDownloadURL(ref(storage, storagePath));
+          setItem({
+            type: "sample",
+            id,
+            title: "Street Photography",
+            priceINR: 136,
+            downloadUrl: url,
+            previewUrl: url,
+            storagePath,
+            sellerId: null,
+          });
+        } else {
+          const snap = await getDoc(doc(db, "listings", id));
+          if (!snap.exists()) throw new Error("Listing not found");
+          const d = snap.data();
+          setItem({
+            type: "seller",
+            id,
+            title: d.title,
+            priceINR: d.priceINR,
+            previewUrl: d.previewUrl,
+            downloadUrl: d.previewUrl,
+            sellerId: d.sellerId,
+          });
+        }
       } catch (e) {
-        // fallback: keep route image if your app serves it
-        if (alive) setUrl(`/photo/${fileName}`);
+        alert(e.message || "Failed to load image");
       } finally {
-        if (alive) setLoading(false);
+        setLoading(false);
       }
     }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
-    if (fileName) load();
-    return () => {
-      alive = false;
-    };
-  }, [fileName]);
+  if (loading) return <div style={{ padding: 30 }}>Loading...</div>;
+  if (!item) return <div style={{ padding: 30 }}>Not found</div>;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-10">
-      <Link to="/explore" className="text-sm text-gray-600 hover:text-gray-900">
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "26px 18px 70px" }}>
+      <button onClick={() => nav(-1)} style={{ background: "transparent", border: "none", color: "#555", cursor: "pointer", fontWeight: 800 }}>
         ← Back
-      </Link>
+      </button>
 
-      <div className="mt-6 flex flex-col lg:flex-row items-start justify-between gap-6">
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline", marginTop: 10 }}>
         <div>
-          <h1 className="text-4xl font-bold text-gray-900">Street Photography</h1>
-          <div className="mt-1 text-gray-500">{fileName}</div>
+          <h1 style={{ margin: 0, fontWeight: 900, fontSize: 34, color: "#111" }}>{item.title}</h1>
+          <div style={{ color: "#666", marginTop: 6 }}>{item.type === "sample" ? "Standard digital license" : "Verified seller listing"}</div>
         </div>
-
-        <div className="text-right">
-          <div className="text-2xl font-bold text-gray-900">₹{price}</div>
-          <div className="text-sm text-gray-500">Standard digital license</div>
-        </div>
+        <div style={{ fontWeight: 900, fontSize: 22, color: "#111" }}>{formatINR(item.priceINR)}</div>
       </div>
 
-      <div className="mt-8 rounded-3xl border bg-white overflow-hidden">
-        <div className="bg-gray-50 flex items-center justify-center">
-          {loading ? (
-            <div className="py-16 text-gray-600">Loading…</div>
-          ) : (
-            <img
-              src={url}
-              alt={fileName}
-              className="w-full max-h-[70vh] object-contain"
-              loading="lazy"
-            />
-          )}
+      <div
+        style={{
+          marginTop: 14,
+          borderRadius: 22,
+          overflow: "hidden",
+          border: "1px solid #eee",
+          background: "#fff",
+          boxShadow: "0 18px 40px rgba(0,0,0,0.08)",
+        }}
+      >
+        <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", background: "#f7f7f7" }}>
+          <img
+            src={item.previewUrl}
+            alt={item.title}
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              display: "block",
+            }}
+          />
+          {/* Light watermark overlay (preview only) */}
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              pointerEvents: "none",
+              opacity: 0.12,
+              fontWeight: 900,
+              fontSize: 44,
+              color: "#111",
+              transform: "rotate(-18deg)",
+            }}
+          >
+            PicSellart
+          </div>
         </div>
 
-        <div className="p-5 flex flex-wrap gap-3 items-center justify-between">
-          <Link
-            to="/explore"
-            className="px-5 py-2.5 rounded-full border font-semibold hover:bg-gray-50 transition"
-          >
-            Back
-          </Link>
-
-          <Link
-            to={`/checkout?photo=${encodeURIComponent(fileName || "")}&price=${encodeURIComponent(
-              price
-            )}`}
-            className="px-6 py-2.5 rounded-full bg-purple-600 text-white font-semibold hover:bg-purple-700 transition"
+        <div style={{ padding: 16, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "flex-start" }}>
+          <button
+            onClick={() => nav("/checkout?type=" + encodeURIComponent(item.type) + "&id=" + encodeURIComponent(item.id) + "&title=" + encodeURIComponent(item.title) + "&priceINR=" + encodeURIComponent(item.priceINR) + "&sellerId=" + encodeURIComponent(item.sellerId || "") + "&downloadUrl=" + encodeURIComponent(item.downloadUrl || ""), { state: { item } })}
+            style={{ background: "#7c3aed", color: "#fff", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}
           >
             Buy Now
-          </Link>
+          </button>
+          <button onClick={() => nav(-1)} style={{ background: "#fff", color: "#111", border: "1px solid #eee", padding: "12px 16px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}>
+            Back
+          </button>
         </div>
       </div>
     </div>
