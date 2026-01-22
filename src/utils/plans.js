@@ -1,42 +1,50 @@
 // src/utils/plans.js
-// Option A: Show as "Account Activation" (not "Subscription plan").
-// No "days" mentioned anywhere.
 
-export const SELLER_PLANS = [
+// Central place for plan definitions + shared helpers.
+// NOTE: Keep labels human-friendly (no "days" in UI).
+
+export const PLANS = [
   {
     id: "starter",
-    title: "Starter",
+    name: "Starter",
     priceINR: 100,
     maxUploads: 25,
-    maxPriceINR: 199,
-    badge: "Best for new sellers",
-    description:
-      "Activate your seller account and start listing your photos with simple limits.",
+    maxPricePerImageINR: 199,
+    durationLabel: "6 months",
   },
   {
     id: "pro",
-    title: "Pro",
+    name: "Pro",
     priceINR: 300,
     maxUploads: 30,
-    maxPriceINR: 249,
-    badge: "Most popular",
-    description:
-      "For consistent sellers who want higher upload capacity and stronger pricing.",
+    maxPricePerImageINR: 249,
+    durationLabel: "6 months",
   },
   {
     id: "elite",
-    title: "Elite",
+    name: "Elite",
     priceINR: 800,
     maxUploads: 50,
-    maxPriceINR: 249,
-    badge: "For power sellers",
-    description:
-      "Maximum uploads with premium account activation benefits.",
+    maxPricePerImageINR: 249,
+    durationLabel: "6 months",
   },
 ];
 
-export const COMMISSION_RATE = 0.10; // 10% per sale
+export function getPlanById(id) {
+  return PLANS.find((p) => p.id === id) || null;
+}
 
-export function getPlan(planId) {
-  return SELLER_PLANS.find((p) => p.id === planId) || null;
+// ✅ This is what Explore.jsx expects to exist
+export function formatINR(amount) {
+  const n = Number(amount || 0);
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(n);
+  } catch {
+    // Fallback (rare environments)
+    return `₹${Math.round(n).toLocaleString("en-IN")}`;
+  }
 }

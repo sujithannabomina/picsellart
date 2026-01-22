@@ -1,61 +1,52 @@
-/* FILE: src/index.css */
+/* src/index.css */
 
-/* Tailwind (keep these if you already use Tailwind) */
+/* ✅ @import must come first (before comments/rules/tailwind) */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Light, smooth font everywhere */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap");
-
+/* App base */
 :root {
-  --psa-text: #111;
-  --psa-muted: #666;
-  --psa-border: #ececec;
-  --psa-bg: #ffffff;
-}
-
-html, body {
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  font-weight: 400;
-  color: var(--psa-text);
-  background: var(--psa-bg);
+  color-scheme: light;
 }
 
-h1, h2, h3 {
-  font-weight: 600; /* not heavy-bold */
-  letter-spacing: -0.02em;
+body {
+  margin: 0;
+  background: #ffffff;
+  color: #111;
 }
 
-a, button {
-  font-weight: 500;
+/* (Optional) your existing PSA utility classes used in Explore.jsx */
+.psa-muted { color: #666; }
+.psa-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid #e6e6e6;
+  border-radius: 12px;
+  outline: none;
 }
+.psa-input:focus { border-color: #cfcfcf; }
 
 .psa-card {
+  border: 1px solid #eee;
+  border-radius: 16px;
   background: #fff;
-  border: 1px solid var(--psa-border);
-  border-radius: 18px;
-  box-shadow: 0 12px 28px rgba(0,0,0,0.06);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.04);
 }
 
-.psa-muted { color: var(--psa-muted); }
 .psa-btn {
-  border-radius: 12px;
-  padding: 10px 14px;
-  border: 1px solid var(--psa-border);
+  border: 1px solid #e6e6e6;
   background: #fff;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-weight: 600;
   cursor: pointer;
 }
 .psa-btn-primary {
-  border: none;
-  background: #7c3aed;
+  border-color: #111;
+  background: #111;
   color: #fff;
-}
-.psa-input {
-  width: 100%;
-  max-width: 520px;
-  padding: 12px 14px;
-  border-radius: 999px;
-  border: 1px solid var(--psa-border);
-  outline: none;
 }
