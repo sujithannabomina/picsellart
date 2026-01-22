@@ -1,6 +1,10 @@
 // src/utils/plans.js
 // Keep plan definitions + shared helpers in one place.
 
+// ✅ Seller commission (example: 20% platform fee)
+// If your project uses a different number, change it here.
+export const COMMISSION_RATE = 0.1;
+
 // ✅ Canonical plans list
 export const PLANS = [
   {
@@ -29,10 +33,10 @@ export const PLANS = [
   },
 ];
 
-// ✅ Compatibility exports (your SellerOnboarding.jsx expects these)
+// ✅ Compatibility exports (your files expect these)
 export const SELLER_PLANS = PLANS;
 
-// Old name expected by SellerOnboarding.jsx
+// Old name expected by Seller pages
 export function getPlan(id) {
   return PLANS.find((p) => p.id === id) || null;
 }
@@ -42,7 +46,7 @@ export function getPlanById(id) {
   return getPlan(id);
 }
 
-// ✅ Used by Explore.jsx (your previous error)
+// ✅ Used by Explore.jsx
 export function formatINR(amount) {
   const n = Number(amount || 0);
   try {
