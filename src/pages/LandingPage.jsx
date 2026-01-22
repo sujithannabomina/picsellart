@@ -162,7 +162,7 @@ export default function LandingPage() {
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      Access dashboard and track your earings and upload limits
+                      Access dashboard-Track your earnings-upload limits
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
@@ -273,4 +273,5 @@ export default function LandingPage() {
     </div>
   );
 }
+
 
