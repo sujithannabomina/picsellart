@@ -1,8 +1,7 @@
 // src/utils/plans.js
+// Keep plan definitions + shared helpers in one place.
 
-// Central place for plan definitions + shared helpers.
-// NOTE: Keep labels human-friendly (no "days" in UI).
-
+// ✅ Canonical plans list
 export const PLANS = [
   {
     id: "starter",
@@ -10,7 +9,7 @@ export const PLANS = [
     priceINR: 100,
     maxUploads: 25,
     maxPricePerImageINR: 199,
-    durationLabel: "6 months",
+    durationLabel: "6 months", // no "days"
   },
   {
     id: "pro",
@@ -30,11 +29,20 @@ export const PLANS = [
   },
 ];
 
-export function getPlanById(id) {
+// ✅ Compatibility exports (your SellerOnboarding.jsx expects these)
+export const SELLER_PLANS = PLANS;
+
+// Old name expected by SellerOnboarding.jsx
+export function getPlan(id) {
   return PLANS.find((p) => p.id === id) || null;
 }
 
-// ✅ This is what Explore.jsx expects to exist
+// New name (safe to keep)
+export function getPlanById(id) {
+  return getPlan(id);
+}
+
+// ✅ Used by Explore.jsx (your previous error)
 export function formatINR(amount) {
   const n = Number(amount || 0);
   try {
@@ -44,7 +52,6 @@ export function formatINR(amount) {
       maximumFractionDigits: 0,
     }).format(n);
   } catch {
-    // Fallback (rare environments)
     return `₹${Math.round(n).toLocaleString("en-IN")}`;
   }
 }
