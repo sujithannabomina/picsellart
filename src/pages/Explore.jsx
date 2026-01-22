@@ -38,6 +38,7 @@ export default function Explore() {
             const url = await getDownloadURL(itemRef);
             const filename = itemRef.name;
 
+            // sample id = sample-public/images/sample1.jpg (safe for view page)
             const storagePath = `public/images/${filename}`;
             return {
               type: "sample",
@@ -45,7 +46,7 @@ export default function Explore() {
               uniqueKey: storagePath,
               title: "Street Photography",
               filename,
-              priceINR: 120 + (idx % 130),
+              priceINR: 120 + (idx % 130), // simple stable pricing
               previewUrl: url,
               downloadUrl: url,
               sellerId: null,
@@ -91,11 +92,7 @@ export default function Explore() {
     const merged = dedupe([...seller, ...sample]); // seller first, then sample
     const qq = q.trim().toLowerCase();
     if (!qq) return merged;
-    return merged.filter(
-      (x) =>
-        (x.title || "").toLowerCase().includes(qq) ||
-        (x.filename || "").toLowerCase().includes(qq)
-    );
+    return merged.filter((x) => (x.title || "").toLowerCase().includes(qq) || (x.filename || "").toLowerCase().includes(qq));
   }, [sample, seller, q]);
 
   // Simple pagination (front-end)
@@ -104,12 +101,10 @@ export default function Explore() {
   const totalPages = Math.max(1, Math.ceil(all.length / perPage));
   useEffect(() => setPage(1), [q]);
 
-  const pageItems = useMemo(
-    () => all.slice((page - 1) * perPage, page * perPage),
-    [all, page]
-  );
+  const pageItems = useMemo(() => all.slice((page - 1) * perPage, page * perPage), [all, page]);
 
   function goView(item) {
+    // Use /view/:id
     nav(`/view/${encodeURIComponent(item.id)}`, { state: { item } });
   }
 
@@ -125,47 +120,43 @@ export default function Explore() {
   }
 
   return (
-    <div className="psa-wrap">
-      {/* Header */}
-      <div className="psa-head">
-        <h1 className="psa-h1">Explore Marketplace</h1>
-        <p className="psa-sub">
-          Curated sample gallery + verified sellers. Buy securely and manage downloads in your Buyer Dashboard.
-        </p>
+    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "30px 18px 60px" }}>
+      <h1 style={{ margin: 0, fontWeight: 900, fontSize: 34, color: "#111" }}>Explore Marketplace</h1>
+      <p style={{ color: "#666", marginTop: 8, lineHeight: 1.6 }}>
+        Curated sample gallery + verified sellers. Buy securely and manage downloads in your Buyer Dashboard.
+      </p>
 
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search street, interior, food..."
-          className="psa-search"
-        />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search street, interior, food..."
+        style={{ width: "100%", maxWidth: 520, padding: 12, borderRadius: 999, border: "1px solid #eee", marginTop: 14 }}
+      />
 
-        {loading && <div className="psa-loading">Loading images...</div>}
-      </div>
+      {loading && <div style={{ marginTop: 16, color: "#666" }}>Loading images...</div>}
 
-      {/* Grid */}
-      <div className="psa-grid">
+      <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
         {pageItems.map((x) => (
-          <div key={x.uniqueKey} className="psa-card">
-            <button className="psa-imgWrap" onClick={() => goView(x)} title="View">
-              <img src={x.previewUrl} alt={x.title} className="psa-img" />
-            </button>
+          <div key={x.uniqueKey} style={{ border: "1px solid #eee", borderRadius: 18, overflow: "hidden", background: "#fff", boxShadow: "0 12px 30px rgba(0,0,0,0.06)" }}>
+            <div style={{ height: 180, background: "#f7f7f7" }}>
+              <img src={x.previewUrl} alt={x.title} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            </div>
 
-            <div className="psa-body">
-              <div className="psa-title">{x.title}</div>
-              <div className="psa-file">{x.filename}</div>
-              <div className="psa-price">{formatINR(x.priceINR || 0)}</div>
+            <div style={{ padding: 14 }}>
+              <div style={{ fontWeight: 900, color: "#111" }}>{x.title}</div>
+              <div style={{ color: "#666", marginTop: 4, fontSize: 13 }}>{x.filename}</div>
+              <div style={{ marginTop: 8, fontWeight: 900 }}>{formatINR(x.priceINR || 0)}</div>
 
-              <div className="psa-actions">
-                <button onClick={() => goView(x)} className="psa-btn psa-btnGhost">
+              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                <button onClick={() => goView(x)} style={{ flex: 1, background: "#fff", border: "1px solid #eee", padding: "10px 12px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}>
                   View
                 </button>
-                <button onClick={() => goBuy(x)} className="psa-btn psa-btnPrimary">
+                <button onClick={() => goBuy(x)} style={{ flex: 1, background: "#7c3aed", color: "#fff", border: "none", padding: "10px 12px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}>
                   Buy
                 </button>
               </div>
 
-              <div className="psa-meta">
+              <div style={{ marginTop: 10, color: "#999", fontSize: 12 }}>
                 {x.type === "sample" ? "Standard digital license" : "Verified seller listing"}
               </div>
             </div>
@@ -174,208 +165,29 @@ export default function Explore() {
       </div>
 
       {/* Pagination */}
-      <div className="psa-pagi">
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 18, flexWrap: "wrap" }}>
         <button
           disabled={page <= 1}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
-          className="psa-pageBtn"
+          style={{ background: "#fff", border: "1px solid #eee", padding: "10px 14px", borderRadius: 12, fontWeight: 900, cursor: page <= 1 ? "not-allowed" : "pointer", opacity: page <= 1 ? 0.6 : 1 }}
         >
           Prev
         </button>
-
-        <div className="psa-pageText">
-          Page <span>{page}</span> / <span>{totalPages}</span>
+        <div style={{ padding: "10px 14px", fontWeight: 900, color: "#111" }}>
+          Page {page} / {totalPages}
         </div>
-
         <button
           disabled={page >= totalPages}
           onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          className="psa-pageBtn"
+          style={{ background: "#fff", border: "1px solid #eee", padding: "10px 14px", borderRadius: 12, fontWeight: 900, cursor: page >= totalPages ? "not-allowed" : "pointer", opacity: page >= totalPages ? 0.6 : 1 }}
         >
           Next
         </button>
       </div>
 
-      {/* Styles (only affects this page) */}
       <style>{`
-        /* Neat font + lighter weights everywhere */
-        .psa-wrap{
-          max-width: 1100px;
-          margin: 0 auto;
-          padding: 30px 18px 60px;
-          font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
-          color: #0f172a;
-        }
-        .psa-head{ margin-bottom: 18px; }
-        .psa-h1{
-          margin: 0;
-          font-weight: 650;        /* was 900 */
-          letter-spacing: -0.02em;
-          font-size: 34px;
-          color: #0f172a;
-        }
-        .psa-sub{
-          color: #64748b;
-          margin-top: 8px;
-          line-height: 1.65;
-          font-size: 14.5px;
-          font-weight: 400;
-        }
-        .psa-search{
-          width: 100%;
-          max-width: 520px;
-          padding: 12px 14px;
-          border-radius: 999px;
-          border: 1px solid #e5e7eb;
-          margin-top: 14px;
-          outline: none;
-          font-size: 14px;
-          color: #0f172a;
-          background: #fff;
-          box-shadow: 0 1px 0 rgba(0,0,0,0.02);
-        }
-        .psa-search:focus{
-          border-color: #c4b5fd;
-          box-shadow: 0 0 0 4px rgba(124,58,237,0.12);
-        }
-        .psa-loading{ margin-top: 12px; color: #64748b; font-size: 14px; }
-
-        .psa-grid{
-          margin-top: 18px;
-          display: grid;
-          grid-template-columns: repeat(4, 1fr);
-          gap: 14px;
-        }
-
-        .psa-card{
-          border: 1px solid #eef2f7;
-          border-radius: 18px;
-          overflow: hidden;
-          background: #fff;
-          box-shadow: 0 10px 24px rgba(15,23,42,0.06);
-          transition: transform .12s ease, box-shadow .12s ease;
-        }
-        .psa-card:hover{
-          transform: translateY(-2px);
-          box-shadow: 0 14px 30px rgba(15,23,42,0.10);
-        }
-
-        .psa-imgWrap{
-          width: 100%;
-          height: 180px;
-          background: #f1f5f9;
-          border: 0;
-          padding: 0;
-          cursor: pointer;
-          display: block;
-        }
-        .psa-img{
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-          display: block;
-        }
-
-        .psa-body{ padding: 14px; }
-        .psa-title{
-          font-weight: 600;        /* was 900 */
-          color: #0f172a;
-          font-size: 16px;
-          letter-spacing: -0.01em;
-        }
-        .psa-file{
-          color: #64748b;
-          margin-top: 4px;
-          font-size: 12.5px;
-          font-weight: 400;
-        }
-        .psa-price{
-          margin-top: 8px;
-          font-weight: 650;        /* was 900 */
-          font-size: 15px;
-          color: #0f172a;
-        }
-
-        .psa-actions{
-          display: flex;
-          gap: 10px;
-          margin-top: 12px;
-        }
-        .psa-btn{
-          flex: 1;
-          padding: 10px 12px;
-          border-radius: 999px;   /* smoother */
-          font-weight: 600;       /* was 900 */
-          font-size: 13.5px;
-          cursor: pointer;
-          transition: transform .06s ease, background .12s ease, border-color .12s ease;
-        }
-        .psa-btn:active{ transform: scale(0.98); }
-
-        .psa-btnGhost{
-          background: #fff;
-          border: 1px solid #e5e7eb;
-          color: #0f172a;
-        }
-        .psa-btnGhost:hover{ background: #f8fafc; }
-
-        .psa-btnPrimary{
-          background: #7c3aed;
-          color: #fff;
-          border: none;
-        }
-        .psa-btnPrimary:hover{ background: #6d28d9; }
-
-        .psa-meta{
-          margin-top: 10px;
-          color: #94a3b8;
-          font-size: 12px;
-          font-weight: 400;
-        }
-
-        .psa-pagi{
-          display: flex;
-          gap: 10px;
-          justify-content: center;
-          margin-top: 18px;
-          flex-wrap: wrap;
-          align-items: center;
-        }
-        .psa-pageBtn{
-          background: #fff;
-          border: 1px solid #e5e7eb;
-          padding: 10px 14px;
-          border-radius: 999px;
-          font-weight: 600;       /* was 900 */
-          font-size: 13.5px;
-          cursor: pointer;
-          color: #0f172a;
-          transition: background .12s ease, opacity .12s ease;
-        }
-        .psa-pageBtn:hover{ background: #f8fafc; }
-        .psa-pageBtn:disabled{
-          cursor: not-allowed;
-          opacity: 0.55;
-        }
-        .psa-pageText{
-          padding: 10px 14px;
-          font-weight: 500;       /* was 900 */
-          color: #334155;
-          font-size: 13.5px;
-        }
-        .psa-pageText span{
-          font-weight: 650;
-          color: #0f172a;
-        }
-
-        /* Responsive */
-        @media (max-width: 1050px){
-          .psa-grid{ grid-template-columns: repeat(2, 1fr); }
-        }
-        @media (max-width: 520px){
-          .psa-grid{ grid-template-columns: 1fr; }
-          .psa-h1{ font-size: 28px; }
-        }
+        @media (max-width: 1050px){ div[style*="grid-template-columns: repeat(4, 1fr)"]{ grid-template-columns: repeat(2, 1fr) !important; } }
+        @media (max-width: 520px){ div[style*="grid-template-columns: repeat(4, 1fr)"]{ grid-template-columns: 1fr !important; } }
       `}</style>
     </div>
   );
