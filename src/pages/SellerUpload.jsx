@@ -1,212 +1,151 @@
 // src/pages/SellerUpload.jsx
 import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { db, storage } from "../firebase";
-import { doc, getDoc, addDoc, collection, serverTimestamp, getDocs, query, where, orderBy } from "firebase/firestore";
-import { ref as sRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { collection, doc, getDoc, getDocs, serverTimestamp, addDoc, query, where } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { getPlan } from "../utils/plans";
 
-const SellerUpload = () => {
+export default function SellerUpload() {
   const { user } = useAuth();
-  const uid = user?.uid;
+  const nav = useNavigate();
 
   const [seller, setSeller] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [uploadsCount, setUploadsCount] = useState(0);
 
-  const [file, setFile] = useState(null);
-  const [title, setTitle] = useState("");
-  const [price, setPrice] = useState("");
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
 
-  const [myListings, setMyListings] = useState([]);
+  const [title, setTitle] = useState("");
+  const [priceINR, setPriceINR] = useState("");
+  const [file, setFile] = useState(null);
 
   useEffect(() => {
-    let alive = true;
+    let cancelled = false;
 
-    (async () => {
-      if (!uid) return;
+    async function run() {
+      if (!user) return;
+      const sSnap = await getDoc(doc(db, "sellers", user.uid));
+      if (!sSnap.exists()) return;
+      const sellerData = sSnap.data();
+      if (cancelled) return;
+      setSeller(sellerData);
 
-      setLoading(true);
-      setErr("");
+      const photosSnap = await getDocs(query(collection(db, "photos"), where("sellerId", "==", user.uid)));
+      if (!cancelled) setUploadsCount(photosSnap.size);
+    }
 
-      try {
-        const snap = await getDoc(doc(db, "sellers", uid));
-        if (!snap.exists() || !snap.data()?.planId) {
-          setSeller(null);
-          setLoading(false);
-          return;
-        }
+    run();
+    return () => (cancelled = true);
+  }, [user]);
 
-        if (!alive) return;
-        setSeller(snap.data());
-
-        // load listings
-        const q = query(
-          collection(db, "listings"),
-          where("sellerUid", "==", uid),
-          orderBy("createdAt", "desc")
-        );
-        const ls = await getDocs(q);
-        if (!alive) return;
-        setMyListings(ls.docs.map((d) => ({ id: d.id, ...d.data() })));
-      } catch (e) {
-        if (!alive) return;
-        setSeller(null);
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [uid]);
-
-  const maxPrice = useMemo(() => Number(seller?.maxPrice || 0), [seller]);
-  const maxUploads = useMemo(() => Number(seller?.maxUploads || 0), [seller]);
-
-  const canUploadMore = myListings.length < maxUploads;
+  const plan = useMemo(() => getPlan(seller?.planId), [seller?.planId]);
 
   const onUpload = async () => {
     setErr("");
-
-    if (!seller) {
-      setErr("Please choose a plan first from Seller Dashboard.");
-      return;
-    }
-    if (!canUploadMore) {
-      setErr(`Upload limit reached (${maxUploads}).`);
-      return;
-    }
-    if (!file) {
-      setErr("Please select an image file.");
-      return;
-    }
-    const p = Number(price);
-    if (!title.trim()) {
-      setErr("Please enter a title.");
-      return;
-    }
-    if (!p || p <= 0) {
-      setErr("Please enter a valid price.");
-      return;
-    }
-    if (p > maxPrice) {
-      setErr(`Price exceeds your plan max (₹${maxPrice}).`);
-      return;
-    }
-
-    setSaving(true);
+    setBusy(true);
     try {
-      // Flat path so Explore can show fast + easy
+      if (!user) throw new Error("Not logged in");
+      if (!seller || seller.status !== "active") throw new Error("Seller account is not active.");
+      if (!plan) throw new Error("Plan not found.");
+
+      const price = Number(priceINR);
+      if (!title.trim()) throw new Error("Title is required.");
+      if (!file) throw new Error("Please select an image.");
+      if (!Number.isFinite(price) || price <= 0) throw new Error("Invalid price.");
+      if (price > plan.maxPriceINR) throw new Error(`Price cannot exceed ₹${plan.maxPriceINR}.`);
+      if (uploadsCount >= plan.maxUploads) throw new Error("Upload limit reached for your account.");
+
       const safeName = file.name.replace(/\s+/g, "_");
-      const storagePath = `marketplace/${uid}__${Date.now()}__${safeName}`;
+      const storagePath = `sellers/${user.uid}/${Date.now()}_${safeName}`;
+      const storageRef = ref(storage, storagePath);
 
-      const uploadRef = sRef(storage, storagePath);
-      await uploadBytes(uploadRef, file);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
 
-      const url = await getDownloadURL(uploadRef);
-
-      const docRef = await addDoc(collection(db, "listings"), {
-        sellerUid: uid,
-        sellerName: user?.displayName || "",
+      await addDoc(collection(db, "photos"), {
+        sellerId: user.uid,
         title: title.trim(),
-        price: p,
-        url,
+        priceINR: price,
+        imageUrl: url,
         storagePath,
-        filename: safeName,
-        status: "active",
         createdAt: serverTimestamp(),
       });
 
-      // refresh list
-      setMyListings((prev) => [
-        { id: docRef.id, sellerUid: uid, title: title.trim(), price: p, url, storagePath, filename: safeName, status: "active" },
-        ...prev,
-      ]);
-
-      setFile(null);
-      setTitle("");
-      setPrice("");
+      nav("/seller/dashboard", { replace: true });
     } catch (e) {
-      setErr("Upload failed. Please try again.");
+      setErr(e?.message || "Upload failed");
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="page">
-        <div className="card">Loading…</div>
-      </div>
-    );
-  }
-
-  if (!seller) {
-    return (
-      <div className="page">
-        <div className="card">
-          <h1>Upload Images</h1>
-          <p style={{ color: "#6b7280" }}>
-            You don’t have an active plan yet. Please go to Seller Dashboard and choose a plan first.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  if (!seller) return null;
 
   return (
-    <div className="page">
-      <div className="card">
-        <h1>Upload Images</h1>
-        <p style={{ color: "#6b7280" }}>
-          Plan: <b>{seller.planName}</b> • Max uploads: <b>{maxUploads}</b> • Max price per image: <b>₹{maxPrice}</b>
+    <div className="min-h-screen bg-white">
+      <div className="mx-auto max-w-2xl px-4 py-12">
+        <h1 className="text-3xl font-semibold tracking-tight">Upload Photo</h1>
+        <p className="mt-2 text-slate-600">
+          Upload a new listing. Limits are enforced automatically.
         </p>
 
-        <div style={{ marginTop: 14, display: "grid", gap: 10, maxWidth: 520 }}>
-          <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-          <input
-            className="explore-search-input"
-            placeholder="Title (e.g., Hyderabad Street Market)"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-          <input
-            className="explore-search-input"
-            placeholder={`Price (₹) — max ₹${maxPrice}`}
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-          />
+        {err ? (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {err}
+          </div>
+        ) : null}
 
-          <button className="btn btn-nav-primary" disabled={saving || !canUploadMore} onClick={onUpload}>
-            {saving ? "Uploading..." : canUploadMore ? "Upload to Marketplace" : "Upload Limit Reached"}
-          </button>
-
-          {err ? <div style={{ color: "#dc2626", fontWeight: 600 }}>{err}</div> : null}
-        </div>
-
-        <div style={{ marginTop: 18 }}>
-          <h3>Your Listings</h3>
-          {myListings.length === 0 ? (
-            <p style={{ color: "#6b7280" }}>No uploads yet.</p>
-          ) : (
-            <div className="image-grid">
-              {myListings.map((it) => (
-                <div className="image-card" key={it.id}>
-                  <img src={it.url} alt={it.title} loading="lazy" />
-                  <div className="image-card-body">
-                    <div className="image-card-title">{it.title}</div>
-                    <div style={{ marginTop: 6, fontWeight: 700 }}>₹{it.price}</div>
-                  </div>
-                </div>
-              ))}
+        <div className="mt-8 rounded-2xl border border-slate-200 p-6">
+          <div className="grid gap-4">
+            <div>
+              <label className="text-sm font-medium text-slate-700">Title</label>
+              <input
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Example: Sunset Street Photography"
+              />
             </div>
-          )}
+
+            <div>
+              <label className="text-sm font-medium text-slate-700">
+                Price (INR) — max ₹{plan?.maxPriceINR}
+              </label>
+              <input
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
+                value={priceINR}
+                onChange={(e) => setPriceINR(e.target.value)}
+                placeholder="Example: 149"
+                inputMode="numeric"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-slate-700">Image File</label>
+              <input
+                className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"
+                type="file"
+                accept="image/*"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+              />
+            </div>
+
+            <button
+              disabled={busy}
+              onClick={onUpload}
+              className="mt-2 w-full rounded-2xl bg-black px-5 py-3 text-white hover:bg-slate-900 disabled:opacity-60"
+            >
+              {busy ? "Uploading..." : "Upload"}
+            </button>
+
+            <div className="text-xs text-slate-500">
+              Current uploads: {uploadsCount} / {plan?.maxUploads}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
-};
-
-export default SellerUpload;
+}

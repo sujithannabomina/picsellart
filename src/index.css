@@ -1,7 +1,61 @@
+/* FILE: src/index.css */
+
+/* Tailwind (keep these if you already use Tailwind) */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  height: 100%;
+/* Light, smooth font everywhere */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap");
+
+:root {
+  --psa-text: #111;
+  --psa-muted: #666;
+  --psa-border: #ececec;
+  --psa-bg: #ffffff;
+}
+
+html, body {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  font-weight: 400;
+  color: var(--psa-text);
+  background: var(--psa-bg);
+}
+
+h1, h2, h3 {
+  font-weight: 600; /* not heavy-bold */
+  letter-spacing: -0.02em;
+}
+
+a, button {
+  font-weight: 500;
+}
+
+.psa-card {
+  background: #fff;
+  border: 1px solid var(--psa-border);
+  border-radius: 18px;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.06);
+}
+
+.psa-muted { color: var(--psa-muted); }
+.psa-btn {
+  border-radius: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--psa-border);
+  background: #fff;
+  cursor: pointer;
+}
+.psa-btn-primary {
+  border: none;
+  background: #7c3aed;
+  color: #fff;
+}
+.psa-input {
+  width: 100%;
+  max-width: 520px;
+  padding: 12px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--psa-border);
+  outline: none;
 }

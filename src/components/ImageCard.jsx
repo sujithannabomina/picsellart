@@ -1,53 +1,56 @@
-// src/components/ImageCard.jsx
+// File: src/components/ImageCard.jsx
+
 import React from "react";
+import { useNavigate } from "react-router-dom";
 
-const ImageCard = ({ photo, onView, onBuy }) => {
+export default function ImageCard({ photo }) {
+  const navigate = useNavigate();
+
+  const title = photo.title || "Street Photography";
+  const filename = photo.filename || photo.name || "image.jpg";
+  const price = typeof photo.price === "number" ? photo.price : 120;
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-slate-100 flex flex-col">
-      <div className="relative h-64 w-full overflow-hidden">
-        <img
-          src={photo.url}
-          alt={photo.title || photo.fileName}
-          className="h-full w-full object-cover transform hover:scale-105 transition-transform duration-500"
-          loading="lazy"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent pointer-events-none" />
-        <span className="absolute bottom-3 left-4 text-[11px] tracking-[0.3em] uppercase text-slate-100 drop-shadow">
-          PICSELLART
-        </span>
-      </div>
+    <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
+      <button
+        onClick={() => navigate(`/photo/${encodeURIComponent(filename)}`)}
+        className="block w-full"
+        title="View"
+      >
+        <div className="aspect-[4/3] w-full overflow-hidden bg-slate-100">
+          <img
+            src={photo.thumbUrl || photo.url}
+            alt={title}
+            className="h-full w-full object-cover transition duration-300 hover:scale-[1.02]"
+            loading="lazy"
+          />
+        </div>
+      </button>
 
-      <div className="flex-1 flex flex-col px-4 py-3 gap-1">
-        <h3 className="text-sm font-semibold text-slate-900 truncate">
-          {photo.title || "Street Photography"}
-        </h3>
-        <p className="text-xs text-slate-500 truncate">{photo.fileName}</p>
-        <p className="text-sm font-semibold text-slate-900 mt-1">
-          ₹{photo.price}
-          <span className="text-[11px] text-slate-500 ml-1">
-            {photo.ownerType === "platform"
-              ? "Picsellart sample"
-              : "Seller image"}
-          </span>
-        </p>
+      <div className="p-5">
+        <p className="text-lg font-semibold text-slate-900">{title}</p>
+        <p className="mt-1 text-sm text-slate-500">{filename}</p>
 
-        <div className="mt-3 flex gap-2">
+        <p className="mt-2 text-base font-semibold text-slate-900">₹{price}</p>
+
+        <div className="mt-4 flex items-center gap-3">
           <button
-            onClick={() => onView(photo)}
-            className="flex-1 px-3 py-1.5 rounded-full border border-slate-300 text-xs font-medium text-slate-800 hover:border-violet-400 hover:text-violet-700 transition"
+            onClick={() => navigate(`/photo/${encodeURIComponent(filename)}`)}
+            className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-800 shadow-sm transition hover:bg-slate-50"
           >
             View
           </button>
+
           <button
-            onClick={() => onBuy(photo)}
-            className="flex-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 text-xs font-medium text-white shadow-sm hover:shadow-md transition"
+            onClick={() => navigate(`/checkout?photo=${encodeURIComponent(filename)}`)}
+            className="flex-1 rounded-full bg-purple-600 px-4 py-2.5 text-sm font-medium text-white shadow-md transition hover:bg-purple-700"
           >
             Buy
           </button>
         </div>
+
+        <p className="mt-3 text-xs text-slate-500">Standard digital license</p>
       </div>
     </div>
   );
-};
-
-export default ImageCard;
+}

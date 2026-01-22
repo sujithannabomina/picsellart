@@ -2,94 +2,78 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { auth, googleProvider, db } from "../firebase";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 
-const AuthContext = createContext(null);
+const AuthCtx = createContext(null);
 
-async function upsertUserBase(user, roleHint = null) {
-  const ref = doc(db, "users", user.uid);
-  const snap = await getDoc(ref);
+const MODE_KEY = "psa_mode"; // "buyer" | "seller"
 
-  const base = {
-    uid: user.uid,
-    email: user.email || "",
-    photoURL: user.photoURL || "",
-    updatedAt: serverTimestamp(),
-  };
-
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      ...base,
-      createdAt: serverTimestamp(),
-      role: roleHint || null,
-      displayName: user.displayName || "",
-      buyerProfile: null,
-      sellerProfile: null,
-    });
-  } else {
-    const existing = snap.data();
-    await setDoc(
-      ref,
-      {
-        ...base,
-        displayName: existing.displayName || user.displayName || "",
-        role: roleHint || existing.role || null,
-      },
-      { merge: true }
-    );
-  }
-
-  const fresh = await getDoc(ref);
-  return fresh.data();
+export function getMode() {
+  return sessionStorage.getItem(MODE_KEY) || "buyer";
+}
+export function setMode(mode) {
+  sessionStorage.setItem(MODE_KEY, mode);
 }
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [userDoc, setUserDoc] = useState(null);
+  const [mode, setModeState] = useState(getMode());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u || null);
-      if (u) {
-        const data = await upsertUserBase(u, null);
-        setUserDoc(data || null);
-      } else {
-        setUserDoc(null);
-      }
       setLoading(false);
+
+      // Keep a lightweight account doc for analytics / future
+      if (u) {
+        await setDoc(
+          doc(db, "accounts", u.uid),
+          {
+            uid: u.uid,
+            email: u.email || "",
+            name: u.displayName || "",
+            photoURL: u.photoURL || "",
+            lastSeenAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      }
     });
     return () => unsub();
   }, []);
 
-  const api = useMemo(() => {
-    return {
-      user,
-      userDoc,
-      loading,
-      async signIn(roleHint) {
-        const res = await signInWithPopup(auth, googleProvider);
-        const data = await upsertUserBase(res.user, roleHint || null);
-        setUserDoc(data || null);
-        return res.user;
-      },
-      async refreshUserDoc() {
-        if (!auth.currentUser) return null;
-        const ref = doc(db, "users", auth.currentUser.uid);
-        const snap = await getDoc(ref);
-        const data = snap.exists() ? snap.data() : null;
-        setUserDoc(data);
-        return data;
-      },
-      async logout() {
-        await signOut(auth);
-      },
-    };
-  }, [user, userDoc, loading]);
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setModeState(nextMode);
+  }
 
-  return <AuthContext.Provider value={api}>{children}</AuthContext.Provider>;
+  async function loginAs(nextMode) {
+    switchMode(nextMode);
+    const res = await signInWithPopup(auth, googleProvider);
+    return res.user;
+  }
+
+  async function logout() {
+    await signOut(auth);
+  }
+
+  const value = useMemo(
+    () => ({
+      user,
+      loading,
+      mode,
+      switchMode,
+      loginAsBuyer: () => loginAs("buyer"),
+      loginAsSeller: () => loginAs("seller"),
+      logout,
+    }),
+    [user, loading, mode]
+  );
+
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
 export function useAuth() {
-  return useContext(AuthContext);
+  return useContext(AuthCtx);
 }
