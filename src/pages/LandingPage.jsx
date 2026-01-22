@@ -81,7 +81,7 @@ export default function LandingPage() {
               </div>
 
               <h1 className="mt-5 text-4xl font-bold tracking-tight text-black sm:text-5xl">
-                PicSellArt — Buy & Sell Stunning Photos
+                Turn your Photos into Income
               </h1>
 
               <p className="mt-4 max-w-2xl text-base leading-7 text-black/70">
@@ -148,8 +148,8 @@ export default function LandingPage() {
                     }}
                   />
                   <div>
-                    <div className="text-sm font-semibold text-black">Start in 2 minutes</div>
-                    <div className="text-xs text-black/60">Login as buyer or seller.</div>
+                    <div className="text-sm font-semibold text-black">Start earning in 2 minutes</div>
+                    <div className="text-xs text-black/60">Photos, Art, Designs and more.</div>
                   </div>
                 </div>
 
@@ -158,15 +158,15 @@ export default function LandingPage() {
                   <ul className="mt-2 space-y-2 text-sm text-black/70">
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      Browse public gallery with tags & search
+                      Select a Seller plan and upload your work
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      View photo page and buy with secure checkout
+                      Access dashboard and track your earings and upload limits
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      Seller plans: upload limits & upgrade options
+                      Fast Payouts via UPI- weekly
                     </li>
                   </ul>
                 </div>
@@ -187,7 +187,7 @@ export default function LandingPage() {
                 </div>
 
                 <div className="mt-4 text-xs text-black/50">
-                  Hero image rotates on every refresh / visit (your request).
+                  Buyers can view photo page and buy with secure checkout
                 </div>
               </div>
             </div>
@@ -199,9 +199,9 @@ export default function LandingPage() {
       <section className="mx-auto max-w-6xl px-4 py-12">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-black">Featured previews</h2>
+            <h2 className="text-2xl font-bold text-black">Featured </h2>
             <p className="mt-1 text-sm text-black/60">
-              These come from your local <span className="font-semibold">/public/images</span> folder.
+              These come from our best <span className="font-semibold">Sellers</span> .
             </p>
           </div>
           <Link
@@ -250,7 +250,7 @@ export default function LandingPage() {
             <div>
               <div className="text-lg font-bold text-black">Ready to start?</div>
               <div className="text-sm text-black/60">
-                Browse photos now — or become a seller and list your work.
+                Become a seller and list your work.
               </div>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -273,3 +273,4 @@ export default function LandingPage() {
     </div>
   );
 }
+
