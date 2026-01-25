@@ -3,7 +3,7 @@
 
 // ✅ Seller commission (example: 20% platform fee)
 // If your project uses a different number, change it here.
-export const COMMISSION_RATE = 0.1;
+export const COMMISSION_RATE = 0.2;
 
 // ✅ Canonical plans list
 export const PLANS = [

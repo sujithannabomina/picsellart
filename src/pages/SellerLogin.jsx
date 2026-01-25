@@ -1,4 +1,3 @@
-// src/pages/SellerLogin.jsx
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -15,10 +14,11 @@ export default function SellerLogin() {
     try {
       const u = await googleLogin();
       const seller = await getSellerProfile(u.uid);
+
       if (seller && seller.status === "active") {
-        nav("/seller/dashboard", { replace: true });
+        nav("/seller-dashboard", { replace: true });
       } else {
-        nav("/seller/onboarding", { replace: true });
+        nav("/seller-onboarding", { replace: true });
       }
     } catch (e) {
       setErr(e?.message || "Login failed");
@@ -31,14 +31,10 @@ export default function SellerLogin() {
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-xl px-4 py-14">
         <h1 className="text-3xl font-semibold tracking-tight">Seller Login</h1>
-        <p className="mt-2 text-slate-600">
-          Sign in with Google to access your seller dashboard.
-        </p>
+        <p className="mt-2 text-slate-600">Sign in with Google to access your seller dashboard.</p>
 
         {err ? (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {err}
-          </div>
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
         ) : null}
 
         <button
@@ -51,7 +47,7 @@ export default function SellerLogin() {
 
         <div className="mt-6 text-sm text-slate-600">
           Not a seller?{" "}
-          <Link className="underline" to="/buyer/login">
+          <Link className="underline" to="/buyer-login">
             Buyer Login
           </Link>
         </div>

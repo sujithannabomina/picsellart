@@ -1,74 +1,82 @@
 import React from "react";
-import { NavLink, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
+
+function NavItem({ to, children }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `px-3 py-2 rounded-xl text-sm ${
+          isActive ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+        }`
+      }
+    >
+      {children}
+    </NavLink>
+  );
+}
 
 export default function Navbar() {
-  const { user, role, logout } = useAuth();
-  const navigate = useNavigate();
-
-  const linkClass = ({ isActive }) =>
-    `px-3 py-2 rounded-lg text-sm font-medium transition ${
-      isActive ? "text-purple-700" : "text-gray-600 hover:text-gray-900"
-    }`;
+  const nav = useNavigate();
+  const { user, logout } = useAuth();
 
   return (
-    <header className="sticky top-0 z-50 bg-white/90 backdrop-blur border-b">
-      <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2"
-        >
-          <img
-            src="/logo.png"
-            alt="Picsellart"
-            className="h-9 w-9 rounded-full object-cover border"
-          />
-          <span className="font-semibold text-gray-900">Picsellart</span>
-        </button>
+    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur">
+      <div className="mx-auto max-w-6xl px-4">
+        <div className="flex h-16 items-center justify-between gap-4">
+          <Link to="/" className="flex items-center gap-3">
+            <img
+              src="/logo.png"
+              alt="PicSellArt"
+              className="h-9 w-9 rounded-xl object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+            <div className="font-semibold tracking-tight text-slate-900">PicSellArt</div>
+          </Link>
 
-        <nav className="hidden md:flex items-center gap-1">
-          <NavLink to="/" className={linkClass}>Home</NavLink>
-          <NavLink to="/explore" className={linkClass}>Explore</NavLink>
-          <NavLink to="/faq" className={linkClass}>FAQ</NavLink>
-          <NavLink to="/contact" className={linkClass}>Contact</NavLink>
-          <NavLink to="/refunds" className={linkClass}>Refunds</NavLink>
-        </nav>
+          <nav className="hidden md:flex items-center gap-1">
+            <NavItem to="/explore">Explore</NavItem>
+            <NavItem to="/faq">FAQ</NavItem>
+            <NavItem to="/contact">Contact</NavItem>
+            <NavItem to="/refunds">Refunds</NavItem>
+          </nav>
 
-        <div className="flex items-center gap-2">
-          {user ? (
-            <>
-              <span className="hidden md:inline text-xs text-gray-500">
-                {role ? `Logged in as ${role}` : "Logged in"}
-              </span>
-              <button
-                onClick={() => navigate(role === "seller" ? "/seller-dashboard" : "/buyer-dashboard")}
-                className="px-4 py-2 rounded-full text-sm border bg-white hover:bg-gray-50"
-              >
-                Dashboard
-              </button>
-              <button
-                onClick={logout}
-                className="px-4 py-2 rounded-full text-sm bg-purple-600 text-white hover:bg-purple-700"
-              >
-                Logout
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => navigate("/buyer-login")}
-                className="px-4 py-2 rounded-full text-sm border bg-white hover:bg-gray-50"
-              >
-                Buyer Login
-              </button>
-              <button
-                onClick={() => navigate("/seller-login")}
-                className="px-4 py-2 rounded-full text-sm bg-purple-600 text-white hover:bg-purple-700"
-              >
-                Seller Login
-              </button>
-            </>
-          )}
+          <div className="flex items-center gap-2">
+            {!user ? (
+              <>
+                <Link
+                  to="/buyer-login"
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
+                >
+                  Buyer Login
+                </Link>
+                <Link
+                  to="/seller-login"
+                  className="rounded-2xl bg-black px-4 py-2 text-sm text-white hover:bg-slate-900"
+                >
+                  Seller Login
+                </Link>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => nav("/buyer-dashboard")}
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={logout}
+                  className="rounded-2xl bg-black px-4 py-2 text-sm text-white hover:bg-slate-900"
+                >
+                  Logout
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </header>
