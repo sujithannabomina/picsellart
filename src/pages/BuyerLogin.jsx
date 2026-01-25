@@ -1,136 +1,147 @@
-import React from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import SiteHeader from "../components/SiteHeader";
 
-function NavItem({ to, children }) {
+function Field({ label, type = "text", value, onChange, placeholder, autoComplete }) {
   return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+    <label className="block">
+      <div className="mb-1 text-sm font-semibold text-black">{label}</div>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        className="w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black outline-none ring-0 focus:border-violet-300"
+      />
+    </label>
+  );
+}
 
 export default function BuyerLogin() {
-  const { googleLogin, ensureBuyerProfile } = useAuth();
   const nav = useNavigate();
-  const [busy, setBusy] = useState(false);
+  const location = useLocation();
+  const { googleLogin, ensureBuyerProfile } = useAuth();
+
+  const nextPath = useMemo(() => {
+    const p = new URLSearchParams(location.search).get("next");
+    return p && p.startsWith("/") ? p : "/buyer-dashboard";
+  }, [location.search]);
+
+  const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
-  const onLogin = async () => {
+  // Optional fields (only used if you want to store them in buyer profile)
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+
+  async function handleGoogle() {
     setErr("");
-    setBusy(true);
+    setLoading(true);
     try {
       const u = await googleLogin();
-      await ensureBuyerProfile(u);
-      nav("/buyer-dashboard", { replace: true });
+      // create / update buyer profile doc
+      await ensureBuyerProfile(u, { name, phone });
+      nav(nextPath, { replace: true });
     } catch (e) {
-      setErr(e?.message || "Login failed");
+      setErr(e?.message || "Login failed. Please try again.");
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-xl px-4 py-14">
-        <h1 className="text-3xl font-semibold tracking-tight">Buyer Login</h1>
-        <p className="mt-2 text-slate-600">Sign in with Google to explore and purchase.</p>
+    <div className="min-h-screen bg-[#fbfbfd]">
+      <SiteHeader />
 
-        {err ? (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
-        ) : null}
+      <main className="mx-auto max-w-6xl px-4 py-10">
+        <div className="grid gap-8 lg:grid-cols-12 lg:items-start">
+          <div className="lg:col-span-6">
+            <h1 className="text-3xl font-bold tracking-tight text-black">Buyer Login</h1>
+            <p className="mt-2 text-sm text-black/60">
+              Login to purchase images and download watermark-free files after payment verification.
+            </p>
 
-        <button
-          onClick={onLogin}
-          disabled={busy}
-          className="mt-8 w-full rounded-2xl bg-black px-5 py-3 text-white hover:bg-slate-900 disabled:opacity-60"
-        >
-          {busy ? "Signing in..." : "Continue with Google"}
-        </button>
+            <div className="mt-6 rounded-3xl border border-black/10 bg-white p-6 shadow-sm">
+              <div className="grid gap-4">
+                <Field
+                  label="Name (optional)"
+                  value={name}
+                  onChange={setName}
+                  placeholder="Your name"
+                  autoComplete="name"
+                />
+                <Field
+                  label="Phone (optional)"
+                  value={phone}
+                  onChange={setPhone}
+                  placeholder="10-digit mobile number"
+                  autoComplete="tel"
+                />
 
-        <div className="mt-6 text-sm text-slate-600">
-          Want to sell?{" "}
-          <Link className="underline" to="/seller-login">
-            Seller Login
-          </Link>
-        </div>
-      </div>
-    </div>
-  );
-}
+                {err ? (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {err}
+                  </div>
+                ) : null}
 
-        `px-3 py-2 rounded-xl text-sm ${
-          isActive ? "bg-slate-100 text-slate-900" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-        }`
-      }
-    >
-      {children}
-    </NavLink>
-  );
-}
-
-export default function Navbar() {
-  const nav = useNavigate();
-  const { user, logout } = useAuth();
-
-  return (
-    <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/80 backdrop-blur">
-      <div className="mx-auto max-w-6xl px-4">
-        <div className="flex h-16 items-center justify-between gap-4">
-          <Link to="/" className="flex items-center gap-3">
-            <img
-              src="/logo.png"
-              alt="PicSellArt"
-              className="h-9 w-9 rounded-xl object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-            <div className="font-semibold tracking-tight text-slate-900">PicSellArt</div>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-1">
-            <NavItem to="/explore">Explore</NavItem>
-            <NavItem to="/faq">FAQ</NavItem>
-            <NavItem to="/contact">Contact</NavItem>
-            <NavItem to="/refunds">Refunds</NavItem>
-          </nav>
-
-          <div className="flex items-center gap-2">
-            {!user ? (
-              <>
-                <Link
-                  to="/buyer-login"
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
-                >
-                  Buyer Login
-                </Link>
-                <Link
-                  to="/seller-login"
-                  className="rounded-2xl bg-black px-4 py-2 text-sm text-white hover:bg-slate-900"
-                >
-                  Seller Login
-                </Link>
-              </>
-            ) : (
-              <>
                 <button
-                  onClick={() => nav("/buyer-dashboard")}
-                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
+                  onClick={handleGoogle}
+                  disabled={loading}
+                  className="inline-flex w-full items-center justify-center rounded-full bg-violet-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Dashboard
+                  {loading ? "Signing in..." : "Continue with Google"}
                 </button>
-                <button
-                  onClick={logout}
-                  className="rounded-2xl bg-black px-4 py-2 text-sm text-white hover:bg-slate-900"
-                >
-                  Logout
-                </button>
-              </>
-            )}
+
+                <div className="text-xs text-black/50">
+                  By continuing, you agree to our{" "}
+                  <Link className="text-violet-700 hover:underline" to="/policy">
+                    policies
+                  </Link>
+                  .
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3 text-sm">
+              <Link className="rounded-full border border-black/10 bg-white px-4 py-2 hover:bg-black/[0.02]" to="/explore">
+                Back to Explore
+              </Link>
+              <Link className="rounded-full border border-black/10 bg-white px-4 py-2 hover:bg-black/[0.02]" to="/contact">
+                Contact
+              </Link>
+              <Link className="rounded-full border border-black/10 bg-white px-4 py-2 hover:bg-black/[0.02]" to="/faq">
+                FAQ
+              </Link>
+            </div>
+          </div>
+
+          <div className="lg:col-span-6">
+            <div className="rounded-3xl border border-black/10 bg-white p-6 shadow-sm">
+              <div className="text-sm font-semibold text-black">What happens after login</div>
+              <ul className="mt-3 space-y-2 text-sm text-black/70">
+                <li className="flex gap-2">
+                  <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
+                  Browse previews with watermark protection.
+                </li>
+                <li className="flex gap-2">
+                  <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
+                  Pay securely via checkout.
+                </li>
+                <li className="flex gap-2">
+                  <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
+                  Download watermark-free files from your Buyer Dashboard.
+                </li>
+              </ul>
+
+              <div className="mt-5 rounded-2xl bg-black/[0.03] p-4 text-xs text-black/60">
+                Tip: If you clicked “Buy” from Explore, you’ll return to the checkout automatically after login.
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </header>
+      </main>
+    </div>
   );
 }
