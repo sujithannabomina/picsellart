@@ -1,52 +1,73 @@
-/* src/index.css */
-
-/* ✅ @import must come first (before comments/rules/tailwind) */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* App base */
 :root {
+  --psa-blue: #2563eb;
+  --psa-blue-dark: #1d4ed8;
+  --psa-text: #0f172a;
+  --psa-muted: #64748b;
+  --psa-border: #e2e8f0;
+  --psa-bg: #ffffff;
+
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   color-scheme: light;
 }
 
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   margin: 0;
-  background: #ffffff;
-  color: #111;
+  background: var(--psa-bg);
+  color: var(--psa-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* (Optional) your existing PSA utility classes used in Explore.jsx */
-.psa-muted { color: #666; }
-.psa-input {
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid #e6e6e6;
-  border-radius: 12px;
-  outline: none;
-}
-.psa-input:focus { border-color: #cfcfcf; }
+/* Reusable UI helpers (keeps pages neat + consistent) */
+@layer components {
+  .psa-container {
+    @apply mx-auto w-full max-w-[1240px] px-4 sm:px-6;
+  }
 
-.psa-card {
-  border: 1px solid #eee;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.04);
-}
+  .psa-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
 
-.psa-btn {
-  border: 1px solid #e6e6e6;
-  background: #fff;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.psa-btn-primary {
-  border-color: #111;
-  background: #111;
-  color: #fff;
+  .psa-title {
+    @apply text-2xl sm:text-3xl font-semibold tracking-tight text-slate-900;
+  }
+
+  .psa-subtitle {
+    @apply text-sm sm:text-base text-slate-500;
+  }
+
+  .psa-input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none
+           focus:border-blue-500 focus:ring-2 focus:ring-blue-100;
+  }
+
+  .psa-btn {
+    @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold
+           transition active:scale-[0.99];
+  }
+
+  /* ✅ All buttons same blue (your request) */
+  .psa-btn-primary {
+    @apply psa-btn bg-blue-600 text-white hover:bg-blue-700;
+  }
+
+  .psa-btn-soft {
+    @apply psa-btn bg-blue-50 text-blue-700 hover:bg-blue-100;
+  }
+
+  .psa-link {
+    @apply text-blue-600 hover:text-blue-700 font-medium;
+  }
 }

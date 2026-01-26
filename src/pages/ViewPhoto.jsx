@@ -1,134 +1,132 @@
-// FILE: src/pages/ViewPhoto.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { db, storage } from "../firebase";
-import { doc, getDoc } from "firebase/firestore";
-import { getDownloadURL, ref } from "firebase/storage";
-import { formatINR } from "../utils/plans.js";
+import { useNavigate, useParams } from "react-router-dom";
+import { ref, getDownloadURL } from "firebase/storage";
+import { storage } from "../firebase";
+import { useAuth } from "../hooks/useAuth";
+import WatermarkedImage from "../components/WatermarkedImage";
 
+function safeDecode(value, times = 2) {
+  let v = value;
+  for (let i = 0; i < times; i++) {
+    try {
+      const decoded = decodeURIComponent(v);
+      if (decoded === v) break;
+      v = decoded;
+    } catch {
+      break;
+    }
+  }
+  return v;
+}
+
+/**
+ * FIXES:
+ * - Works even on refresh/back (no location.state dependency)
+ * - Accepts ids like:
+ *   - sample-public%2Fimages%2Fsample1.jpg (encoded)
+ *   - sample-public/images/sample1.jpg
+ *   - sample1.jpg (direct)
+ */
 export default function ViewPhoto() {
-  const nav = useNavigate();
+  const { user } = useAuth();
   const { id } = useParams();
-  const loc = useLocation();
+  const navigate = useNavigate();
 
-  const [item, setItem] = useState(loc.state?.item || null);
-  const [loading, setLoading] = useState(!loc.state?.item);
+  const decodedId = useMemo(() => safeDecode(id || "", 3), [id]);
 
-  // id can be: sample-public/images/sample16.jpg   OR listing Firestore id
-  const isSample = useMemo(() => (id || "").startsWith("sample-"), [id]);
+  const storagePath = useMemo(() => {
+    if (!decodedId) return "";
+
+    // If Explore passed "sample-<encodedPath>"
+    if (decodedId.startsWith("sample-")) {
+      const raw = decodedId.replace("sample-", "");
+      return safeDecode(raw, 3);
+    }
+
+    // If someone typed /photo/sample1.jpg
+    if (decodedId.endsWith(".jpg") || decodedId.endsWith(".png") || decodedId.endsWith(".jpeg")) {
+      return `public/images/${decodedId}`;
+    }
+
+    // If already a storage path
+    return decodedId;
+  }, [decodedId]);
+
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
-    async function load() {
-      if (item) return;
-      setLoading(true);
-
-      try {
-        if (isSample) {
-          const storagePath = decodeURIComponent(id.replace("sample-", ""));
-          const url = await getDownloadURL(ref(storage, storagePath));
-          setItem({
-            type: "sample",
-            id,
-            title: "Street Photography",
-            priceINR: 136,
-            downloadUrl: url,
-            previewUrl: url,
-            storagePath,
-            sellerId: null,
-          });
-        } else {
-          const snap = await getDoc(doc(db, "listings", id));
-          if (!snap.exists()) throw new Error("Listing not found");
-          const d = snap.data();
-          setItem({
-            type: "seller",
-            id,
-            title: d.title,
-            priceINR: d.priceINR,
-            previewUrl: d.previewUrl,
-            downloadUrl: d.previewUrl,
-            sellerId: d.sellerId,
-          });
-        }
-      } catch (e) {
-        alert(e.message || "Failed to load image");
-      } finally {
+    let alive = true;
+    (async () => {
+      if (!storagePath) {
+        setErr("Invalid photo.");
         setLoading(false);
+        return;
       }
-    }
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+      setErr("");
+      setLoading(true);
+      try {
+        const u = await getDownloadURL(ref(storage, storagePath));
+        if (alive) setUrl(u);
+      } catch (e) {
+        if (alive) setErr("Unable to load this photo.");
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [storagePath]);
 
-  if (loading) return <div style={{ padding: 30 }}>Loading...</div>;
-  if (!item) return <div style={{ padding: 30 }}>Not found</div>;
+  const buyUrl = useMemo(() => {
+    const sampleId = decodedId.startsWith("sample-")
+      ? decodedId
+      : `sample-${encodeURIComponent(storagePath)}`;
+    return `/checkout?type=sample&id=${encodeURIComponent(sampleId)}`;
+  }, [decodedId, storagePath]);
+
+  const onBuy = () => {
+    if (user) navigate(buyUrl);
+    else navigate("/buyer-login", { state: { next: buyUrl } });
+  };
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "26px 18px 70px" }}>
-      <button onClick={() => nav(-1)} style={{ background: "transparent", border: "none", color: "#555", cursor: "pointer", fontWeight: 800 }}>
-        ← Back
-      </button>
-
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "baseline", marginTop: 10 }}>
+    <div className="psa-container">
+      <div className="mb-5 flex items-center justify-between gap-3">
         <div>
-          <h1 style={{ margin: 0, fontWeight: 900, fontSize: 34, color: "#111" }}>{item.title}</h1>
-          <div style={{ color: "#666", marginTop: 6 }}>{item.type === "sample" ? "Standard digital license" : "Verified seller listing"}</div>
+          <h1 className="psa-title">Photo Preview</h1>
+          <p className="psa-subtitle mt-1">Watermarked preview shown below.</p>
         </div>
-        <div style={{ fontWeight: 900, fontSize: 22, color: "#111" }}>{formatINR(item.priceINR)}</div>
+        <button className="psa-btn-soft" onClick={() => navigate("/explore")}>
+          Back to Explore
+        </button>
       </div>
 
-      <div
-        style={{
-          marginTop: 14,
-          borderRadius: 22,
-          overflow: "hidden",
-          border: "1px solid #eee",
-          background: "#fff",
-          boxShadow: "0 18px 40px rgba(0,0,0,0.08)",
-        }}
-      >
-        <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", background: "#f7f7f7" }}>
-          <img
-            src={item.previewUrl}
-            alt={item.title}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              display: "block",
-            }}
-          />
-          {/* Light watermark overlay (preview only) */}
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              display: "grid",
-              placeItems: "center",
-              pointerEvents: "none",
-              opacity: 0.12,
-              fontWeight: 900,
-              fontSize: 44,
-              color: "#111",
-              transform: "rotate(-18deg)",
-            }}
-          >
-            PicSellart
+      <div className="psa-card p-4 sm:p-6">
+        {loading ? (
+          <div className="h-[420px] w-full rounded-2xl bg-slate-100 animate-pulse" />
+        ) : err ? (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {err}
           </div>
-        </div>
+        ) : (
+          <WatermarkedImage src={url} alt="Preview" className="h-[420px] w-full" />
+        )}
 
-        <div style={{ padding: 16, display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "flex-start" }}>
-          <button
-            onClick={() => nav("/checkout?type=" + encodeURIComponent(item.type) + "&id=" + encodeURIComponent(item.id) + "&title=" + encodeURIComponent(item.title) + "&priceINR=" + encodeURIComponent(item.priceINR) + "&sellerId=" + encodeURIComponent(item.sellerId || "") + "&downloadUrl=" + encodeURIComponent(item.downloadUrl || ""), { state: { item } })}
-            style={{ background: "#7c3aed", color: "#fff", border: "none", padding: "12px 16px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}
-          >
-            Buy Now
-          </button>
-          <button onClick={() => nav(-1)} style={{ background: "#fff", color: "#111", border: "1px solid #eee", padding: "12px 16px", borderRadius: 12, fontWeight: 900, cursor: "pointer" }}>
-            Back
-          </button>
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-slate-600">
+            To download the full file, purchase this photo.
+          </div>
+          <div className="flex gap-2">
+            <button className="psa-btn-primary" onClick={onBuy}>
+              Buy
+            </button>
+            <button className="psa-btn-soft" onClick={() => navigate("/explore")}>
+              Continue browsing
+            </button>
+          </div>
         </div>
       </div>
     </div>

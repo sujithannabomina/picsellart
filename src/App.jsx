@@ -3,94 +3,59 @@ import { Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./components/Layout";
 
-import Home from "./pages/Home";
+import LandingPage from "./pages/LandingPage"; // ✅ untouched
 import Explore from "./pages/Explore";
+import BuyerLogin from "./pages/BuyerLogin";
+import SellerLogin from "./pages/SellerLogin";
+import Checkout from "./pages/Checkout";
 import Faq from "./pages/Faq";
 import Contact from "./pages/Contact";
 import Refunds from "./pages/Refunds";
 
-import BuyerLogin from "./pages/BuyerLogin";
-import SellerLogin from "./pages/SellerLogin";
-
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
-import SellerOnboarding from "./pages/SellerOnboarding";
-import SellerUpload from "./pages/SellerUpload";
 
-import Checkout from "./pages/Checkout";
 import ViewPhoto from "./pages/ViewPhoto";
 import ViewImage from "./pages/ViewImage";
 
 import NotFound from "./pages/NotFound";
 
-import BuyerRoute from "./routes/BuyerRoute";
-import SellerRoute from "./routes/SellerRoute";
-
 export default function App() {
   return (
     <Routes>
-      {/* ✅ All pages get Header/Footer via Layout */}
       <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
+        {/* Main */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/home" element={<Navigate to="/" replace />} />
 
-        {/* Main pages */}
+        {/* Public pages */}
         <Route path="/explore" element={<Explore />} />
         <Route path="/faq" element={<Faq />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/refunds" element={<Refunds />} />
 
-        {/* ✅ Login routes (fix 404) */}
+        {/* ✅ Logins (both spellings supported to stop 404) */}
         <Route path="/buyer-login" element={<BuyerLogin />} />
-        <Route path="/seller-login" element={<SellerLogin />} />
-
-        {/* Legacy aliases (so old links won't break) */}
         <Route path="/buyer/login" element={<Navigate to="/buyer-login" replace />} />
+
+        <Route path="/seller-login" element={<SellerLogin />} />
         <Route path="/seller/login" element={<Navigate to="/seller-login" replace />} />
 
-        {/* ✅ View routes (fix View button + /photo/sample1.jpg) */}
-        <Route path="/view/:id" element={<ViewPhoto />} />
-        <Route path="/photo/:name" element={<ViewImage />} />
-
-        {/* ✅ Checkout route (fix Buy 404) */}
+        {/* Checkout */}
         <Route path="/checkout" element={<Checkout />} />
 
-        {/* ✅ Dashboards (fix 404 + protect) */}
-        <Route
-          path="/buyer-dashboard"
-          element={
-            <BuyerRoute>
-              <BuyerDashboard />
-            </BuyerRoute>
-          }
-        />
-        <Route
-          path="/seller-dashboard"
-          element={
-            <SellerRoute>
-              <SellerDashboard />
-            </SellerRoute>
-          }
-        />
-
-        {/* Legacy dashboard aliases */}
+        {/* Dashboards (aliases supported) */}
+        <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
         <Route path="/buyer/dashboard" element={<Navigate to="/buyer-dashboard" replace />} />
+
+        <Route path="/seller-dashboard" element={<SellerDashboard />} />
         <Route path="/seller/dashboard" element={<Navigate to="/seller-dashboard" replace />} />
 
-        {/* Seller flow */}
-        <Route path="/seller-onboarding" element={<SellerOnboarding />} />
-        <Route path="/seller/onboarding" element={<Navigate to="/seller-onboarding" replace />} />
+        {/* ✅ Photo view routes (View button will work + refresh/back won’t break) */}
+        <Route path="/photo/:id" element={<ViewPhoto />} />
+        <Route path="/view/:id" element={<ViewImage />} />
 
-        <Route
-          path="/seller-upload"
-          element={
-            <SellerRoute>
-              <SellerUpload />
-            </SellerRoute>
-          }
-        />
-        <Route path="/seller/upload" element={<Navigate to="/seller-upload" replace />} />
-
-        {/* Not Found */}
+        {/* Fallback */}
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

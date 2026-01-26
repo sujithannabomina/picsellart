@@ -1,93 +1,134 @@
-// FILE: src/components/SiteHeader.jsx
-import React from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import React, { useMemo, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../hooks/useAuth";
 
-export default function SiteHeader() {
-  const nav = useNavigate();
-  const loc = useLocation();
-  const { user, activeRole, setActiveRole, logout } = useAuth();
-
-  const dashboardHref = activeRole === "seller" ? "/seller-dashboard" : "/buyer-dashboard";
-
-  function switchRole(next) {
-    setActiveRole(next);
-    // send them to the correct dashboard if already logged in
-    if (user) nav(next === "seller" ? "/seller-dashboard" : "/buyer-dashboard");
-  }
-
+function NavItem({ to, label, onClick }) {
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 50, background: "rgba(255,255,255,0.9)", backdropFilter: "blur(10px)", borderBottom: "1px solid #eee" }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "14px 18px", display: "flex", alignItems: "center", gap: 16 }}>
-        <Link to="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none", color: "#111" }}>
-          <img src="/logo-round-128.png" alt="Picsellart" style={{ width: 34, height: 34, borderRadius: 999, border: "1px solid #eaeaea" }} />
-          <div style={{ fontWeight: 600, letterSpacing: 0.2 }}>Picsellart</div>
-        </Link>
-
-        <div style={{ flex: 1 }} />
-
-        <nav style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link to="/" style={{ color: loc.pathname === "/" ? "#6d28d9" : "#444", textDecoration: "none", fontWeight: 500 }}>Home</Link>
-          <Link to="/explore" style={{ color: loc.pathname.startsWith("/explore") ? "#6d28d9" : "#444", textDecoration: "none", fontWeight: 500 }}>Explore</Link>
-          <Link to="/faq" style={{ color: loc.pathname.startsWith("/faq") ? "#6d28d9" : "#444", textDecoration: "none", fontWeight: 500 }}>FAQ</Link>
-          <Link to="/contact" style={{ color: loc.pathname.startsWith("/contact") ? "#6d28d9" : "#444", textDecoration: "none", fontWeight: 500 }}>Contact</Link>
-          <Link to="/refunds" style={{ color: loc.pathname.startsWith("/refunds") ? "#6d28d9" : "#444", textDecoration: "none", fontWeight: 500 }}>Refunds</Link>
-        </nav>
-
-        <div style={{ flex: 1 }} />
-
-        {!user ? (
-          <div style={{ display: "flex", gap: 10 }}>
-            <Link to="/buyer-login" style={btnGhost}>Buyer Login</Link>
-            <Link to="/seller-login" style={btnPrimary}>Seller Login</Link>
-          </div>
-        ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ display: "flex", border: "1px solid #eee", borderRadius: 999, overflow: "hidden" }}>
-              <button onClick={() => switchRole("buyer")} style={activeRole === "buyer" ? pillActive : pill}>Buyer</button>
-              <button onClick={() => switchRole("seller")} style={activeRole === "seller" ? pillActive : pill}>Seller</button>
-            </div>
-
-            <Link to={dashboardHref} style={btnGhost}>Dashboard</Link>
-            <button onClick={logout} style={btnPrimary}>Logout</button>
-          </div>
-        )}
-      </div>
-    </div>
+    <NavLink
+      to={to}
+      onClick={onClick}
+      className={({ isActive }) =>
+        [
+          "rounded-xl px-3 py-2 text-sm font-medium transition",
+          isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
+        ].join(" ")
+      }
+    >
+      {label}
+    </NavLink>
   );
 }
 
-const btnGhost = {
-  padding: "10px 14px",
-  borderRadius: 999,
-  border: "1px solid #eaeaea",
-  background: "#fff",
-  color: "#222",
-  textDecoration: "none",
-  fontWeight: 500,
-};
+export default function SiteHeader() {
+  const { user, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-const btnPrimary = {
-  padding: "10px 14px",
-  borderRadius: 999,
-  border: "1px solid transparent",
-  background: "#7c3aed",
-  color: "#fff",
-  textDecoration: "none",
-  fontWeight: 500,
-};
+  const items = useMemo(
+    () => [
+      { to: "/", label: "Home" },          // ✅ home button present (your request)
+      { to: "/explore", label: "Explore" },
+      { to: "/faq", label: "FAQ" },
+      { to: "/contact", label: "Contact" },
+      { to: "/refunds", label: "Refunds" },
+    ],
+    []
+  );
 
-const pill = {
-  padding: "8px 12px",
-  border: "none",
-  background: "#fff",
-  cursor: "pointer",
-  fontWeight: 500,
-  color: "#333",
-};
+  const closeMenu = () => setOpen(false);
 
-const pillActive = {
-  ...pill,
-  background: "#f4f0ff",
-  color: "#5b21b6",
-};
+  const handleBuyerClick = () => {
+    closeMenu();
+    if (user) navigate("/buyer-dashboard");
+    else navigate("/buyer-login", { state: { next: location.pathname } });
+  };
+
+  const handleSellerClick = () => {
+    closeMenu();
+    navigate("/seller-login", { state: { next: location.pathname } });
+  };
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/85 backdrop-blur">
+      <div className="psa-container flex h-16 items-center justify-between gap-3">
+        {/* Logo + brand (always visible) */}
+        <Link to="/" className="flex items-center gap-2">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700 font-bold">
+            P
+          </div>
+          <div className="text-sm font-semibold text-slate-900">PicSellArt</div>
+        </Link>
+
+        {/* Desktop nav */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {items.map((it) => (
+            <NavItem key={it.to} to={it.to} label={it.label} />
+          ))}
+        </nav>
+
+        {/* Actions */}
+        <div className="hidden items-center gap-2 md:flex">
+          <button className="psa-btn-primary" onClick={handleBuyerClick}>
+            {user ? "Buyer Dashboard" : "Buyer Login"}
+          </button>
+          <button className="psa-btn-primary" onClick={handleSellerClick}>
+            Seller Login
+          </button>
+          {user ? (
+            <button
+              className="psa-btn-soft"
+              onClick={async () => {
+                await logout();
+                navigate("/");
+              }}
+            >
+              Logout
+            </button>
+          ) : null}
+        </div>
+
+        {/* Mobile menu button */}
+        <button
+          className="md:hidden psa-btn-soft"
+          onClick={() => setOpen((s) => !s)}
+          aria-label="Menu"
+        >
+          {open ? "Close" : "Menu"}
+        </button>
+      </div>
+
+      {/* Mobile drawer */}
+      {open ? (
+        <div className="border-t border-slate-100 bg-white md:hidden">
+          <div className="psa-container flex flex-col gap-1 py-3">
+            {items.map((it) => (
+              <NavItem key={it.to} to={it.to} label={it.label} onClick={closeMenu} />
+            ))}
+
+            <div className="mt-2 flex flex-col gap-2">
+              <button className="psa-btn-primary w-full" onClick={handleBuyerClick}>
+                {user ? "Buyer Dashboard" : "Buyer Login"}
+              </button>
+              <button className="psa-btn-primary w-full" onClick={handleSellerClick}>
+                Seller Login
+              </button>
+              {user ? (
+                <button
+                  className="psa-btn-soft w-full"
+                  onClick={async () => {
+                    await logout();
+                    closeMenu();
+                    navigate("/");
+                  }}
+                >
+                  Logout
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </header>
+  );
+}

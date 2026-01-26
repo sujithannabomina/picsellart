@@ -1,56 +1,41 @@
-// src/components/WatermarkedImage.jsx
-const WatermarkedImage = ({
+import React from "react";
+
+export default function WatermarkedImage({
   src,
-  alt,
-  watermarkText = "Picsellart",
+  alt = "",
   className = "",
-  style = {},
-}) => {
-  const containerStyle = {
-    position: "relative",
-    overflow: "hidden",
-    borderRadius: "18px",
-    backgroundColor: "#111827",
-    ...style,
-  };
-
-  const imgStyle = {
-    width: "100%",
-    height: "100%",
-    objectFit: "cover",
-    display: "block",
-  };
-
-  const overlayStyle = {
-    position: "absolute",
-    inset: 0,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    pointerEvents: "none",
-    background:
-      "radial-gradient(circle at center, rgba(0,0,0,0.2), rgba(0,0,0,0.55))",
-  };
-
-  const textStyle = {
-    color: "rgba(255,255,255,0.9)",
-    fontWeight: 700,
-    fontSize: "1.1rem",
-    letterSpacing: "0.25em",
-    textTransform: "uppercase",
-    transform: "rotate(-24deg)",
-    whiteSpace: "nowrap",
-    opacity: 0.75,
-  };
-
+  watermarkText = "PICSELLART",
+}) {
   return (
-    <div className={`watermarked-container ${className}`} style={containerStyle}>
-      <img src={src} alt={alt} style={imgStyle} />
-      <div style={overlayStyle}>
-        <span style={textStyle}>{watermarkText}</span>
+    <div className={"relative overflow-hidden rounded-2xl " + className}>
+      <img
+        src={src}
+        alt={alt}
+        className="block h-full w-full object-cover select-none"
+        draggable={false}
+      />
+
+      {/* Watermark overlay */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/10" />
+        <div
+          className="absolute inset-[-40%] rotate-[-20deg] opacity-[0.28]"
+          style={{
+            backgroundImage: `repeating-linear-gradient(
+              0deg,
+              rgba(255,255,255,0.0) 0px,
+              rgba(255,255,255,0.0) 22px,
+              rgba(255,255,255,0.55) 22px,
+              rgba(255,255,255,0.55) 24px
+            )`,
+          }}
+        />
+        <div className="absolute inset-0 grid place-items-center">
+          <div className="select-none text-white/60 text-3xl sm:text-5xl font-semibold tracking-[0.35em] rotate-[-15deg]">
+            {watermarkText}
+          </div>
+        </div>
       </div>
     </div>
   );
-};
-
-export default WatermarkedImage;
+}

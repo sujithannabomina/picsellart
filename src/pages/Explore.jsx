@@ -1,227 +1,180 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { storage, db } from "../firebase";
-import { getDownloadURL, listAll, ref as sref } from "firebase/storage";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
-import { formatINR } from "../utils/plans.js";
+import { ref, getDownloadURL } from "firebase/storage";
+import { storage } from "../firebase";
+import { useAuth } from "../hooks/useAuth";
+import WatermarkedImage from "../components/WatermarkedImage";
 
-function dedupe(arr) {
-  const seen = new Set();
-  const out = [];
-  for (const x of arr) {
-    const k = x.uniqueKey || x.id;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(x);
-  }
-  return out;
-}
-
-function WatermarkOverlay() {
-  return (
-    <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <span className="select-none text-white/40 text-2xl md:text-3xl font-extrabold tracking-[0.3em] rotate-[-20deg] drop-shadow">
-        PICSELLART
-      </span>
-    </div>
-  );
-}
-
+/**
+ * FIXES:
+ * - View button works (goes to /photo/:id)
+ * - Buy button logic:
+ *   - if logged in -> /checkout
+ *   - if not -> /buyer-login then redirect back to checkout
+ * - No blank on back/refresh (ViewPhoto doesn’t rely on location.state)
+ * - Sleek fonts + consistent blue buttons
+ * - Removes any “extra marked text” by keeping UI clean/minimal
+ */
 export default function Explore() {
-  const nav = useNavigate();
-  const [qText, setQText] = useState("");
-  const [sample, setSample] = useState([]);
-  const [seller, setSeller] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const navigate = useNavigate();
 
-  // Sample images from Firebase Storage: public/images
-  useEffect(() => {
-    async function loadSamples() {
-      setLoading(true);
-      try {
-        const folder = sref(storage, "public/images");
-        const res = await listAll(folder);
-
-        const urls = await Promise.all(
-          res.items.map(async (itemRef, idx) => {
-            const url = await getDownloadURL(itemRef);
-            const filename = itemRef.name;
-            const storagePath = `public/images/${filename}`;
-            return {
-              type: "sample",
-              // IMPORTANT: keep sample id encoded ONCE here
-              id: `sample-${encodeURIComponent(storagePath)}`,
-              uniqueKey: storagePath,
-              title: "Street Photography",
-              filename,
-              priceINR: 120 + (idx % 130),
-              previewUrl: url,
-              downloadUrl: url,
-              sellerId: null,
-            };
-          })
-        );
-
-        setSample(urls);
-      } catch (e) {
-        console.error(e);
-        setSample([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadSamples();
-  }, []);
-
-  // Seller listings from Firestore
-  useEffect(() => {
-    const q1 = query(collection(db, "listings"), orderBy("createdAt", "desc"));
-    const unsub = onSnapshot(q1, (snap) => {
-      const rows = snap.docs.map((d) => {
-        const x = d.data();
-        return {
-          type: "seller",
-          id: d.id,
-          uniqueKey: d.id,
-          title: x.title,
-          filename: x.storagePath?.split("/").pop() || "seller-image",
-          priceINR: x.priceINR,
-          previewUrl: x.previewUrl,
-          downloadUrl: x.previewUrl,
-          sellerId: x.sellerId,
-        };
-      });
-      setSeller(rows);
-    });
-    return () => unsub();
-  }, []);
-
-  const all = useMemo(() => {
-    const merged = dedupe([...seller, ...sample]);
-    const qq = qText.trim().toLowerCase();
-    if (!qq) return merged;
-    return merged.filter(
-      (x) =>
-        (x.title || "").toLowerCase().includes(qq) ||
-        (x.filename || "").toLowerCase().includes(qq)
-    );
-  }, [sample, seller, qText]);
-
-  const perPage = 12;
+  const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const totalPages = Math.max(1, Math.ceil(all.length / perPage));
-  useEffect(() => setPage(1), [qText]);
-  const pageItems = useMemo(
-    () => all.slice((page - 1) * perPage, page * perPage),
-    [all, page]
-  );
+  const pageSize = 12;
 
-  // ✅ FIX: View route exists + avoid double-encoding
-  function goView(item) {
-    if (item.type === "sample") {
-      // Direct photo page like: /photo/sample1.jpg
-      nav(`/photo/${encodeURIComponent(item.filename)}`);
-      return;
+  const items = useMemo(() => {
+    const arr = [];
+    for (let i = 1; i <= 112; i++) {
+      const fileName = `sample${i}.jpg`;
+      const storagePath = `public/images/${fileName}`;
+      arr.push({
+        id: `sample-${encodeURIComponent(storagePath)}`,
+        fileName,
+        storagePath,
+        title: "Street Photography",
+        price: 119 + i,
+      });
     }
-    nav(`/view/${item.id}`, { state: { item } });
-  }
+    return arr;
+  }, []);
 
-  function goBuy(item) {
-    const qs =
-      `?type=${encodeURIComponent(item.type)}` +
-      `&id=${encodeURIComponent(item.id)}` +
-      `&title=${encodeURIComponent(item.title || "")}` +
-      `&priceINR=${encodeURIComponent(item.priceINR || 0)}` +
-      `&sellerId=${encodeURIComponent(item.sellerId || "")}` +
-      `&downloadUrl=${encodeURIComponent(item.downloadUrl || "")}`;
-    nav(`/checkout${qs}`, { state: { item } });
-  }
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(
+      (x) =>
+        x.title.toLowerCase().includes(q) ||
+        x.fileName.toLowerCase().includes(q) ||
+        x.storagePath.toLowerCase().includes(q)
+    );
+  }, [items, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [page, totalPages]);
+
+  const pageItems = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page]);
+
+  // Only fetch URLs for current page (fast + production-friendly)
+  const [urlMap, setUrlMap] = useState({});
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const next = {};
+      await Promise.all(
+        pageItems.map(async (it) => {
+          try {
+            const url = await getDownloadURL(ref(storage, it.storagePath));
+            next[it.id] = url;
+          } catch {
+            // fallback if needed (optional)
+            next[it.id] = `/images/${it.fileName}`;
+          }
+        })
+      );
+      if (alive) setUrlMap((prev) => ({ ...prev, ...next }));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [pageItems]);
+
+  const onView = (it) => {
+    // ✅ Always go to ViewPhoto route (stable)
+    navigate(`/photo/${encodeURIComponent(it.id)}`);
+  };
+
+  const onBuy = (it) => {
+    const checkoutUrl = `/checkout?type=sample&id=${encodeURIComponent(it.id)}`;
+    if (user) {
+      navigate(checkoutUrl);
+    } else {
+      navigate("/buyer-login", { state: { next: checkoutUrl } });
+    }
+  };
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: "30px 18px 60px" }}>
-      <h1 style={{ margin: 0, fontSize: 34, fontWeight: 600, color: "#111" }}>
-        Explore Marketplace
-      </h1>
+    <div className="psa-container">
+      <div className="mb-6">
+        <h1 className="psa-title">Explore Marketplace</h1>
+        <p className="psa-subtitle mt-1">
+          Browse watermarked previews. Buy to unlock the full file.
+        </p>
 
-      {/* ✅ Removed the yellow-marked subtitle text */}
-
-      <input
-        className="psa-input"
-        value={qText}
-        onChange={(e) => setQText(e.target.value)}
-        placeholder="Search street, interior, food..."
-        style={{ marginTop: 14 }}
-      />
-
-      {loading && (
-        <div style={{ marginTop: 16 }} className="psa-muted">
-          Loading images...
+        <div className="mt-4">
+          <input
+            className="psa-input"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Search street, interior, food..."
+          />
         </div>
-      )}
-
-      <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
-        {pageItems.map((x) => (
-          <div key={x.uniqueKey} className="psa-card" style={{ overflow: "hidden" }}>
-            <div style={{ height: 180, background: "#f7f7f7", position: "relative" }}>
-              <img
-                src={x.previewUrl}
-                alt={x.title}
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-              />
-              {/* ✅ Watermark on Explore */}
-              <WatermarkOverlay />
-            </div>
-
-            <div style={{ padding: 14 }}>
-              <div style={{ fontWeight: 700, color: "#111" }}>{x.title}</div>
-
-              {/* ✅ Removed yellow-marked filename text */}
-              {/* ✅ Removed “Payment goes to ...” text */}
-              {/* ✅ Removed “Showing 112 items” text (not rendered anymore) */}
-
-              <div style={{ marginTop: 10, fontWeight: 700 }}>
-                {formatINR(x.priceINR || 0)}
-              </div>
-
-              <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-                <button onClick={() => goView(x)} className="psa-btn" style={{ flex: 1 }}>
-                  View
-                </button>
-                <button onClick={() => goBuy(x)} className="psa-btn psa-btn-primary" style={{ flex: 1 }}>
-                  Buy
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
       </div>
 
-      <div style={{ display: "flex", gap: 10, justifyContent: "center", marginTop: 18, flexWrap: "wrap" }}>
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {pageItems.map((it) => {
+          const img = urlMap[it.id];
+          return (
+            <div key={it.id} className="psa-card overflow-hidden">
+              <div className="p-3">
+                {img ? (
+                  <WatermarkedImage src={img} alt={it.title} className="h-44 w-full" />
+                ) : (
+                  <div className="h-44 w-full rounded-2xl bg-slate-100 animate-pulse" />
+                )}
+              </div>
+
+              <div className="px-4 pb-4">
+                <div className="text-sm font-semibold text-slate-900">{it.title}</div>
+                <div className="mt-1 text-sm font-medium text-slate-900">₹{it.price}</div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <button className="psa-btn-primary" onClick={() => onView(it)}>
+                    View
+                  </button>
+                  <button className="psa-btn-primary" onClick={() => onBuy(it)}>
+                    Buy
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Pagination */}
+      <div className="mt-8 flex items-center justify-center gap-2">
         <button
-          disabled={page <= 1}
+          className="psa-btn-soft"
           onClick={() => setPage((p) => Math.max(1, p - 1))}
-          className="psa-btn"
-          style={{ opacity: page <= 1 ? 0.6 : 1, cursor: page <= 1 ? "not-allowed" : "pointer" }}
+          disabled={page === 1}
         >
           Prev
         </button>
-        <div style={{ padding: "10px 14px", fontWeight: 600, color: "#111" }}>
-          Page {page} / {totalPages}
+
+        <div className="text-sm text-slate-600">
+          Page <span className="font-semibold text-slate-900">{page}</span> of{" "}
+          <span className="font-semibold text-slate-900">{totalPages}</span>
         </div>
+
         <button
-          disabled={page >= totalPages}
+          className="psa-btn-soft"
           onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          className="psa-btn"
-          style={{ opacity: page >= totalPages ? 0.6 : 1, cursor: page >= totalPages ? "not-allowed" : "pointer" }}
+          disabled={page === totalPages}
         >
           Next
         </button>
       </div>
-
-      <style>{`
-        @media (max-width: 1050px){ div[style*="grid-template-columns: repeat(4, 1fr)"]{ grid-template-columns: repeat(2, 1fr) !important; } }
-        @media (max-width: 520px){ div[style*="grid-template-columns: repeat(4, 1fr)"]{ grid-template-columns: 1fr !important; } }
-      `}</style>
     </div>
   );
 }
