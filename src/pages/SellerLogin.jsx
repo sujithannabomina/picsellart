@@ -1,56 +1,54 @@
-import React, { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import React from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { auth } from "../firebase";
 
 export default function SellerLogin() {
-  const { googleLogin, getSellerProfile } = useAuth();
-  const nav = useNavigate();
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const next = location.state?.next || "/seller-dashboard";
 
-  const onLogin = async () => {
-    setErr("");
-    setBusy(true);
-    try {
-      const u = await googleLogin();
-      const seller = await getSellerProfile(u.uid);
-
-      if (seller && seller.status === "active") {
-        nav("/seller-dashboard", { replace: true });
-      } else {
-        nav("/seller-onboarding", { replace: true });
-      }
-    } catch (e) {
-      setErr(e?.message || "Login failed");
-    } finally {
-      setBusy(false);
-    }
+  const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+    navigate(next);
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      <div className="mx-auto max-w-xl px-4 py-14">
-        <h1 className="text-3xl font-semibold tracking-tight">Seller Login</h1>
-        <p className="mt-2 text-slate-600">Sign in with Google to access your seller dashboard.</p>
-
-        {err ? (
-          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
-        ) : null}
+    <div className="psa-container py-10">
+      <div className="mx-auto w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">
+        <h1 className="text-3xl font-bold text-slate-900">Seller Login</h1>
+        <p className="mt-2 text-slate-600">
+          Sign in with Google to access your seller dashboard.
+        </p>
 
         <button
-          onClick={onLogin}
-          disabled={busy}
-          className="mt-8 w-full rounded-2xl bg-black px-5 py-3 text-white hover:bg-slate-900 disabled:opacity-60"
+          className="psa-btn-primary mt-6 w-full"
+          onClick={signInWithGoogle}
         >
-          {busy ? "Signing in..." : "Continue with Google"}
+          Continue with Google
         </button>
 
-        <div className="mt-6 text-sm text-slate-600">
+        <div className="mt-5 text-sm text-slate-600">
           Not a seller?{" "}
-          <Link className="underline" to="/buyer-login">
+          <Link className="text-blue-700 hover:underline" to="/buyer-login">
             Buyer Login
           </Link>
         </div>
+
+        <div className="mt-2 text-sm">
+          <Link className="text-blue-700 hover:underline" to="/explore">
+            Back to Explore
+          </Link>
+        </div>
+      </div>
+
+      <div className="psa-container pt-10 text-center text-xs text-slate-500">
+        By continuing, you agree to our Terms and Policies.
+      </div>
+
+      <div className="psa-container pt-6 text-center text-slate-500">
+        © 2026 PicSellArt
       </div>
     </div>
   );
