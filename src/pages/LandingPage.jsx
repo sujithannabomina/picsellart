@@ -166,7 +166,7 @@ export default function LandingPage() {
                     </li>
                     <li className="flex gap-2">
                       <span className="mt-[6px] h-2 w-2 rounded-full bg-violet-600" />
-                      Fast Payouts via UPI- weekly
+                      Fast Payouts - weekly
                     </li>
                   </ul>
                 </div>
@@ -273,5 +273,6 @@ export default function LandingPage() {
     </div>
   );
 }
+
 
 
