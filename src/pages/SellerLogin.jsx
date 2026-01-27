@@ -1,138 +1,57 @@
-import React, { useMemo, useState } from "react";
-import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
-function NavItem({ to, label, onClick }) {
-  return (
-    <NavLink
-      to={to}
-      onClick={onClick}
-      className={({ isActive }) =>
-        [
-          "rounded-xl px-3 py-2 text-sm font-medium transition",
-          isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
-        ].join(" ")
+export default function SellerLogin() {
+  const { googleLogin, getSellerProfile } = useAuth();
+  const nav = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const onLogin = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      const u = await googleLogin();
+      const seller = await getSellerProfile(u.uid);
+
+      if (seller && seller.status === "active") {
+        nav("/seller-dashboard", { replace: true });
+      } else {
+        nav("/seller-onboarding", { replace: true });
       }
-    >
-      {label}
-    </NavLink>
-  );
-}
-
-export default function SiteHeader() {
-  const { user, logout } = useAuth();
-  const [open, setOpen] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
-
-  const items = useMemo(
-    () => [
-      { to: "/", label: "Home" },          // ✅ home button present (your request)
-      { to: "/explore", label: "Explore" },
-      { to: "/faq", label: "FAQ" },
-      { to: "/contact", label: "Contact" },
-      { to: "/refunds", label: "Refunds" },
-    ],
-    []
-  );
-
-  const closeMenu = () => setOpen(false);
-
-  const handleBuyerClick = () => {
-    closeMenu();
-    if (user) navigate("/buyer-dashboard");
-    else navigate("/buyer-login", { state: { next: location.pathname } });
-  };
-
-  const handleSellerClick = () => {
-    closeMenu();
-    navigate("/seller-login", { state: { next: location.pathname } });
+    } catch (e) {
+      setErr(e?.message || "Login failed");
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/85 backdrop-blur">
-      <div className="psa-container flex h-16 items-center justify-between gap-3">
-        {/* Logo + brand (always visible) */}
-        <Link to="/" className="flex items-center gap-2">
-          {/* ✅ Your logo from /public/logo.png */}
-          <img
-            src="/logo.png"
-            alt="PicSellArt"
-            className="h-9 w-9 rounded-xl object-contain bg-white"
-            loading="eager"
-          />
-          <div className="text-sm font-semibold text-slate-900">PicSellArt</div>
-        </Link>
+    <div className="min-h-screen bg-white">
+      <div className="mx-auto max-w-xl px-4 py-14">
+        <h1 className="text-3xl font-semibold tracking-tight">Seller Login</h1>
+        <p className="mt-2 text-slate-600">Sign in with Google to access your seller dashboard.</p>
 
-        {/* Desktop nav */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {items.map((it) => (
-            <NavItem key={it.to} to={it.to} label={it.label} />
-          ))}
-        </nav>
+        {err ? (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>
+        ) : null}
 
-        {/* Actions */}
-        <div className="hidden items-center gap-2 md:flex">
-          <button className="psa-btn-primary" onClick={handleBuyerClick}>
-            {user ? "Buyer Dashboard" : "Buyer Login"}
-          </button>
-          <button className="psa-btn-primary" onClick={handleSellerClick}>
-            Seller Login
-          </button>
-          {user ? (
-            <button
-              className="psa-btn-soft"
-              onClick={async () => {
-                await logout();
-                navigate("/");
-              }}
-            >
-              Logout
-            </button>
-          ) : null}
-        </div>
-
-        {/* Mobile menu button */}
         <button
-          className="md:hidden psa-btn-soft"
-          onClick={() => setOpen((s) => !s)}
-          aria-label="Menu"
+          onClick={onLogin}
+          disabled={busy}
+          className="mt-8 w-full rounded-2xl bg-black px-5 py-3 text-white hover:bg-slate-900 disabled:opacity-60"
         >
-          {open ? "Close" : "Menu"}
+          {busy ? "Signing in..." : "Continue with Google"}
         </button>
-      </div>
 
-      {/* Mobile drawer */}
-      {open ? (
-        <div className="border-t border-slate-100 bg-white md:hidden">
-          <div className="psa-container flex flex-col gap-1 py-3">
-            {items.map((it) => (
-              <NavItem key={it.to} to={it.to} label={it.label} onClick={closeMenu} />
-            ))}
-
-            <div className="mt-2 flex flex-col gap-2">
-              <button className="psa-btn-primary w-full" onClick={handleBuyerClick}>
-                {user ? "Buyer Dashboard" : "Buyer Login"}
-              </button>
-              <button className="psa-btn-primary w-full" onClick={handleSellerClick}>
-                Seller Login
-              </button>
-              {user ? (
-                <button
-                  className="psa-btn-soft w-full"
-                  onClick={async () => {
-                    await logout();
-                    closeMenu();
-                    navigate("/");
-                  }}
-                >
-                  Logout
-                </button>
-              ) : null}
-            </div>
-          </div>
+        <div className="mt-6 text-sm text-slate-600">
+          Not a seller?{" "}
+          <Link className="underline" to="/buyer-login">
+            Buyer Login
+          </Link>
         </div>
-      ) : null}
-    </header>
+      </div>
+    </div>
   );
 }
