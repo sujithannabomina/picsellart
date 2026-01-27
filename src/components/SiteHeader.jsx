@@ -54,9 +54,13 @@ export default function SiteHeader() {
       <div className="psa-container flex h-16 items-center justify-between gap-3">
         {/* Logo + brand (always visible) */}
         <Link to="/" className="flex items-center gap-2">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700 font-bold">
-            P
-          </div>
+          {/* ✅ Your logo from /public/logo.png */}
+          <img
+            src="/logo.png"
+            alt="PicSellArt"
+            className="h-9 w-9 rounded-xl object-contain bg-white"
+            loading="eager"
+          />
           <div className="text-sm font-semibold text-slate-900">PicSellArt</div>
         </Link>
 
