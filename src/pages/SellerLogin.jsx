@@ -1,4 +1,4 @@
-// src/pages/SellerLogin.jsx
+// FILE PATH: src/pages/SellerLogin.jsx
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -7,6 +7,7 @@ export default function SellerLogin() {
   const { googleLogin, getSellerDoc } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
   const next = location.state?.next || "/seller-dashboard";
 
   const [err, setErr] = useState("");
@@ -18,22 +19,18 @@ export default function SellerLogin() {
     try {
       const u = await googleLogin();
 
-      // Decide correct next page for seller
+      // If user is already a buyer-only user, block seller flow cleanly
+      // (We only rely on sellers/{uid} existence for seller access)
       const seller = await getSellerDoc(u.uid);
 
-      if (!seller) {
-        // New seller -> go to onboarding (plan + profile)
+      // New seller OR incomplete seller -> onboarding
+      if (!seller || seller.status !== "active") {
         navigate("/seller-onboarding", { replace: true });
         return;
       }
 
-      if (seller.status === "active") {
-        navigate(next, { replace: true });
-        return;
-      }
-
-      // pending_profile or anything else -> onboarding
-      navigate("/seller-onboarding", { replace: true });
+      // Active seller -> go to dashboard (or next)
+      navigate(next, { replace: true });
     } catch (e) {
       setErr(e?.message || "Seller login failed.");
     } finally {

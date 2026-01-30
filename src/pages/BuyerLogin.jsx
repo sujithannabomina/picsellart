@@ -1,7 +1,9 @@
-// src/pages/BuyerLogin.jsx
+// FILE PATH: src/pages/BuyerLogin.jsx
 import React, { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../firebase";
 
 export default function BuyerLogin() {
   const { googleLogin, ensureBuyerProfile } = useAuth();
@@ -21,6 +23,17 @@ export default function BuyerLogin() {
     setLoading(true);
     try {
       const u = await googleLogin();
+
+      // If this user already has an ACTIVE seller profile, block buyer flow cleanly
+      // This avoids “seller account logged into buyer dashboard” confusion in production.
+      const sellerSnap = await getDoc(doc(db, "sellers", u.uid));
+      if (sellerSnap.exists()) {
+        const s = sellerSnap.data();
+        if (s?.status === "active" || s?.status === "pending_profile") {
+          throw new Error("This Google account is registered as a Seller. Please use Seller Login.");
+        }
+      }
+
       await ensureBuyerProfile(u);
       navigate(nextUrl, { replace: true });
     } catch (e) {
