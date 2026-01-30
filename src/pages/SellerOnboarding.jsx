@@ -1,4 +1,4 @@
-// src/pages/SellerOnboarding.jsx
+// FILE PATH: src/pages/SellerOnboarding.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
@@ -24,18 +24,20 @@ export default function SellerOnboarding() {
     upiId: "",
   });
 
-  // Ensure user is logged in. If not, login here.
   useEffect(() => {
     if (booting) return;
     if (!user) return;
+
     (async () => {
       const ref = doc(db, "sellers", user.uid);
       const snap = await getDoc(ref);
+
       if (snap.exists()) {
         const d = snap.data();
-        if (d.status === "active") nav("/seller/dashboard", { replace: true });
+        if (d.status === "active") nav("/seller-dashboard", { replace: true });
         if (d.status === "pending_profile") setStep("profile");
       }
+
       setProfile((p) => ({
         ...p,
         displayName: user.displayName || "",
@@ -59,19 +61,22 @@ export default function SellerOnboarding() {
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      // 1) create subscription on server
       const res = await fetch("/api/razorpay/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ uid: u.uid, planId: selectedPlanId }),
       });
 
-      const data = await res.json();
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
       if (!res.ok) throw new Error(data?.error || "Failed to create account activation.");
 
       const { subscriptionId, shortRef } = data;
 
-      // 2) open Razorpay checkout for subscription authorization
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
       if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env vars.");
 
@@ -81,8 +86,8 @@ export default function SellerOnboarding() {
         name: "PicSellArt",
         description: "Seller Account Activation (AutoPay enabled)",
         handler: async function () {
-          // Mark seller as pending_profile. Webhook will later confirm activation/charges.
           const sellerRef = doc(db, "sellers", u.uid);
+
           await setDoc(
             sellerRef,
             {
@@ -131,7 +136,6 @@ export default function SellerOnboarding() {
     try {
       if (!user) throw new Error("Please login first.");
 
-      // UpI note: "UPI details for withdrawal or earnings."
       const upiClean = (profile.upiId || "").trim();
       if (!upiClean) throw new Error("UPI ID is required for withdrawals/earnings.");
 
@@ -147,7 +151,7 @@ export default function SellerOnboarding() {
         updatedAt: serverTimestamp(),
       });
 
-      nav("/seller/dashboard", { replace: true });
+      nav("/seller-dashboard", { replace: true });
     } catch (e) {
       setErr(e?.message || "Profile save failed");
     } finally {
@@ -159,9 +163,7 @@ export default function SellerOnboarding() {
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-3xl px-4 py-12">
         <h1 className="text-3xl font-semibold tracking-tight">Seller Setup</h1>
-        <p className="mt-2 text-slate-600">
-          Complete activation and profile to start uploading.
-        </p>
+        <p className="mt-2 text-slate-600">Complete activation and profile to start uploading.</p>
 
         {err ? (
           <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -191,8 +193,12 @@ export default function SellerOnboarding() {
                   </div>
                   <div className="mt-4 text-sm text-slate-700">{p.description}</div>
                   <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                    <div>Upload limit: <span className="font-medium">{p.maxUploads}</span></div>
-                    <div>Max price per image: <span className="font-medium">₹{p.maxPriceINR}</span></div>
+                    <div>
+                      Upload limit: <span className="font-medium">{p.maxUploads}</span>
+                    </div>
+                    <div>
+                      Max price per image: <span className="font-medium">₹{p.maxPriceINR}</span>
+                    </div>
                     <div className="mt-2 text-xs text-slate-500">
                       AutoPay will be enabled. You can manage/cancel it from your UPI app.
                     </div>

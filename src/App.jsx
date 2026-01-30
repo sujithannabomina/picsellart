@@ -1,3 +1,4 @@
+// FILE PATH: src/App.jsx
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
@@ -14,6 +15,9 @@ import Refunds from "./pages/Refunds";
 
 import BuyerDashboard from "./pages/BuyerDashboard";
 import SellerDashboard from "./pages/SellerDashboard";
+
+import SellerOnboarding from "./pages/SellerOnboarding";
+import SellerUpload from "./pages/SellerUpload";
 
 import ViewPhoto from "./pages/ViewPhoto";
 import ViewImage from "./pages/ViewImage";
@@ -43,6 +47,10 @@ export default function App() {
 
         {/* Checkout */}
         <Route path="/checkout" element={<Checkout />} />
+
+        {/* Seller onboarding + upload */}
+        <Route path="/seller-onboarding" element={<SellerOnboarding />} />
+        <Route path="/seller/upload" element={<SellerUpload />} />
 
         {/* Dashboards (aliases supported) */}
         <Route path="/buyer-dashboard" element={<BuyerDashboard />} />

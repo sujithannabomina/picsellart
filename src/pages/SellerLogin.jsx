@@ -1,18 +1,44 @@
 // src/pages/SellerLogin.jsx
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { auth } from "../firebase";
+import { useAuth } from "../hooks/useAuth";
 
 export default function SellerLogin() {
+  const { googleLogin, getSellerDoc } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const next = location.state?.next || "/seller-dashboard";
 
+  const [err, setErr] = useState("");
+  const [loading, setLoading] = useState(false);
+
   const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-    navigate(next);
+    setErr("");
+    setLoading(true);
+    try {
+      const u = await googleLogin();
+
+      // Decide correct next page for seller
+      const seller = await getSellerDoc(u.uid);
+
+      if (!seller) {
+        // New seller -> go to onboarding (plan + profile)
+        navigate("/seller-onboarding", { replace: true });
+        return;
+      }
+
+      if (seller.status === "active") {
+        navigate(next, { replace: true });
+        return;
+      }
+
+      // pending_profile or anything else -> onboarding
+      navigate("/seller-onboarding", { replace: true });
+    } catch (e) {
+      setErr(e?.message || "Seller login failed.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -26,9 +52,16 @@ export default function SellerLogin() {
         <button
           className="psa-btn-primary mt-6 w-full"
           onClick={signInWithGoogle}
+          disabled={loading}
         >
-          Continue with Google
+          {loading ? "Signing in..." : "Continue with Google"}
         </button>
+
+        {err ? (
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            {err}
+          </div>
+        ) : null}
 
         <div className="mt-5 text-sm text-slate-600">
           Not a seller?{" "}
@@ -48,7 +81,7 @@ export default function SellerLogin() {
         By continuing, you agree to our Terms and Policies.
       </div>
 
-      {/* removed the red-marked © 2026 PicSellArt line */}
+      {/* Removed the red-marked © line as requested */}
     </div>
   );
 }

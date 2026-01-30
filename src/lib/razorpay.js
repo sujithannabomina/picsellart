@@ -1,4 +1,4 @@
-// FILE: src/lib/razorpay.js
+// FILE PATH: src/lib/razorpay.js
 export function loadRazorpay() {
   return new Promise((resolve) => {
     if (window.Razorpay) return resolve(true);

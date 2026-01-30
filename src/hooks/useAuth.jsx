@@ -1,8 +1,8 @@
-// src/hooks/useAuth.jsx
+// FILE PATH: src/hooks/useAuth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
-import { auth, db, googleProvider } from "../firebase";
+import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { auth, db } from "../firebase";
 
 const AuthCtx = createContext(null);
 
@@ -11,57 +11,64 @@ export function AuthProvider({ children }) {
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    const unsub = onAuthStateChanged(auth, (u) => {
       setUser(u || null);
       setBooting(false);
     });
     return () => unsub();
   }, []);
 
-  const api = useMemo(() => {
-    return {
-      user,
-      booting,
+  const googleLogin = async () => {
+    const provider = new GoogleAuthProvider();
+    // Helps during testing: always let you choose account
+    provider.setCustomParameters({ prompt: "select_account" });
+    const res = await signInWithPopup(auth, provider);
+    return res.user;
+  };
 
-      async googleLogin() {
-        const res = await signInWithPopup(auth, googleProvider);
-        return res.user;
+  const logout = async () => {
+    await signOut(auth);
+  };
+
+  // Ensure buyer profile exists (users/{uid}) — used by BuyerLogin
+  const ensureBuyerProfile = async (u) => {
+    if (!u?.uid) throw new Error("Missing user");
+    const ref = doc(db, "users", u.uid);
+    const snap = await getDoc(ref);
+
+    await setDoc(
+      ref,
+      {
+        uid: u.uid,
+        email: u.email || "",
+        displayName: u.displayName || "",
+        photoURL: u.photoURL || "",
+        type: "buyer",
+        createdAt: snap.exists() ? snap.data()?.createdAt || serverTimestamp() : serverTimestamp(),
+        updatedAt: serverTimestamp(),
       },
+      { merge: true }
+    );
+    return true;
+  };
 
-      async logout() {
-        await signOut(auth);
-      },
+  // Read seller doc for routing decisions
+  const getSellerDoc = async (uid) => {
+    if (!uid) return null;
+    const snap = await getDoc(doc(db, "sellers", uid));
+    return snap.exists() ? snap.data() : null;
+  };
 
-      // Buyer profile is stored at buyers/{uid}
-      async ensureBuyerProfile(u) {
-        const ref = doc(db, "buyers", u.uid);
-        const snap = await getDoc(ref);
-        if (!snap.exists()) {
-          await setDoc(ref, {
-            uid: u.uid,
-            email: u.email || "",
-            name: u.displayName || "",
-            photoURL: u.photoURL || "",
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        } else {
-          await updateDoc(ref, { updatedAt: serverTimestamp() });
-        }
-      },
+  const value = useMemo(
+    () => ({ user, booting, googleLogin, logout, ensureBuyerProfile, getSellerDoc }),
+    [user, booting]
+  );
 
-      // Seller profile is stored at sellers/{uid}
-      async getSellerProfile(uid) {
-        const ref = doc(db, "sellers", uid);
-        const snap = await getDoc(ref);
-        return snap.exists() ? snap.data() : null;
-      },
-    };
-  }, [user, booting]);
-
-  return <AuthCtx.Provider value={api}>{children}</AuthCtx.Provider>;
+  return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;
 }
 
 export function useAuth() {
-  return useContext(AuthCtx);
+  const ctx = useContext(AuthCtx);
+  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
+  return ctx;
 }

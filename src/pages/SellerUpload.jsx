@@ -1,4 +1,4 @@
-// src/pages/SellerUpload.jsx
+// FILE PATH: src/pages/SellerUpload.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -26,8 +26,10 @@ export default function SellerUpload() {
 
     async function run() {
       if (!user) return;
+
       const sSnap = await getDoc(doc(db, "sellers", user.uid));
       if (!sSnap.exists()) return;
+
       const sellerData = sSnap.data();
       if (cancelled) return;
       setSeller(sellerData);
@@ -70,10 +72,11 @@ export default function SellerUpload() {
         priceINR: price,
         imageUrl: url,
         storagePath,
+        visibility: "public", // ✅ IMPORTANT: enables Explore reads with rules
         createdAt: serverTimestamp(),
       });
 
-      nav("/seller/dashboard", { replace: true });
+      nav("/seller-dashboard", { replace: true });
     } catch (e) {
       setErr(e?.message || "Upload failed");
     } finally {
@@ -87,9 +90,7 @@ export default function SellerUpload() {
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-2xl px-4 py-12">
         <h1 className="text-3xl font-semibold tracking-tight">Upload Photo</h1>
-        <p className="mt-2 text-slate-600">
-          Upload a new listing. Limits are enforced automatically.
-        </p>
+        <p className="mt-2 text-slate-600">Upload a new listing. Limits are enforced automatically.</p>
 
         {err ? (
           <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -110,9 +111,7 @@ export default function SellerUpload() {
             </div>
 
             <div>
-              <label className="text-sm font-medium text-slate-700">
-                Price (INR) — max ₹{plan?.maxPriceINR}
-              </label>
+              <label className="text-sm font-medium text-slate-700">Price (INR) — max ₹{plan?.maxPriceINR}</label>
               <input
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                 value={priceINR}

@@ -1,12 +1,8 @@
+// src/pages/BuyerLogin.jsx
 import React, { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
-/**
- * FIXES:
- * - No more crash (was calling non-existing auth functions) -> blank page fixed
- * - Supports redirect after login (Buy -> BuyerLogin -> Checkout)
- */
 export default function BuyerLogin() {
   const { googleLogin, ensureBuyerProfile } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -17,7 +13,7 @@ export default function BuyerLogin() {
   const nextUrl = useMemo(() => {
     const fromState = location.state?.next;
     const fromQuery = new URLSearchParams(location.search).get("next");
-    return fromState || fromQuery || "/explore";
+    return fromState || fromQuery || "/buyer-dashboard";
   }, [location]);
 
   const handleLogin = async () => {
