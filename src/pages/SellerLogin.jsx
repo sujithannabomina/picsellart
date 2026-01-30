@@ -1,3 +1,4 @@
+// src/pages/SellerLogin.jsx
 import React from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
@@ -47,9 +48,7 @@ export default function SellerLogin() {
         By continuing, you agree to our Terms and Policies.
       </div>
 
-      <div className="psa-container pt-6 text-center text-slate-500">
-        © 2026 PicSellArt
-      </div>
+      {/* removed the red-marked © 2026 PicSellArt line */}
     </div>
   );
 }
