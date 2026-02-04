@@ -1,10 +1,21 @@
 // FILE PATH: src/hooks/useAuth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 const AuthCtx = createContext(null);
+
+function normalizeUser(u) {
+  if (!u) return null;
+  return {
+    uid: u.uid,
+    email: u.email || "",
+    displayName: u.displayName || "",
+    photoURL: u.photoURL || "",
+    _raw: u,
+  };
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -12,7 +23,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
+      setUser(normalizeUser(u));
       setBooting(false);
     });
     return () => unsub();
@@ -20,47 +31,59 @@ export function AuthProvider({ children }) {
 
   const googleLogin = async () => {
     const provider = new GoogleAuthProvider();
-    // Helps during testing: always let you choose account
     provider.setCustomParameters({ prompt: "select_account" });
     const res = await signInWithPopup(auth, provider);
-    return res.user;
+    return normalizeUser(res.user);
   };
 
   const logout = async () => {
     await signOut(auth);
   };
 
-  // Ensure buyer profile exists (users/{uid}) — used by BuyerLogin
+  // -------- Buyer helpers --------
   const ensureBuyerProfile = async (u) => {
-    if (!u?.uid) throw new Error("Missing user");
-    const ref = doc(db, "users", u.uid);
+    if (!u?.uid) throw new Error("Login failed. Please try again.");
+
+    const ref = doc(db, "buyers", u.uid);
     const snap = await getDoc(ref);
 
-    await setDoc(
-      ref,
-      {
-        uid: u.uid,
-        email: u.email || "",
-        displayName: u.displayName || "",
-        photoURL: u.photoURL || "",
-        type: "buyer",
-        createdAt: snap.exists() ? snap.data()?.createdAt || serverTimestamp() : serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-    return true;
+    // Create once. Keep minimal fields (production safe).
+    if (!snap.exists()) {
+      await setDoc(
+        ref,
+        {
+          uid: u.uid,
+          email: u.email || "",
+          name: u.displayName || "",
+          photoURL: u.photoURL || "",
+          role: "buyer",
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    } else {
+      // Refresh updatedAt (cheap + helps debugging)
+      await setDoc(ref, { updatedAt: serverTimestamp() }, { merge: true });
+    }
   };
 
-  // Read seller doc for routing decisions
+  // -------- Seller helpers (needed to block buyer if seller exists) --------
   const getSellerDoc = async (uid) => {
     if (!uid) return null;
-    const snap = await getDoc(doc(db, "sellers", uid));
-    return snap.exists() ? snap.data() : null;
+    const s = await getDoc(doc(db, "sellers", uid));
+    return s.exists() ? s.data() : null;
   };
 
   const value = useMemo(
-    () => ({ user, booting, googleLogin, logout, ensureBuyerProfile, getSellerDoc }),
+    () => ({
+      user,
+      booting,
+      googleLogin,
+      logout,
+      ensureBuyerProfile,
+      getSellerDoc,
+    }),
     [user, booting]
   );
 
