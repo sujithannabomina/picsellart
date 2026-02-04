@@ -181,7 +181,10 @@ export default function SellerOnboarding() {
                   onClick={() => setSelectedPlanId(p.id)}
                   className={[
                     "rounded-2xl border p-5 text-left hover:border-slate-400",
-                    selectedPlanId === p.id ? "border-black ring-1 ring-black" : "border-slate-200",
+                    // ✅ Selected card highlight switched to BLUE (matches site buttons)
+                    selectedPlanId === p.id
+                      ? "border-blue-600 ring-2 ring-blue-600"
+                      : "border-slate-200",
                   ].join(" ")}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -191,7 +194,9 @@ export default function SellerOnboarding() {
                     </div>
                     <div className="text-lg font-semibold">₹{p.priceINR}</div>
                   </div>
+
                   <div className="mt-4 text-sm text-slate-700">{p.description}</div>
+
                   <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
                     <div>
                       Upload limit: <span className="font-medium">{p.maxUploads}</span>
@@ -207,10 +212,11 @@ export default function SellerOnboarding() {
               ))}
             </div>
 
+            {/* ✅ Button already matched to site primary UI */}
             <button
               onClick={startAutoPayActivation}
               disabled={busy}
-              className="mt-8 w-full rounded-2xl bg-black px-5 py-3 text-white hover:bg-slate-900 disabled:opacity-60"
+              className="psa-btn-primary mt-8 w-full rounded-2xl py-3 disabled:opacity-60"
             >
               {busy ? "Processing..." : "Activate Seller Account"}
             </button>
@@ -259,10 +265,11 @@ export default function SellerOnboarding() {
                 </div>
               </div>
 
+              {/* ✅ Button already matched to site primary UI */}
               <button
                 onClick={saveProfile}
                 disabled={busy}
-                className="mt-6 w-full rounded-2xl bg-black px-5 py-3 text-white hover:bg-slate-900 disabled:opacity-60"
+                className="psa-btn-primary mt-6 w-full rounded-2xl py-3 disabled:opacity-60"
               >
                 {busy ? "Saving..." : "Finish & Go to Dashboard"}
               </button>

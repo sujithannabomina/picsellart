@@ -1,6 +1,6 @@
 // FILE PATH: src/pages/BuyerDashboard.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getPurchasesForBuyer } from "../utils/purchases";
 
@@ -10,8 +10,10 @@ function TabButton({ active, children, onClick }) {
       type="button"
       onClick={onClick}
       className={[
-        "rounded-2xl px-4 py-2 text-sm",
-        active ? "bg-black text-white" : "border border-slate-200 text-slate-700 hover:border-slate-400",
+        "rounded-2xl px-4 py-2 text-sm transition",
+        active
+          ? "psa-btn-primary"
+          : "psa-btn-soft border border-slate-200 text-slate-700 hover:border-slate-400",
       ].join(" ")}
     >
       {children}
@@ -22,6 +24,7 @@ function TabButton({ active, children, onClick }) {
 export default function BuyerDashboard() {
   const { user, booting, logout } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
 
   const [tab, setTab] = useState("overview"); // overview | purchases
   const [busy, setBusy] = useState(false);
@@ -29,6 +32,21 @@ export default function BuyerDashboard() {
   const [purchases, setPurchases] = useState([]);
   const [pLoading, setPLoading] = useState(true);
   const [pErr, setPErr] = useState("");
+  const [banner, setBanner] = useState("");
+
+  // URL-driven tab + banner message (prevents weird back/refresh behavior)
+  useEffect(() => {
+    const sp = new URLSearchParams(location.search);
+    const t = sp.get("tab");
+    const msg = sp.get("msg");
+
+    if (t === "purchases" || t === "overview") setTab(t);
+    if (msg) setBanner(msg);
+
+    // Clean URL (keeps UI stable when user hits Back)
+    if (t || msg) nav("/buyer-dashboard", { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Hard guard: if not logged in, go to buyer-login
   useEffect(() => {
@@ -36,27 +54,32 @@ export default function BuyerDashboard() {
     if (!user?.uid) nav("/buyer-login", { replace: true });
   }, [booting, user, nav]);
 
-  // Load purchases
+  const loadPurchases = async (uid) => {
+    setPErr("");
+    setPLoading(true);
+    try {
+      const items = await getPurchasesForBuyer(uid);
+      setPurchases(items || []);
+    } catch {
+      // Professional message (no raw Firebase/permission errors shown)
+      setPErr("We couldn’t load your purchases right now. Please try again.");
+    } finally {
+      setPLoading(false);
+    }
+  };
+
+  // Load purchases (safe + stable)
   useEffect(() => {
     let alive = true;
-
     (async () => {
       if (!user?.uid) return;
-      setPErr("");
-      setPLoading(true);
-      try {
-        const items = await getPurchasesForBuyer(user.uid);
-        if (alive) setPurchases(items || []);
-      } catch (e) {
-        if (alive) setPErr("Unable to load purchases right now.");
-      } finally {
-        if (alive) setPLoading(false);
-      }
+      if (!alive) return;
+      await loadPurchases(user.uid);
     })();
-
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
   const totalSpent = useMemo(() => {
@@ -97,18 +120,31 @@ export default function BuyerDashboard() {
           </div>
 
           <div className="flex gap-3">
-            <Link to="/explore" className="rounded-2xl bg-black px-5 py-3 text-sm text-white hover:bg-slate-900">
+            <Link to="/explore" className="psa-btn-primary rounded-2xl px-5 py-3 text-sm">
               Explore Pictures
             </Link>
             <button
               onClick={onLogout}
               disabled={busy}
-              className="rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400 disabled:opacity-60"
+              className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400 disabled:opacity-60"
             >
               {busy ? "Logging out..." : "Logout"}
             </button>
           </div>
         </div>
+
+        {banner ? (
+          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+            {banner}
+            <button
+              className="ml-3 underline underline-offset-2"
+              onClick={() => setBanner("")}
+              type="button"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
 
         {/* Tabs */}
         <div className="mt-8 flex flex-wrap gap-2">
@@ -116,7 +152,7 @@ export default function BuyerDashboard() {
             Overview
           </TabButton>
           <TabButton active={tab === "purchases"} onClick={() => setTab("purchases")}>
-            Purchases
+            Purchases <span className="ml-1 text-xs text-slate-500">({purchases.length})</span>
           </TabButton>
         </div>
 
@@ -134,7 +170,7 @@ export default function BuyerDashboard() {
               <div className="rounded-2xl border border-slate-200 p-5">
                 <div className="text-sm text-slate-600">Quick Action</div>
                 <div className="mt-3">
-                  <Link className="rounded-2xl bg-black px-4 py-2 text-sm text-white hover:bg-slate-900" to="/explore">
+                  <Link className="psa-btn-primary rounded-2xl px-4 py-2 text-sm" to="/explore">
                     Browse & Buy
                   </Link>
                 </div>
@@ -158,9 +194,35 @@ export default function BuyerDashboard() {
             {pLoading ? (
               <div className="mt-4 h-24 rounded-2xl bg-slate-100 animate-pulse" />
             ) : pErr ? (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{pErr}</div>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <div className="font-medium">Something went wrong</div>
+                <div className="mt-1">{pErr}</div>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    className="psa-btn-primary rounded-2xl px-4 py-2 text-sm"
+                    onClick={() => user?.uid && loadPurchases(user.uid)}
+                  >
+                    Retry
+                  </button>
+                  <Link
+                    className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
+                    to="/explore"
+                  >
+                    Explore
+                  </Link>
+                </div>
+              </div>
             ) : purchases.length === 0 ? (
-              <div className="mt-4 text-sm text-slate-600">No purchases yet.</div>
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                <div className="font-medium">No purchases yet</div>
+                <div className="mt-1 text-slate-600">Browse photos and buy anytime.</div>
+                <div className="mt-3">
+                  <Link className="psa-btn-primary rounded-2xl px-4 py-2 text-sm" to="/explore">
+                    Browse Photos
+                  </Link>
+                </div>
+              </div>
             ) : (
               <div className="mt-4 grid gap-3">
                 {purchases.map((p) => {
@@ -176,7 +238,7 @@ export default function BuyerDashboard() {
                         <div className="flex gap-2">
                           {canDownload ? (
                             <a
-                              className="rounded-2xl bg-black px-4 py-2 text-sm text-white hover:bg-slate-900"
+                              className="psa-btn-primary rounded-2xl px-4 py-2 text-sm"
                               href={p.downloadUrl}
                               target="_blank"
                               rel="noreferrer"
@@ -185,14 +247,14 @@ export default function BuyerDashboard() {
                             </a>
                           ) : (
                             <button
-                              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
+                              className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm text-slate-600"
                               disabled
                             >
                               Download not ready
                             </button>
                           )}
                           <Link
-                            className="rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
+                            className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
                             to="/explore"
                           >
                             Buy more
