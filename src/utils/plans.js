@@ -4,67 +4,57 @@
 // ✅ Seller commission (example: 20% platform fee)
 export const COMMISSION_RATE = 0.2;
 
-// ✅ Canonical plans list (no "days", only "6 months")
+// ✅ Canonical plans list
 export const PLANS = [
   {
     id: "starter",
     title: "Starter",
-    name: "Starter",
     badge: "Best for getting started",
+    description: "Ideal for new sellers who want to start listing and selling quickly.",
     priceINR: 100,
     maxUploads: 25,
-
-    // ✅ Canonical field
-    maxPricePerImageINR: 199,
-
-    // ✅ Backward-compatible field used by existing pages
+    // ✅ FIX: match SellerOnboarding.jsx usage
     maxPriceINR: 199,
-
     durationLabel: "6 months",
-    description: "Ideal for new sellers who want to start listing and selling quickly.",
   },
   {
     id: "pro",
     title: "Pro",
-    name: "Pro",
     badge: "Most popular",
+    description: "Perfect for regular sellers who upload frequently and need more capacity.",
     priceINR: 300,
     maxUploads: 30,
-
-    maxPricePerImageINR: 249,
+    // ✅ FIX: match SellerOnboarding.jsx usage
     maxPriceINR: 249,
-
     durationLabel: "6 months",
-    description: "Perfect for regular sellers who upload frequently and need more capacity.",
   },
   {
     id: "elite",
     title: "Elite",
-    name: "Elite",
     badge: "For heavy sellers",
+    description: "Best for power sellers who want maximum uploads and serious selling.",
     priceINR: 800,
     maxUploads: 50,
-
-    maxPricePerImageINR: 249,
+    // ✅ FIX: match SellerOnboarding.jsx usage
     maxPriceINR: 249,
-
     durationLabel: "6 months",
-    description: "Best for power sellers who want maximum uploads and serious selling.",
   },
 ];
 
-// ✅ Compatibility exports (your pages expect these)
+// ✅ Compatibility exports (your files expect these)
 export const SELLER_PLANS = PLANS;
 
+// Old name expected by Seller pages
 export function getPlan(id) {
   return PLANS.find((p) => p.id === id) || null;
 }
 
+// New name (safe to keep)
 export function getPlanById(id) {
   return getPlan(id);
 }
 
-// ✅ Used by Explore.jsx (keep as-is)
+// ✅ Used by Explore.jsx
 export function formatINR(amount) {
   const n = Number(amount || 0);
   try {

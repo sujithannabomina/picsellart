@@ -1,19 +1,16 @@
-// api/razorpay/webhook.js
-const crypto = require("crypto");
-const { db } = require("../../src/lib/firebaseAdmin");
+// FILE PATH: api/razorpay/webhook.js
+import crypto from "crypto";
+import { db } from "../../src/lib/firebaseAdmin.js";
 
 // IMPORTANT:
-// In Razorpay Webhook setup, you set "Secret" (example: pic_sell_art).
-// Put the same value in Vercel env: RAZORPAY_WEBHOOK_SECRET
+// Put the same webhook secret value in Vercel env: RAZORPAY_WEBHOOK_SECRET
 
 function verifySignature(rawBody, signature, secret) {
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   return expected === signature;
 }
 
-// Vercel serverless: body is already parsed usually.
-// We will reconstruct raw JSON reliably using JSON.stringify(req.body).
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
     if (req.method !== "POST") return res.status(405).send("Method not allowed");
 
@@ -30,7 +27,6 @@ module.exports = async (req, res) => {
     const event = req.body?.event;
     const payload = req.body?.payload || {};
 
-    // Handle subscription lifecycle updates
     if (event && event.startsWith("subscription.")) {
       const sub = payload.subscription?.entity;
       if (sub?.id) {
@@ -51,11 +47,8 @@ module.exports = async (req, res) => {
         const planId = sub.notes?.planId;
 
         if (sellerUid) {
-          // Do not mention any "days" in seller doc.
-          // Just keep status and subscription info.
           const sellerRef = db.collection("sellers").doc(sellerUid);
 
-          // "active" stays active; if cancelled/paused, reflect status.
           let sellerStatus = "active";
           if (sub.status === "cancelled") sellerStatus = "cancelled";
           if (sub.status === "paused") sellerStatus = "paused";
@@ -79,4 +72,4 @@ module.exports = async (req, res) => {
   } catch (e) {
     return res.status(500).send(e?.message || "Webhook error");
   }
-};
+}

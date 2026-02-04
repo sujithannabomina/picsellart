@@ -36,19 +36,30 @@ export default function Checkout() {
 
   const decodedId = useMemo(() => safeDecode(rawId, 3), [rawId]);
 
-  // For your sample flow, ViewPhoto generates:
-  // /checkout?type=sample&id=sample-<encodedStoragePathOrFilename>
+  /**
+   * ✅ CRITICAL FIX:
+   * Your Explore sends id like: sample-public%2Fimages%2Fsample1.jpg
+   * which decodes to: sample-public/images/sample1.jpg
+   *
+   * Your older logic mistakenly converted it into:
+   * public/images/public/images/sample1.jpg  (WRONG)
+   *
+   * This new logic:
+   * - If it already has "/" => treat as full storage path
+   * - If it's only filename => prefix public/images/
+   */
   const storagePath = useMemo(() => {
     if (!decodedId) return "";
+
     const v = decodedId.startsWith("sample-") ? decodedId.replace("sample-", "") : decodedId;
-    const vv = safeDecode(v, 3);
+    const vv = safeDecode(v, 3).trim();
 
-    // If user directly passed filename
-    if (vv.endsWith(".jpg") || vv.endsWith(".jpeg") || vv.endsWith(".png") || vv.endsWith(".webp")) {
-      return `public/images/${vv}`;
-    }
+    // ✅ Already a full path like "public/images/sample1.jpg"
+    if (vv.includes("/")) return vv;
 
-    // If user passed full storage path already
+    // ✅ Only a filename like "sample1.jpg"
+    if (vv.match(/\.(jpg|jpeg|png|webp)$/i)) return `public/images/${vv}`;
+
     return vv;
   }, [decodedId]);
 
@@ -95,7 +106,6 @@ export default function Checkout() {
   }, [storagePath]);
 
   // Price model (stable for now; prevents missing price -> crash)
-  // You can later map price from Firestore photo docs if needed.
   const priceINR = useMemo(() => {
     if (type === "sample") return 149; // stable test price
     return 149;
@@ -105,13 +115,8 @@ export default function Checkout() {
     setErr("");
     setPaying(true);
     try {
-      // If something went wrong, stop gracefully
       if (!user?.uid) throw new Error("Please login again.");
       if (!downloadUrl) throw new Error("Item is not ready.");
-
-      // Production-safe: record purchase as "completed" after a successful payment handler.
-      // NOTE: This is a functional “test checkout” flow (no backend order_id).
-      // It prevents blank pages and gives a stable buyer experience.
 
       // Load Razorpay SDK
       const ok = await new Promise((resolve) => {
@@ -124,11 +129,7 @@ export default function Checkout() {
       });
       if (!ok) throw new Error("Payment SDK failed to load. Please disable adblock and retry.");
 
-      const key =
-        import.meta.env.VITE_RAZORPAY_KEY_ID ||
-        import.meta.env.VITE_RAZORPAY_KEY ||
-        "";
-
+      const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY || "";
       if (!key) throw new Error("Missing Razorpay key. Set VITE_RAZORPAY_KEY_ID in Vercel env vars.");
 
       // Open payment
@@ -159,7 +160,6 @@ export default function Checkout() {
         paymentInfo
       );
 
-      // Go to Buyer Dashboard Purchases tab with a success banner
       nav("/buyer-dashboard?tab=purchases&msg=Purchase%20successful.%20Your%20download%20is%20ready.", {
         replace: true,
       });
@@ -213,16 +213,13 @@ export default function Checkout() {
               <div className="text-sm text-slate-600">Amount</div>
               <div className="mt-1 text-2xl font-semibold tracking-tight">₹{priceINR}</div>
               <div className="mt-2 text-sm text-slate-600">
-                After payment, your download will appear in <span className="font-medium">Buyer Dashboard → Purchases</span>.
+                After payment, your download will appear in{" "}
+                <span className="font-medium">Buyer Dashboard → Purchases</span>.
               </div>
             </div>
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <button
-                className="psa-btn-primary"
-                onClick={onPay}
-                disabled={paying}
-              >
+              <button className="psa-btn-primary" onClick={onPay} disabled={paying}>
                 {paying ? "Processing..." : "Pay & Complete Purchase"}
               </button>
 

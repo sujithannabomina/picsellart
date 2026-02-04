@@ -1,6 +1,6 @@
-// api/razorpay/create-subscription.js
-const { getRazorpay } = require("./razorpay");
-const { db } = require("../../src/lib/firebaseAdmin");
+// FILE PATH: api/razorpay/create-subscription.js
+import { getRazorpay } from "./razorpay.js";
+import { db } from "../../src/lib/firebaseAdmin.js";
 
 const PLAN_MAP = {
   starter: { name: "Seller Activation - Starter", amountINR: 100 },
@@ -8,9 +8,11 @@ const PLAN_MAP = {
   elite: { name: "Seller Activation - Elite", amountINR: 800 },
 };
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    if (req.method !== "POST") {
+      return res.status(405).json({ error: "Method not allowed" });
+    }
 
     const { uid, planId } = req.body || {};
     if (!uid) return res.status(400).json({ error: "Missing uid" });
@@ -22,7 +24,7 @@ module.exports = async (req, res) => {
     const planDocRef = db.collection("razorpay_plans").doc(planId);
     const planDoc = await planDocRef.get();
 
-    let razorpayPlanId = planDoc.exists ? planDoc.data().razorpayPlanId : null;
+    let razorpayPlanId = planDoc.exists ? planDoc.data()?.razorpayPlanId : null;
 
     if (!razorpayPlanId) {
       const rpPlan = await rz.plans.create({
@@ -77,9 +79,9 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({
       subscriptionId: subscription.id,
-      shortRef: `${planId}_${uid.slice(0, 6)}`,
+      shortRef: `${planId}_${String(uid).slice(0, 6)}`,
     });
   } catch (e) {
     return res.status(500).json({ error: e?.message || "Server error" });
   }
-};
+}

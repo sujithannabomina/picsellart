@@ -58,6 +58,9 @@ export default function SellerOnboarding() {
     try {
       const u = await ensureLoggedIn();
 
+      // extra safety: selectedPlanId must exist
+      if (!selectedPlanId || !selectedPlan) throw new Error("Please select a plan.");
+
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
@@ -73,7 +76,10 @@ export default function SellerOnboarding() {
       } catch {
         data = {};
       }
-      if (!res.ok) throw new Error(data?.error || "Failed to create account activation.");
+
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to create account activation.");
+      }
 
       const { subscriptionId, shortRef } = data;
 
@@ -116,6 +122,7 @@ export default function SellerOnboarding() {
           sellerUid: u.uid,
           ref: shortRef,
         },
+        // keep your theme (UI handled by page styles)
         theme: { color: "#000000" },
         modal: {
           ondismiss: () => {},
@@ -174,45 +181,48 @@ export default function SellerOnboarding() {
         {step === "plan" ? (
           <>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
-              {SELLER_PLANS.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setSelectedPlanId(p.id)}
-                  className={[
-                    "rounded-2xl border p-5 text-left hover:border-slate-400",
-                    // ✅ Selected card highlight switched to BLUE (matches site buttons)
-                    selectedPlanId === p.id
-                      ? "border-blue-600 ring-2 ring-blue-600"
-                      : "border-slate-200",
-                  ].join(" ")}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold">{p.title}</div>
-                      <div className="mt-1 text-sm text-slate-600">{p.badge}</div>
-                    </div>
-                    <div className="text-lg font-semibold">₹{p.priceINR}</div>
-                  </div>
+              {SELLER_PLANS.map((p) => {
+                // ✅ bulletproof max price key (supports both names)
+                const maxPrice = p.maxPriceINR ?? p.maxPricePerImageINR ?? 0;
 
-                  <div className="mt-4 text-sm text-slate-700">{p.description}</div>
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setSelectedPlanId(p.id)}
+                    className={[
+                      "rounded-2xl border p-5 text-left hover:border-slate-400",
+                      selectedPlanId === p.id
+                        ? "border-blue-600 ring-2 ring-blue-600"
+                        : "border-slate-200",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-semibold">{p.title}</div>
+                        <div className="mt-1 text-sm text-slate-600">{p.badge}</div>
+                      </div>
+                      <div className="text-lg font-semibold">₹{p.priceINR}</div>
+                    </div>
 
-                  <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                    <div>
-                      Upload limit: <span className="font-medium">{p.maxUploads}</span>
+                    <div className="mt-4 text-sm text-slate-700">{p.description}</div>
+
+                    <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                      <div>
+                        Upload limit: <span className="font-medium">{p.maxUploads}</span>
+                      </div>
+                      <div>
+                        Max price per image: <span className="font-medium">₹{maxPrice}</span>
+                      </div>
+                      <div className="mt-2 text-xs text-slate-500">
+                        AutoPay will be enabled. You can manage/cancel it from your UPI app.
+                      </div>
                     </div>
-                    <div>
-                      Max price per image: <span className="font-medium">₹{p.maxPriceINR}</span>
-                    </div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      AutoPay will be enabled. You can manage/cancel it from your UPI app.
-                    </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* ✅ Button already matched to site primary UI */}
             <button
               onClick={startAutoPayActivation}
               disabled={busy}
@@ -265,7 +275,6 @@ export default function SellerOnboarding() {
                 </div>
               </div>
 
-              {/* ✅ Button already matched to site primary UI */}
               <button
                 onClick={saveProfile}
                 disabled={busy}

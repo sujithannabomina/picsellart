@@ -59,7 +59,7 @@ export default function App() {
         <Route path="/seller-dashboard" element={<SellerDashboard />} />
         <Route path="/seller/dashboard" element={<Navigate to="/seller-dashboard" replace />} />
 
-        {/* ✅ Photo view routes (View button will work + refresh/back won’t break) */}
+        {/* ✅ Photo view routes */}
         <Route path="/photo/:id" element={<ViewPhoto />} />
         <Route path="/view/:id" element={<ViewImage />} />
 
