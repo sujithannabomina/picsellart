@@ -14,20 +14,16 @@ service cloud.firestore {
     /*******************************
      * Public, read-only collections
      *******************************/
-    // e.g., site-wide config, plans catalog you render on pricing page
     match /config/{doc} {
       allow read: if true;
       allow write: if false;
     }
 
-    // Public photo metadata used by Explore/Detail pages.
-    // Expect docs to have: visibility: "public" | "private"
     match /photos/{photoId} {
       allow read: if resource.data.visibility == "public";
-      allow create, update, delete: if false; // uploads/edits go via server (recommended)
+      allow create, update, delete: if false;
     }
 
-    // Aggregated stats you might show on homepage
     match /stats/{doc} {
       allow read: if true;
       allow write: if false;
@@ -37,37 +33,68 @@ service cloud.firestore {
      * User profile (per-user access)
      *******************************/
     match /users/{uid} {
-      // A user can read their own profile
       allow read: if isOwner(uid);
 
-      // Restrict which fields a user can change from the client.
-      // Only allow these keys: displayName, photoURL, phone, country
       allow update: if isOwner(uid)
         && request.resource.data.keys().hasOnly(
-            ['displayName', 'photoURL', 'phone', 'country', 'updatedAt']
-          )
-        // Preserve server-owned fields from being changed client-side
+          ['displayName', 'photoURL', 'phone', 'country', 'updatedAt']
+        )
         && request.resource.data.diff(resource.data).changedKeys()
-             .hasOnly(['displayName','photoURL','phone','country','updatedAt']);
+          .hasOnly(['displayName','photoURL','phone','country','updatedAt']);
 
-      // Creation of the user doc is allowed for the owner (first sign-in),
-      // but must not set server-owned fields such as role/plan/limits.
       allow create: if isOwner(uid)
         && !('role' in request.resource.data)
         && !('plan' in request.resource.data)
         && !('planExpiresAt' in request.resource.data)
         && !('uploadsUsed' in request.resource.data);
 
-      // Never allow client-side deletes
       allow delete: if false;
+    }
+
+    /*****************************************
+     * Sellers (client writes needed for onboarding)
+     *****************************************/
+    match /sellers/{uid} {
+      // Seller can read their own seller profile
+      allow read: if isOwner(uid);
+
+      // Seller onboarding creates the doc after Razorpay handler
+      // Allow create only by the owner and only limited safe fields.
+      allow create: if isOwner(uid)
+        && request.resource.data.keys().hasOnly([
+          'uid','email','name','photoURL','planId','subscriptionId',
+          'status','createdAt','updatedAt','phone','upiId'
+        ]);
+
+      // Allow updates only by the owner and only specific keys
+      // (matches your SellerOnboarding.jsx: phone, upiId, name, status, updatedAt)
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'name','phone','upiId','status','updatedAt','planId','subscriptionId','photoURL','email','uid','createdAt'
+        ]);
+
+      allow delete: if false;
+    }
+
+    /*****************************************
+     * Purchases (client writes needed for buyer checkout)
+     *****************************************/
+    // Your Checkout.jsx calls recordPurchase() from the client.
+    // So we MUST allow a buyer to create their own purchase records.
+    match /purchases/{purchaseId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid;
+
+      // Buyer should not edit purchases after creation (avoid tampering)
+      allow update, delete: if false;
     }
 
     /*****************************************
      * Payments & subscriptions (server-only)
      *****************************************/
-    // All writes for these go through Cloud Functions (Admin SDK bypasses rules).
     match /payments/{id} {
-      // Owner can read their own payment record
       allow read: if signedIn() && resource.data.userId == request.auth.uid;
       allow create, update, delete: if false;
     }
