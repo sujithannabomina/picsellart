@@ -6,11 +6,6 @@ import { recordPurchase } from "../utils/purchases";
 import { storage } from "../firebase";
 import { getDownloadURL, ref } from "firebase/storage";
 
-// IMPORTANT:
-// - This Checkout is URL-driven (no location.state required).
-// - Prevents blank page on Buy + fixes Back button behavior.
-// - Uses: /checkout?type=sample&id=<something>
-
 function safeDecode(value, times = 2) {
   let v = value || "";
   for (let i = 0; i < times; i++) {
@@ -33,39 +28,21 @@ export default function Checkout() {
   const sp = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const type = sp.get("type") || "sample";
   const rawId = sp.get("id") || "";
-
   const decodedId = useMemo(() => safeDecode(rawId, 3), [rawId]);
 
-  /**
-   * ✅ CRITICAL FIX:
-   * Your Explore sends id like: sample-public%2Fimages%2Fsample1.jpg
-   * which decodes to: sample-public/images/sample1.jpg
-   *
-   * Your older logic mistakenly converted it into:
-   * public/images/public/images/sample1.jpg  (WRONG)
-   *
-   * This new logic:
-   * - If it already has "/" => treat as full storage path
-   * - If it's only filename => prefix public/images/
-   */
   const storagePath = useMemo(() => {
     if (!decodedId) return "";
-
     const v = decodedId.startsWith("sample-") ? decodedId.replace("sample-", "") : decodedId;
-    const vv = safeDecode(v, 3).trim();
+    const vv = safeDecode(v, 3);
 
-    // ✅ Already a full path like "public/images/sample1.jpg"
-    if (vv.includes("/")) return vv;
-
-    // ✅ Only a filename like "sample1.jpg"
-    if (vv.match(/\.(jpg|jpeg|png|webp)$/i)) return `public/images/${vv}`;
-
+    if (vv.endsWith(".jpg") || vv.endsWith(".jpeg") || vv.endsWith(".png") || vv.endsWith(".webp")) {
+      return `public/images/${vv}`;
+    }
     return vv;
   }, [decodedId]);
 
   const currentCheckoutUrl = useMemo(() => `/checkout${location.search}`, [location.search]);
 
-  // If not logged in, redirect to buyer login with safe "next"
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
@@ -76,9 +53,9 @@ export default function Checkout() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
 
-  // Load the download URL from Storage (prevents blank crashes)
+  // Keep this ONLY as preview loading (UI stability)
   useEffect(() => {
     let alive = true;
 
@@ -92,7 +69,7 @@ export default function Checkout() {
       setLoading(true);
       try {
         const url = await getDownloadURL(ref(storage, storagePath));
-        if (alive) setDownloadUrl(url);
+        if (alive) setPreviewUrl(url);
       } catch {
         if (alive) setErr("Unable to load this item right now.");
       } finally {
@@ -105,18 +82,18 @@ export default function Checkout() {
     };
   }, [storagePath]);
 
-  // Price model (stable for now; prevents missing price -> crash)
   const priceINR = useMemo(() => {
-    if (type === "sample") return 149; // stable test price
+    if (type === "sample") return 149;
     return 149;
   }, [type]);
 
   const onPay = async () => {
     setErr("");
     setPaying(true);
+
     try {
       if (!user?.uid) throw new Error("Please login again.");
-      if (!downloadUrl) throw new Error("Item is not ready.");
+      if (!previewUrl) throw new Error("Item is not ready.");
 
       // Load Razorpay SDK
       const ok = await new Promise((resolve) => {
@@ -132,7 +109,29 @@ export default function Checkout() {
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY || "";
       if (!key) throw new Error("Missing Razorpay key. Set VITE_RAZORPAY_KEY_ID in Vercel env vars.");
 
-      // Open payment
+      // ✅ Create order on server (production-ready)
+      const orderRes = await fetch("/api/razorpay/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: priceINR * 100,
+          currency: "INR",
+          receipt: `buyer_${user.uid}_${Date.now()}`,
+          notes: {
+            purpose: "buyer_purchase",
+            buyerUid: user.uid,
+            item: decodedId || storagePath,
+          },
+        }),
+      });
+
+      const orderData = await orderRes.json().catch(() => ({}));
+      if (!orderRes.ok) throw new Error(orderData?.error || "Failed to create order");
+
+      const { orderId } = orderData;
+      if (!orderId) throw new Error("Order ID missing from server");
+
+      // ✅ Open Razorpay with order_id
       const paymentInfo = await new Promise((resolve, reject) => {
         const rzp = new window.Razorpay({
           key,
@@ -140,13 +139,27 @@ export default function Checkout() {
           currency: "INR",
           name: "PicSellArt",
           description: "Photo Purchase",
+          order_id: orderId,
           handler: (response) => resolve(response),
           modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
+          prefill: {
+            email: user.email || "",
+            name: user.displayName || "",
+          },
         });
         rzp.open();
       });
 
-      // Record purchase
+      // ✅ Verify payment on server (production-ready)
+      const verifyRes = await fetch("/api/razorpay/verify-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(paymentInfo),
+      });
+      const verifyData = await verifyRes.json().catch(() => ({}));
+      if (!verifyRes.ok) throw new Error(verifyData?.error || "Payment verification failed");
+
+      // ✅ Record purchase (buyer dashboard uses this)
       await recordPurchase(
         user.uid,
         {
@@ -154,10 +167,16 @@ export default function Checkout() {
           fileName: storagePath.split("/").pop() || "photo",
           name: "Photo",
           price: priceINR,
-          url: downloadUrl,
-          originalUrl: downloadUrl,
+          // IMPORTANT:
+          // We do not store open download URLs here for production security.
+          // Buyer Dashboard should request a server-signed download URL later.
+          url: "",
+          originalUrl: "",
         },
-        paymentInfo
+        {
+          ...paymentInfo,
+          orderId,
+        }
       );
 
       nav("/buyer-dashboard?tab=purchases&msg=Purchase%20successful.%20Your%20download%20is%20ready.", {
@@ -170,7 +189,6 @@ export default function Checkout() {
     }
   };
 
-  // Safe shell during boot/loading (prevents white screens)
   if (booting) {
     return (
       <div className="psa-container">
@@ -213,8 +231,7 @@ export default function Checkout() {
               <div className="text-sm text-slate-600">Amount</div>
               <div className="mt-1 text-2xl font-semibold tracking-tight">₹{priceINR}</div>
               <div className="mt-2 text-sm text-slate-600">
-                After payment, your download will appear in{" "}
-                <span className="font-medium">Buyer Dashboard → Purchases</span>.
+                After payment, your download will appear in <span className="font-medium">Buyer Dashboard → Purchases</span>.
               </div>
             </div>
 

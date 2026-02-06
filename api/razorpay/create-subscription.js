@@ -10,9 +10,7 @@ const PLAN_MAP = {
 
 export default async function handler(req, res) {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
     const { uid, planId } = req.body || {};
     if (!uid) return res.status(400).json({ error: "Missing uid" });
@@ -24,7 +22,7 @@ export default async function handler(req, res) {
     const planDocRef = db.collection("razorpay_plans").doc(planId);
     const planDoc = await planDocRef.get();
 
-    let razorpayPlanId = planDoc.exists ? planDoc.data()?.razorpayPlanId : null;
+    let razorpayPlanId = planDoc.exists ? planDoc.data().razorpayPlanId : null;
 
     if (!razorpayPlanId) {
       const rpPlan = await rz.plans.create({
@@ -35,28 +33,20 @@ export default async function handler(req, res) {
           amount: PLAN_MAP[planId].amountINR * 100,
           currency: "INR",
         },
-        notes: {
-          purpose: "seller_activation",
-          planId,
-        },
+        notes: { purpose: "seller_activation", planId },
       });
 
       razorpayPlanId = rpPlan.id;
 
       await planDocRef.set(
-        {
-          planId,
-          razorpayPlanId,
-          createdAt: new Date().toISOString(),
-        },
+        { planId, razorpayPlanId, createdAt: new Date().toISOString() },
         { merge: true }
       );
     }
 
-    // Create subscription
     const subscription = await rz.subscriptions.create({
       plan_id: razorpayPlanId,
-      total_count: 60, // long-running; user can cancel from UPI app
+      total_count: 60,
       customer_notify: 1,
       notes: {
         purpose: "seller_activation",
@@ -65,7 +55,6 @@ export default async function handler(req, res) {
       },
     });
 
-    // Track subscription on server side (optional)
     await db.collection("subscriptions").doc(subscription.id).set(
       {
         subscriptionId: subscription.id,
@@ -79,7 +68,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       subscriptionId: subscription.id,
-      shortRef: `${planId}_${String(uid).slice(0, 6)}`,
+      shortRef: `${planId}_${uid.slice(0, 6)}`,
     });
   } catch (e) {
     return res.status(500).json({ error: e?.message || "Server error" });

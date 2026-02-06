@@ -1,32 +1,38 @@
+// FILE PATH: storage.rules
 rules_version = '2';
-
 service firebase.storage {
   match /b/{bucket}/o {
-    // Public galleries are readable by everyone
-    match /public/{allPaths=**} {
+
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // ✅ Public PREVIEWS ONLY (watermarked / low-res)
+    // Put your Explore-visible images here.
+    match /public/previews/{file=**} {
       allow read: if true;
+      allow write: if false; // lock in production
+    }
+
+    // ✅ Seller can upload ORIGINALS privately (not public)
+    match /protected/originals/sellers/{uid}/{file=**} {
+      allow read: if isOwner(uid);   // seller can read own originals
+      allow write: if isOwner(uid);  // seller can upload
+    }
+
+    // ✅ Sample ORIGINALS also private (payment required)
+    match /protected/originals/samples/{file=**} {
+      allow read: if false; // only server should generate signed URL after payment
       allow write: if false;
     }
 
-    // Legacy "Buyer/" gallery you asked to show on Explore
-    match /Buyer/{allPaths=**} {
+    // ✅ Optional: seller can upload previews too (if you implement)
+    match /public/previews/sellers/{uid}/{file=**} {
       allow read: if true;
-      allow write: if false;
+      allow write: if isOwner(uid);
     }
 
-    // Sellers can manage only their own files
-    match /sellers/{uid}/{allPaths=**} {
-      // Public read so Explore can list & show watermarked thumbnails.
-      // If you want to restrict full-res downloads post-purchase, set this to false
-      // and serve signed URLs after payment from a backend instead.
-      allow read: if true;
-
-      // Only the authenticated owner can write to their subtree
-      allow write: if request.auth != null && request.auth.uid == uid;
-    }
-
-    // Deny everything else by default
-    match /{path=**} {
+    // Fallback deny
+    match /{allPaths=**} {
       allow read, write: if false;
     }
   }

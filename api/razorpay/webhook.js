@@ -2,9 +2,6 @@
 import crypto from "crypto";
 import { db } from "../../src/lib/firebaseAdmin.js";
 
-// IMPORTANT:
-// Put the same webhook secret value in Vercel env: RAZORPAY_WEBHOOK_SECRET
-
 function verifySignature(rawBody, signature, secret) {
   const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
   return expected === signature;
@@ -21,14 +18,16 @@ export default async function handler(req, res) {
     if (!signature) return res.status(400).send("Missing signature");
 
     const raw = JSON.stringify(req.body || {});
-    const ok = verifySignature(raw, signature, secret);
-    if (!ok) return res.status(400).send("Invalid signature");
+    if (!verifySignature(raw, signature, secret)) {
+      return res.status(400).send("Invalid signature");
+    }
 
     const event = req.body?.event;
     const payload = req.body?.payload || {};
 
     if (event && event.startsWith("subscription.")) {
       const sub = payload.subscription?.entity;
+
       if (sub?.id) {
         await db.collection("subscriptions").doc(sub.id).set(
           {
@@ -47,13 +46,11 @@ export default async function handler(req, res) {
         const planId = sub.notes?.planId;
 
         if (sellerUid) {
-          const sellerRef = db.collection("sellers").doc(sellerUid);
-
           let sellerStatus = "active";
           if (sub.status === "cancelled") sellerStatus = "cancelled";
           if (sub.status === "paused") sellerStatus = "paused";
 
-          await sellerRef.set(
+          await db.collection("sellers").doc(sellerUid).set(
             {
               uid: sellerUid,
               planId: planId || null,
