@@ -1,18 +1,14 @@
 // FILE PATH: api/razorpay/create-order.js
-import { getRazorpay } from "./razorpay.js";
+const { getRazorpay } = require("./razorpay");
 
-export default async function handler(req, res) {
+module.exports = async (req, res) => {
   try {
-    if (req.method !== "POST") {
-      return res.status(405).json({ error: "Method not allowed" });
-    }
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
     const { amount, currency, receipt, notes } = req.body || {};
-    const amt = Number(amount || 0);
+    const amt = Number(amount);
 
-    if (!amt || amt < 100) {
-      return res.status(400).json({ error: "Invalid amount" });
-    }
+    if (!amt || amt < 1) return res.status(400).json({ error: "Invalid amount" });
 
     const rz = getRazorpay();
 
@@ -20,15 +16,15 @@ export default async function handler(req, res) {
       amount: amt,
       currency: currency || "INR",
       receipt: receipt || `rcpt_${Date.now()}`,
-      notes: notes || {},
+      notes: notes || {}
     });
 
     return res.status(200).json({
       orderId: order.id,
       amount: order.amount,
-      currency: order.currency,
+      currency: order.currency
     });
   } catch (e) {
     return res.status(500).json({ error: e?.message || "Server error" });
   }
-}
+};

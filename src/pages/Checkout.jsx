@@ -28,6 +28,7 @@ export default function Checkout() {
   const sp = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const type = sp.get("type") || "sample";
   const rawId = sp.get("id") || "";
+
   const decodedId = useMemo(() => safeDecode(rawId, 3), [rawId]);
 
   const storagePath = useMemo(() => {
@@ -53,9 +54,8 @@ export default function Checkout() {
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
-  const [previewUrl, setPreviewUrl] = useState("");
+  const [downloadUrl, setDownloadUrl] = useState("");
 
-  // Keep this ONLY as preview loading (UI stability)
   useEffect(() => {
     let alive = true;
 
@@ -68,9 +68,11 @@ export default function Checkout() {
       setErr("");
       setLoading(true);
       try {
+        // This is for preview file availability.
+        // If this fails, your Firebase Storage bucket/env or rules/path is wrong.
         const url = await getDownloadURL(ref(storage, storagePath));
-        if (alive) setPreviewUrl(url);
-      } catch {
+        if (alive) setDownloadUrl(url);
+      } catch (e) {
         if (alive) setErr("Unable to load this item right now.");
       } finally {
         if (alive) setLoading(false);
@@ -93,7 +95,8 @@ export default function Checkout() {
 
     try {
       if (!user?.uid) throw new Error("Please login again.");
-      if (!previewUrl) throw new Error("Item is not ready.");
+      if (!storagePath) throw new Error("Invalid item.");
+      if (!downloadUrl) throw new Error("Item is not ready.");
 
       // Load Razorpay SDK
       const ok = await new Promise((resolve) => {
@@ -109,7 +112,7 @@ export default function Checkout() {
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY || "";
       if (!key) throw new Error("Missing Razorpay key. Set VITE_RAZORPAY_KEY_ID in Vercel env vars.");
 
-      // ✅ Create order on server (production-ready)
+      // ✅ Create Razorpay Order on server (production-safe)
       const orderRes = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,48 +121,45 @@ export default function Checkout() {
           currency: "INR",
           receipt: `buyer_${user.uid}_${Date.now()}`,
           notes: {
-            purpose: "buyer_purchase",
             buyerUid: user.uid,
-            item: decodedId || storagePath,
-          },
-        }),
+            storagePath,
+            type
+          }
+        })
       });
 
       const orderData = await orderRes.json().catch(() => ({}));
       if (!orderRes.ok) throw new Error(orderData?.error || "Failed to create order");
 
       const { orderId } = orderData;
-      if (!orderId) throw new Error("Order ID missing from server");
+      if (!orderId) throw new Error("Order ID missing from server.");
 
       // ✅ Open Razorpay with order_id
       const paymentInfo = await new Promise((resolve, reject) => {
         const rzp = new window.Razorpay({
           key,
+          order_id: orderId,
           amount: priceINR * 100,
           currency: "INR",
           name: "PicSellArt",
           description: "Photo Purchase",
-          order_id: orderId,
           handler: (response) => resolve(response),
-          modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
-          prefill: {
-            email: user.email || "",
-            name: user.displayName || "",
-          },
+          modal: { ondismiss: () => reject(new Error("Payment cancelled")) }
         });
         rzp.open();
       });
 
-      // ✅ Verify payment on server (production-ready)
+      // ✅ Verify signature on server
       const verifyRes = await fetch("/api/razorpay/verify-payment", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentInfo),
+        body: JSON.stringify(paymentInfo)
       });
+
       const verifyData = await verifyRes.json().catch(() => ({}));
       if (!verifyRes.ok) throw new Error(verifyData?.error || "Payment verification failed");
 
-      // ✅ Record purchase (buyer dashboard uses this)
+      // ✅ Record purchase (Firestore rules now allow this)
       await recordPurchase(
         user.uid,
         {
@@ -167,20 +167,14 @@ export default function Checkout() {
           fileName: storagePath.split("/").pop() || "photo",
           name: "Photo",
           price: priceINR,
-          // IMPORTANT:
-          // We do not store open download URLs here for production security.
-          // Buyer Dashboard should request a server-signed download URL later.
-          url: "",
-          originalUrl: "",
+          url: downloadUrl,
+          originalUrl: downloadUrl
         },
-        {
-          ...paymentInfo,
-          orderId,
-        }
+        paymentInfo
       );
 
       nav("/buyer-dashboard?tab=purchases&msg=Purchase%20successful.%20Your%20download%20is%20ready.", {
-        replace: true,
+        replace: true
       });
     } catch (e) {
       setErr(e?.message || "Payment failed. Please try again.");
