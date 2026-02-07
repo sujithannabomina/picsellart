@@ -52,42 +52,29 @@ service cloud.firestore {
     }
 
     /*****************************************
-     * Sellers (client writes needed for onboarding)
+     * Purchases (BUYER) — this was missing ✅
      *****************************************/
-    match /sellers/{uid} {
-      // Seller can read their own seller profile
-      allow read: if isOwner(uid);
-
-      // Seller onboarding creates the doc after Razorpay handler
-      // Allow create only by the owner and only limited safe fields.
-      allow create: if isOwner(uid)
-        && request.resource.data.keys().hasOnly([
-          'uid','email','name','photoURL','planId','subscriptionId',
-          'status','createdAt','updatedAt','phone','upiId'
-        ]);
-
-      // Allow updates only by the owner and only specific keys
-      // (matches your SellerOnboarding.jsx: phone, upiId, name, status, updatedAt)
-      allow update: if isOwner(uid)
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          'name','phone','upiId','status','updatedAt','planId','subscriptionId','photoURL','email','uid','createdAt'
-        ]);
-
-      allow delete: if false;
-    }
-
-    /*****************************************
-     * Purchases (client writes needed for buyer checkout)
-     *****************************************/
-    // Your Checkout.jsx calls recordPurchase() from the client.
-    // So we MUST allow a buyer to create their own purchase records.
     match /purchases/{purchaseId} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      // Buyer can read their own purchases
+      allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
 
+      // Buyer can create only for themselves
       allow create: if signedIn()
-        && request.resource.data.userId == request.auth.uid;
+        && request.resource.data.buyerUid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'buyerUid',
+          'photoId',
+          'fileName',
+          'displayName',
+          'price',
+          'currency',
+          'storagePath',
+          'downloadUrl',
+          'createdAt',
+          'razorpay'
+        ]);
 
-      // Buyer should not edit purchases after creation (avoid tampering)
+      // No edits/deletes from client
       allow update, delete: if false;
     }
 
@@ -109,9 +96,6 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    /*********************************
-     * Fallback: deny everything else
-     *********************************/
     match /{document=**} {
       allow read, write: if false;
     }

@@ -23,7 +23,13 @@ export const recordPurchase = async (buyerUid, photo, paymentInfo) => {
     displayName: photo?.name || photo?.displayName || "Photo",
     price: Number(photo?.price || 0),
     currency: "INR",
-    downloadUrl: photo?.originalUrl || photo?.url || photo?.downloadUrl || "",
+
+    // ✅ NEW: store storagePath so you can fetch download URL later if needed
+    storagePath: photo?.storagePath || "",
+
+    // Optional: may be empty if Storage fetch failed at checkout
+    downloadUrl: photo?.downloadUrl || photo?.originalUrl || photo?.url || "",
+
     createdAt: serverTimestamp(),
     razorpay: paymentInfo || null,
   });

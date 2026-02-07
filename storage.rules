@@ -1,37 +1,47 @@
 // FILE PATH: storage.rules
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
 
     function signedIn() { return request.auth != null; }
     function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function isImage() {
+      return request.resource != null
+        && request.resource.contentType.matches('image/.*');
+    }
+    function smallEnough() {
+      // 15 MB limit per upload (change if you want)
+      return request.resource.size < 15 * 1024 * 1024;
+    }
 
-    // ✅ Public PREVIEWS ONLY (watermarked / low-res)
-    // Put your Explore-visible images here.
-    match /public/previews/{file=**} {
+    /********************************************************
+     * PUBLIC PREVIEWS (WATERMARKED ONLY)
+     * - These can be shown in Explore / ViewPhoto
+     * - They are NOT the original paid file
+     ********************************************************/
+    match /public/images/{file=**} {
       allow read: if true;
-      allow write: if false; // lock in production
+      allow write: if false; // only admin/server should upload these
     }
 
-    // ✅ Seller can upload ORIGINALS privately (not public)
-    match /protected/originals/sellers/{uid}/{file=**} {
-      allow read: if isOwner(uid);   // seller can read own originals
-      allow write: if isOwner(uid);  // seller can upload
+    /********************************************************
+     * SELLER UPLOADS (ORIGINALS / PAID FILES)
+     * - Buyers must NOT be able to read directly
+     ********************************************************/
+    match /sellers/{uid}/{file=**} {
+      allow write: if isOwner(uid) && isImage() && smallEnough();
+      allow read: if isOwner(uid); // only seller can read their own originals
     }
 
-    // ✅ Sample ORIGINALS also private (payment required)
-    match /protected/originals/samples/{file=**} {
-      allow read: if false; // only server should generate signed URL after payment
-      allow write: if false;
+    /********************************************************
+     * BUYER UPLOADS (optional, if you add later)
+     ********************************************************/
+    match /buyers/{uid}/{file=**} {
+      allow write: if isOwner(uid) && isImage() && smallEnough();
+      allow read: if isOwner(uid);
     }
 
-    // ✅ Optional: seller can upload previews too (if you implement)
-    match /public/previews/sellers/{uid}/{file=**} {
-      allow read: if true;
-      allow write: if isOwner(uid);
-    }
-
-    // Fallback deny
     match /{allPaths=**} {
       allow read, write: if false;
     }

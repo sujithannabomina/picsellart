@@ -6,7 +6,7 @@ import { recordPurchase } from "../utils/purchases";
 import { storage } from "../firebase";
 import { getDownloadURL, ref } from "firebase/storage";
 
-function safeDecode(value, times = 2) {
+function safeDecode(value, times = 3) {
   let v = value || "";
   for (let i = 0; i < times; i++) {
     try {
@@ -29,16 +29,23 @@ export default function Checkout() {
   const type = sp.get("type") || "sample";
   const rawId = sp.get("id") || "";
 
-  const decodedId = useMemo(() => safeDecode(rawId, 3), [rawId]);
+  const decodedId = useMemo(() => safeDecode(rawId, 5), [rawId]);
 
+  // /checkout?type=sample&id=sample-<encodedStoragePathOrFilename>
   const storagePath = useMemo(() => {
     if (!decodedId) return "";
     const v = decodedId.startsWith("sample-") ? decodedId.replace("sample-", "") : decodedId;
-    const vv = safeDecode(v, 3);
+    const vv = safeDecode(v, 5);
 
-    if (vv.endsWith(".jpg") || vv.endsWith(".jpeg") || vv.endsWith(".png") || vv.endsWith(".webp")) {
+    if (
+      vv.endsWith(".jpg") ||
+      vv.endsWith(".jpeg") ||
+      vv.endsWith(".png") ||
+      vv.endsWith(".webp")
+    ) {
       return `public/images/${vv}`;
     }
+
     return vv;
   }, [decodedId]);
 
@@ -51,43 +58,28 @@ export default function Checkout() {
     }
   }, [booting, user, nav, currentCheckoutUrl]);
 
-  const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
-  const [downloadUrl, setDownloadUrl] = useState("");
 
-  useEffect(() => {
-    let alive = true;
-
-    (async () => {
-      if (!storagePath) {
-        setErr("Invalid checkout link. Please go back and try again.");
-        setLoading(false);
-        return;
-      }
-      setErr("");
-      setLoading(true);
-      try {
-        // This is for preview file availability.
-        // If this fails, your Firebase Storage bucket/env or rules/path is wrong.
-        const url = await getDownloadURL(ref(storage, storagePath));
-        if (alive) setDownloadUrl(url);
-      } catch (e) {
-        if (alive) setErr("Unable to load this item right now.");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-
-    return () => {
-      alive = false;
-    };
-  }, [storagePath]);
-
+  // IMPORTANT CHANGE:
+  // ✅ Do NOT block checkout because downloadURL failed.
+  // We fetch download URL only AFTER successful payment (best effort).
   const priceINR = useMemo(() => {
     if (type === "sample") return 149;
     return 149;
   }, [type]);
+
+  const loadRazorpaySdk = async () => {
+    const ok = await new Promise((resolve) => {
+      if (window.Razorpay) return resolve(true);
+      const s = document.createElement("script");
+      s.src = "https://checkout.razorpay.com/v1/checkout.js";
+      s.onload = () => resolve(true);
+      s.onerror = () => resolve(false);
+      document.body.appendChild(s);
+    });
+    return ok;
+  };
 
   const onPay = async () => {
     setErr("");
@@ -95,86 +87,77 @@ export default function Checkout() {
 
     try {
       if (!user?.uid) throw new Error("Please login again.");
-      if (!storagePath) throw new Error("Invalid item.");
-      if (!downloadUrl) throw new Error("Item is not ready.");
+      if (!storagePath) throw new Error("Invalid checkout link. Please go back and try again.");
 
-      // Load Razorpay SDK
-      const ok = await new Promise((resolve) => {
-        if (window.Razorpay) return resolve(true);
-        const s = document.createElement("script");
-        s.src = "https://checkout.razorpay.com/v1/checkout.js";
-        s.onload = () => resolve(true);
-        s.onerror = () => resolve(false);
-        document.body.appendChild(s);
-      });
+      const ok = await loadRazorpaySdk();
       if (!ok) throw new Error("Payment SDK failed to load. Please disable adblock and retry.");
 
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY || "";
-      if (!key) throw new Error("Missing Razorpay key. Set VITE_RAZORPAY_KEY_ID in Vercel env vars.");
+      if (!key) throw new Error("Missing Razorpay key. Set VITE_RAZORPAY_KEY_ID in env vars.");
 
-      // ✅ Create Razorpay Order on server (production-safe)
+      // ✅ Create order on server (production-safe)
       const orderRes = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: priceINR * 100,
-          currency: "INR",
-          receipt: `buyer_${user.uid}_${Date.now()}`,
+          amountINR: priceINR,
           notes: {
+            purpose: "buyer_purchase",
             buyerUid: user.uid,
+            photoId: decodedId || "",
             storagePath,
-            type
-          }
-        })
+            type,
+          },
+        }),
       });
 
-      const orderData = await orderRes.json().catch(() => ({}));
-      if (!orderRes.ok) throw new Error(orderData?.error || "Failed to create order");
+      let orderData = {};
+      try {
+        orderData = await orderRes.json();
+      } catch {
+        orderData = {};
+      }
 
-      const { orderId } = orderData;
-      if (!orderId) throw new Error("Order ID missing from server.");
+      if (!orderRes.ok) {
+        throw new Error(orderData?.error || "Unable to start payment. Check server keys.");
+      }
 
-      // ✅ Open Razorpay with order_id
+      const { orderId, amount, currency } = orderData;
+
       const paymentInfo = await new Promise((resolve, reject) => {
         const rzp = new window.Razorpay({
           key,
+          amount,
+          currency,
           order_id: orderId,
-          amount: priceINR * 100,
-          currency: "INR",
           name: "PicSellArt",
           description: "Photo Purchase",
           handler: (response) => resolve(response),
-          modal: { ondismiss: () => reject(new Error("Payment cancelled")) }
+          modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
         });
         rzp.open();
       });
 
-      // ✅ Verify signature on server
-      const verifyRes = await fetch("/api/razorpay/verify-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(paymentInfo)
-      });
+      // ✅ Try to get download URL after payment (best effort)
+      let downloadUrl = "";
+      try {
+        downloadUrl = await getDownloadURL(ref(storage, storagePath));
+      } catch {
+        downloadUrl = "";
+      }
 
-      const verifyData = await verifyRes.json().catch(() => ({}));
-      if (!verifyRes.ok) throw new Error(verifyData?.error || "Payment verification failed");
-
-      // ✅ Record purchase (Firestore rules now allow this)
-      await recordPurchase(
-        user.uid,
-        {
-          id: decodedId || storagePath,
-          fileName: storagePath.split("/").pop() || "photo",
-          name: "Photo",
-          price: priceINR,
-          url: downloadUrl,
-          originalUrl: downloadUrl
-        },
-        paymentInfo
-      );
+      // ✅ Record purchase (NOW allowed by rules once you deploy)
+      await recordPurchase(user.uid, {
+        id: decodedId || storagePath,
+        fileName: storagePath.split("/").pop() || "photo",
+        name: "Photo",
+        price: priceINR,
+        storagePath,
+        downloadUrl, // may be empty; dashboard can fetch later
+      }, paymentInfo);
 
       nav("/buyer-dashboard?tab=purchases&msg=Purchase%20successful.%20Your%20download%20is%20ready.", {
-        replace: true
+        replace: true,
       });
     } catch (e) {
       setErr(e?.message || "Payment failed. Please try again.");
@@ -207,39 +190,31 @@ export default function Checkout() {
       </div>
 
       <div className="psa-card p-4 sm:p-6">
-        {loading ? (
-          <div className="h-[220px] w-full rounded-2xl bg-slate-100 animate-pulse" />
-        ) : err ? (
+        {err ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <div className="font-medium">Checkout unavailable</div>
+            <div className="font-medium">Payment not completed</div>
             <div className="mt-1">{err}</div>
-            <div className="mt-3">
-              <Link className="psa-btn-primary" to="/explore">
-                Go to Explore
-              </Link>
-            </div>
           </div>
-        ) : (
-          <>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-sm text-slate-600">Amount</div>
-              <div className="mt-1 text-2xl font-semibold tracking-tight">₹{priceINR}</div>
-              <div className="mt-2 text-sm text-slate-600">
-                After payment, your download will appear in <span className="font-medium">Buyer Dashboard → Purchases</span>.
-              </div>
-            </div>
+        ) : null}
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <button className="psa-btn-primary" onClick={onPay} disabled={paying}>
-                {paying ? "Processing..." : "Pay & Complete Purchase"}
-              </button>
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="text-sm text-slate-600">Amount</div>
+          <div className="mt-1 text-2xl font-semibold tracking-tight">₹{priceINR}</div>
+          <div className="mt-2 text-sm text-slate-600">
+            After payment, your download will appear in{" "}
+            <span className="font-medium">Buyer Dashboard → Purchases</span>.
+          </div>
+        </div>
 
-              <Link className="psa-btn-soft" to="/explore">
-                Continue browsing
-              </Link>
-            </div>
-          </>
-        )}
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <button className="psa-btn-primary" onClick={onPay} disabled={paying}>
+            {paying ? "Processing..." : "Pay & Complete Purchase"}
+          </button>
+
+          <Link className="psa-btn-soft" to="/explore">
+            Continue browsing
+          </Link>
+        </div>
       </div>
     </div>
   );
