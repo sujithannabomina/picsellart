@@ -1,4 +1,5 @@
-// FILE PATH: src/pages/Checkout.jsx
+src/pages/Checkout.jsx
+
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -6,7 +7,12 @@ import { recordPurchase } from "../utils/purchases";
 import { storage } from "../firebase";
 import { getDownloadURL, ref } from "firebase/storage";
 
-function safeDecode(value, times = 3) {
+// IMPORTANT:
+// - Checkout is URL-driven (no location.state required).
+// - Uses: /checkout?type=sample&id=<something>
+// - Production safety: if Firebase Storage URL fails, fallback to hosted /images/<file>.
+
+function safeDecode(value, times = 2) {
   let v = value || "";
   for (let i = 0; i < times; i++) {
     try {
@@ -20,6 +26,11 @@ function safeDecode(value, times = 3) {
   return v;
 }
 
+function isImageFileName(name) {
+  const n = (name || "").toLowerCase();
+  return n.endsWith(".jpg") || n.endsWith(".jpeg") || n.endsWith(".png") || n.endsWith(".webp");
+}
+
 export default function Checkout() {
   const { user, booting } = useAuth();
   const nav = useNavigate();
@@ -29,28 +40,38 @@ export default function Checkout() {
   const type = sp.get("type") || "sample";
   const rawId = sp.get("id") || "";
 
-  const decodedId = useMemo(() => safeDecode(rawId, 5), [rawId]);
+  const decodedId = useMemo(() => safeDecode(rawId, 3), [rawId]);
 
-  // /checkout?type=sample&id=sample-<encodedStoragePathOrFilename>
+  // Explore generates:
+  // id = sample-<encodeURIComponent("public/images/sampleX.jpg")>
   const storagePath = useMemo(() => {
     if (!decodedId) return "";
+
     const v = decodedId.startsWith("sample-") ? decodedId.replace("sample-", "") : decodedId;
-    const vv = safeDecode(v, 5);
+    const vv = safeDecode(v, 3);
 
-    if (
-      vv.endsWith(".jpg") ||
-      vv.endsWith(".jpeg") ||
-      vv.endsWith(".png") ||
-      vv.endsWith(".webp")
-    ) {
-      return `public/images/${vv}`;
-    }
+    // If user directly passed filename like sample1.jpg
+    if (isImageFileName(vv)) return `public/images/${vv}`;
 
+    // If user passed full storage path already
     return vv;
   }, [decodedId]);
 
+  const fileName = useMemo(() => {
+    if (!storagePath) return "";
+    const parts = storagePath.split("/");
+    return parts[parts.length - 1] || "";
+  }, [storagePath]);
+
+  const hostedFallbackUrl = useMemo(() => {
+    // Vite public folder serves /images/<file> if your file is in /public/images/<file>
+    if (!fileName) return "";
+    return `/images/${fileName}`;
+  }, [fileName]);
+
   const currentCheckoutUrl = useMemo(() => `/checkout${location.search}`, [location.search]);
 
+  // If not logged in, redirect to buyer login with safe "next"
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
@@ -58,28 +79,63 @@ export default function Checkout() {
     }
   }, [booting, user, nav, currentCheckoutUrl]);
 
+  const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [err, setErr] = useState("");
+  const [downloadUrl, setDownloadUrl] = useState("");
 
-  // IMPORTANT CHANGE:
-  // ✅ Do NOT block checkout because downloadURL failed.
-  // We fetch download URL only AFTER successful payment (best effort).
+  // Load URL (Firebase Storage first; if it fails, fallback to hosted file)
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      if (!storagePath) {
+        setErr("Invalid checkout link. Please go back and try again.");
+        setLoading(false);
+        return;
+      }
+
+      setErr("");
+      setLoading(true);
+
+      // 1) Try Firebase Storage URL
+      try {
+        const url = await getDownloadURL(ref(storage, storagePath));
+        if (alive) {
+          setDownloadUrl(url);
+          setLoading(false);
+        }
+        return;
+      } catch {
+        // ignore -> fallback below
+      }
+
+      // 2) Fallback to hosted public file (prevents “Checkout unavailable”)
+      if (hostedFallbackUrl) {
+        if (alive) {
+          setDownloadUrl(hostedFallbackUrl);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // 3) If nothing works
+      if (alive) {
+        setErr("Unable to load this item right now.");
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [storagePath, hostedFallbackUrl]);
+
+  // Stable test price (you can later map by Firestore photo docs)
   const priceINR = useMemo(() => {
     if (type === "sample") return 149;
     return 149;
   }, [type]);
-
-  const loadRazorpaySdk = async () => {
-    const ok = await new Promise((resolve) => {
-      if (window.Razorpay) return resolve(true);
-      const s = document.createElement("script");
-      s.src = "https://checkout.razorpay.com/v1/checkout.js";
-      s.onload = () => resolve(true);
-      s.onerror = () => resolve(false);
-      document.body.appendChild(s);
-    });
-    return ok;
-  };
 
   const onPay = async () => {
     setErr("");
@@ -87,77 +143,57 @@ export default function Checkout() {
 
     try {
       if (!user?.uid) throw new Error("Please login again.");
-      if (!storagePath) throw new Error("Invalid checkout link. Please go back and try again.");
+      if (!downloadUrl) throw new Error("Item is not ready.");
 
-      const ok = await loadRazorpaySdk();
+      // Load Razorpay SDK
+      const ok = await new Promise((resolve) => {
+        if (window.Razorpay) return resolve(true);
+        const s = document.createElement("script");
+        s.src = "https://checkout.razorpay.com/v1/checkout.js";
+        s.onload = () => resolve(true);
+        s.onerror = () => resolve(false);
+        document.body.appendChild(s);
+      });
       if (!ok) throw new Error("Payment SDK failed to load. Please disable adblock and retry.");
 
-      const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY || "";
-      if (!key) throw new Error("Missing Razorpay key. Set VITE_RAZORPAY_KEY_ID in env vars.");
+      const key =
+        import.meta.env.VITE_RAZORPAY_KEY_ID ||
+        import.meta.env.VITE_RAZORPAY_KEY ||
+        "";
 
-      // ✅ Create order on server (production-safe)
-      const orderRes = await fetch("/api/razorpay/create-order", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amountINR: priceINR,
-          notes: {
-            purpose: "buyer_purchase",
-            buyerUid: user.uid,
-            photoId: decodedId || "",
-            storagePath,
-            type,
-          },
-        }),
-      });
+      if (!key) throw new Error("Missing Razorpay key. Set VITE_RAZORPAY_KEY_ID in your hosting env vars.");
 
-      let orderData = {};
-      try {
-        orderData = await orderRes.json();
-      } catch {
-        orderData = {};
-      }
-
-      if (!orderRes.ok) {
-        throw new Error(orderData?.error || "Unable to start payment. Check server keys.");
-      }
-
-      const { orderId, amount, currency } = orderData;
-
+      // Open payment (client-only test flow)
       const paymentInfo = await new Promise((resolve, reject) => {
         const rzp = new window.Razorpay({
           key,
-          amount,
-          currency,
-          order_id: orderId,
+          amount: priceINR * 100,
+          currency: "INR",
           name: "PicSellArt",
           description: "Photo Purchase",
           handler: (response) => resolve(response),
-          modal: { ondismiss: () => reject(new Error("Payment cancelled")) },
+          modal: { ondismiss: () => reject(new Error("Payment cancelled")) }
         });
         rzp.open();
       });
 
-      // ✅ Try to get download URL after payment (best effort)
-      let downloadUrl = "";
-      try {
-        downloadUrl = await getDownloadURL(ref(storage, storagePath));
-      } catch {
-        downloadUrl = "";
-      }
+      // Record purchase in Firestore
+      await recordPurchase(
+        user.uid,
+        {
+          id: decodedId || storagePath,
+          fileName: fileName || "photo",
+          name: "Photo",
+          price: priceINR,
+          url: downloadUrl,
+          originalUrl: downloadUrl
+        },
+        paymentInfo
+      );
 
-      // ✅ Record purchase (NOW allowed by rules once you deploy)
-      await recordPurchase(user.uid, {
-        id: decodedId || storagePath,
-        fileName: storagePath.split("/").pop() || "photo",
-        name: "Photo",
-        price: priceINR,
-        storagePath,
-        downloadUrl, // may be empty; dashboard can fetch later
-      }, paymentInfo);
-
+      // Go to Buyer Dashboard purchases
       nav("/buyer-dashboard?tab=purchases&msg=Purchase%20successful.%20Your%20download%20is%20ready.", {
-        replace: true,
+        replace: true
       });
     } catch (e) {
       setErr(e?.message || "Payment failed. Please try again.");
@@ -166,6 +202,7 @@ export default function Checkout() {
     }
   };
 
+  // Boot/loading shell (prevents white screens)
   if (booting) {
     return (
       <div className="psa-container">
@@ -190,31 +227,40 @@ export default function Checkout() {
       </div>
 
       <div className="psa-card p-4 sm:p-6">
-        {err ? (
+        {loading ? (
+          <div className="h-[220px] w-full rounded-2xl bg-slate-100 animate-pulse" />
+        ) : err ? (
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <div className="font-medium">Payment not completed</div>
+            <div className="font-medium">Checkout unavailable</div>
             <div className="mt-1">{err}</div>
+            <div className="mt-3">
+              <Link className="psa-btn-primary" to="/explore">
+                Go to Explore
+              </Link>
+            </div>
           </div>
-        ) : null}
+        ) : (
+          <>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-sm text-slate-600">Amount</div>
+              <div className="mt-1 text-2xl font-semibold tracking-tight">₹{priceINR}</div>
+              <div className="mt-2 text-sm text-slate-600">
+                After payment, your download will appear in{" "}
+                <span className="font-medium">Buyer Dashboard → Purchases</span>.
+              </div>
+            </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="text-sm text-slate-600">Amount</div>
-          <div className="mt-1 text-2xl font-semibold tracking-tight">₹{priceINR}</div>
-          <div className="mt-2 text-sm text-slate-600">
-            After payment, your download will appear in{" "}
-            <span className="font-medium">Buyer Dashboard → Purchases</span>.
-          </div>
-        </div>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <button className="psa-btn-primary" onClick={onPay} disabled={paying}>
+                {paying ? "Processing..." : "Pay & Complete Purchase"}
+              </button>
 
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <button className="psa-btn-primary" onClick={onPay} disabled={paying}>
-            {paying ? "Processing..." : "Pay & Complete Purchase"}
-          </button>
-
-          <Link className="psa-btn-soft" to="/explore">
-            Continue browsing
-          </Link>
-        </div>
+              <Link className="psa-btn-soft" to="/explore">
+                Continue browsing
+              </Link>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
