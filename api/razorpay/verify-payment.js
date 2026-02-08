@@ -5,24 +5,30 @@ module.exports = async (req, res) => {
   try {
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const key_secret = process.env.RAZORPAY_KEY_SECRET;
-    if (!key_secret) return res.status(500).json({ error: "Missing RAZORPAY_KEY_SECRET" });
+    const secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!secret) return res.status(500).json({ error: "Missing Razorpay secret on server" });
 
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body || {};
+    const {
+      buyerUid,
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature,
+    } = req.body || {};
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ error: "Missing payment fields" });
-    }
+    if (!buyerUid) return res.status(400).json({ error: "Missing buyerUid" });
+    if (!razorpay_order_id) return res.status(400).json({ error: "Missing order id" });
+    if (!razorpay_payment_id) return res.status(400).json({ error: "Missing payment id" });
+    if (!razorpay_signature) return res.status(400).json({ error: "Missing signature" });
 
-    const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-    const expected = crypto.createHmac("sha256", key_secret).update(body).digest("hex");
+    const payload = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expected = crypto.createHmac("sha256", secret).update(payload).digest("hex");
 
-    if (expected !== razorpay_signature) {
-      return res.status(400).json({ error: "Invalid signature" });
-    }
+    const verified = expected === razorpay_signature;
 
-    return res.status(200).json({ ok: true });
+    if (!verified) return res.status(400).json({ verified: false, error: "Invalid signature" });
+
+    return res.status(200).json({ verified: true });
   } catch (e) {
-    return res.status(500).json({ error: e?.message || "Verify error" });
+    return res.status(500).json({ error: e?.message || "Server error" });
   }
 };

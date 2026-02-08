@@ -14,11 +14,13 @@ service cloud.firestore {
     /*******************************
      * Public, read-only collections
      *******************************/
+    // Site config, plans catalog, etc.
     match /config/{doc} {
       allow read: if true;
       allow write: if false;
     }
 
+    // Public photo metadata (if you use it later). Kept read-only from client.
     match /photos/{photoId} {
       allow read: if resource.data.visibility == "public";
       allow create, update, delete: if false;
@@ -30,35 +32,56 @@ service cloud.firestore {
     }
 
     /*******************************
-     * User profile (per-user access)
+     * Buyer profile (per-buyer access)
+     * Matches your code: doc(db, "buyers", uid)
      *******************************/
-    match /users/{uid} {
+    match /buyers/{uid} {
       allow read: if isOwner(uid);
 
-      allow update: if isOwner(uid)
-        && request.resource.data.keys().hasOnly(
-          ['displayName', 'photoURL', 'phone', 'country', 'updatedAt']
-        )
-        && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['displayName','photoURL','phone','country','updatedAt']);
-
+      // Create minimal buyer doc on first login (client)
       allow create: if isOwner(uid)
-        && !('role' in request.resource.data)
-        && !('plan' in request.resource.data)
-        && !('planExpiresAt' in request.resource.data)
-        && !('uploadsUsed' in request.resource.data);
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'email',
+          'name',
+          'photoURL',
+          'role',
+          'createdAt',
+          'updatedAt'
+        ])
+        && request.resource.data.role == "buyer";
+
+      // Allow only safe updates from client
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).changedKeys()
+          .hasOnly(['updatedAt', 'name', 'photoURL']);
 
       allow delete: if false;
     }
 
+    /*******************************
+     * Seller profile (client read for “block buyer if seller”)
+     * Your BuyerLogin checks sellers/{uid}
+     *******************************/
+    match /sellers/{uid} {
+      // BuyerLogin reads this doc to block seller accounts from buyer login
+      allow read: if signedIn();
+
+      // Do NOT allow client writes here (your seller onboarding writes from client,
+      // but for strict production you should move seller writes to server later).
+      // For now, keep locked to prevent abuse.
+      allow create, update, delete: if false;
+    }
+
     /*****************************************
-     * Purchases (BUYER) — this was missing ✅
+     * Purchases (BUYER)
+     * Matches your code: addDoc(collection(db,"purchases"), {...})
      *****************************************/
     match /purchases/{purchaseId} {
-      // Buyer can read their own purchases
+      // Buyer can read only their own purchases
       allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
 
-      // Buyer can create only for themselves
+      // Buyer can create only for themselves and only allowed fields
       allow create: if signedIn()
         && request.resource.data.buyerUid == request.auth.uid
         && request.resource.data.keys().hasOnly([
@@ -74,12 +97,11 @@ service cloud.firestore {
           'razorpay'
         ]);
 
-      // No edits/deletes from client
       allow update, delete: if false;
     }
 
     /*****************************************
-     * Payments & subscriptions (server-only)
+     * Payments / orders / subscriptions (server-only)
      *****************************************/
     match /payments/{id} {
       allow read: if signedIn() && resource.data.userId == request.auth.uid;
@@ -96,6 +118,9 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    /*********************************
+     * Fallback: deny everything else
+     *********************************/
     match /{document=**} {
       allow read, write: if false;
     }

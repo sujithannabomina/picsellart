@@ -5,14 +5,11 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 
-// Allow only safe buyer redirect targets (prevents random /refunds and weird states)
+// Allow only safe buyer redirect targets
 function sanitizeNext(next) {
   if (!next || typeof next !== "string") return "/buyer-dashboard";
-
-  // Only allow internal paths
   if (!next.startsWith("/")) return "/buyer-dashboard";
 
-  // Allow buyer flows and checkout flows only
   const allowPrefixes = ["/checkout", "/buyer-dashboard", "/explore", "/photo/", "/view/"];
   const ok = allowPrefixes.some((p) => next === p || next.startsWith(p));
   return ok ? next : "/buyer-dashboard";
@@ -31,11 +28,11 @@ export default function BuyerLogin() {
     return sanitizeNext(fromState || fromQuery || "/buyer-dashboard");
   }, [location]);
 
-  // If already logged in, go straight to dashboard (stable behavior)
+  // ✅ FIX: If already logged in, go to the nextUrl (NOT always dashboard)
   useEffect(() => {
     if (booting) return;
-    if (user?.uid) navigate("/buyer-dashboard", { replace: true });
-  }, [booting, user, navigate]);
+    if (user?.uid) navigate(nextUrl, { replace: true });
+  }, [booting, user, navigate, nextUrl]);
 
   const handleLogin = async () => {
     setErr("");
@@ -54,7 +51,7 @@ export default function BuyerLogin() {
 
       await ensureBuyerProfile(u);
 
-      // Always land on a safe target
+      // ✅ Always land on safe target (checkout or dashboard)
       navigate(nextUrl, { replace: true });
     } catch (e) {
       setErr(e?.message || "Login failed. Please try again.");
@@ -63,7 +60,6 @@ export default function BuyerLogin() {
     }
   };
 
-  // Keep your UI exactly
   return (
     <div className="psa-container">
       <div className="mx-auto max-w-[720px]">
@@ -74,12 +70,18 @@ export default function BuyerLogin() {
           </p>
 
           <div className="mt-6">
-            <button className="psa-btn-primary w-full py-3" onClick={handleLogin} disabled={loading || booting}>
+            <button
+              className="psa-btn-primary w-full py-3"
+              onClick={handleLogin}
+              disabled={loading || booting}
+            >
               {booting ? "Loading..." : loading ? "Signing in..." : "Continue with Google"}
             </button>
 
             {err ? (
-              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>
+              <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                {err}
+              </div>
             ) : null}
 
             <div className="mt-6 text-sm text-slate-600">

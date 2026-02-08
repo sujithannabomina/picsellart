@@ -47,7 +47,6 @@ export function AuthProvider({ children }) {
     const ref = doc(db, "buyers", u.uid);
     const snap = await getDoc(ref);
 
-    // Create once. Keep minimal fields (production safe).
     if (!snap.exists()) {
       await setDoc(
         ref,
@@ -63,12 +62,10 @@ export function AuthProvider({ children }) {
         { merge: true }
       );
     } else {
-      // Refresh updatedAt (cheap + helps debugging)
       await setDoc(ref, { updatedAt: serverTimestamp() }, { merge: true });
     }
   };
 
-  // -------- Seller helpers (needed to block buyer if seller exists) --------
   const getSellerDoc = async (uid) => {
     if (!uid) return null;
     const s = await getDoc(doc(db, "sellers", uid));
