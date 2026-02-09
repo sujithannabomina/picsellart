@@ -4,43 +4,70 @@ import { useAuth } from "../hooks/useAuth";
 import loadRazorpay from "../utils/loadRazorpay";
 import { recordPurchase } from "../utils/purchases";
 
-// Helper: build a "photo" object from query params
+// Decode repeatedly because your URL has %252F (double-encoded)
+function decodeRepeated(v, times = 3) {
+  let out = v || "";
+  for (let i = 0; i < times; i++) {
+    try {
+      const dec = decodeURIComponent(out);
+      if (dec === out) break;
+      out = dec;
+    } catch {
+      break;
+    }
+  }
+  return out;
+}
+
+// IMPORTANT: if price is missing in URL, we must still allow checkout.
+// Using your current common amount shown in UI: ₹149
+const FALLBACK_PRICE_INR = 149;
+
 function buildPhotoFromQuery(sp) {
   const type = sp.get("type") || "";
-  const id = sp.get("id") || "";
-  const price = Number(sp.get("price") || 0);
-  const name = sp.get("name") || "Photo";
+  const rawId = sp.get("id") || "";
+  const rawName = sp.get("name") || sp.get("title") || "Photo";
 
-  if (!type || !id || !Number.isFinite(price) || price <= 0) return null;
+  // price sometimes missing in your URL -> fallback
+  const priceParam = sp.get("price");
+  const price = Number(priceParam);
+  const finalPrice = Number.isFinite(price) && price > 0 ? price : FALLBACK_PRICE_INR;
 
-  // Your existing urls look like:
-  // /checkout?type=sample&id=sample-public%2Fimages%2Fsample1.jpg
-  // We'll convert to:
-  // preview path (public/images/...) and original path (Buyer/...)
+  if (!type || !rawId) return null;
+
+  const decodedId = decodeRepeated(rawId, 5);
+
+  // Normalize to something containing "public/images/<file>"
+  // Your id formats seen:
+  // - sample-public%252Fimages%252Fsample1.jpg  (=> sample-public/images/sample1.jpg)
+  // - public/images/sample1.jpg
+  const normalized = decodedId.includes("public/images/")
+    ? decodedId.slice(decodedId.indexOf("public/images/"))
+    : decodedId.replace(/^sample-/, ""); // removes "sample-" prefix if present
+
   let fileName = "";
-  let previewPath = "";
   let storagePath = "";
   let photoId = "";
+  let previewPath = "";
 
   if (type === "sample") {
-    // id may contain encoded "public/images/sampleX.jpg"
-    const decoded = decodeURIComponent(id);
-    // decoded example: "sample-public/images/sample1.jpg" or "public/images/sample1.jpg"
-    const normalized = decoded.includes("public/images/")
-      ? decoded.slice(decoded.indexOf("public/images/"))
-      : decoded;
-
     fileName = normalized.split("/").pop() || "";
+    if (!fileName) return null;
+
     previewPath = `public/images/${fileName}`;
-    storagePath = `Buyer/${fileName}`; // ORIGINALS stored here (private)
+
+    // ORIGINAL (paid) file location from your Firebase Storage screenshot:
+    // Buyer/ folder contains originals
+    storagePath = `Buyer/${fileName}`;
+
     photoId = `sample_${fileName}`;
   } else if (type === "seller") {
-    // For seller items your Explore/View must pass storagePath already OR encode it in id
-    const decoded = decodeURIComponent(id);
-    // expected: "sellers/<sellerUid>/<file>"
-    storagePath = decoded.startsWith("sellers/") ? decoded : "";
+    // expects id to be storage path like sellers/<uid>/<file>
+    const sellerPath = decodedId.startsWith("sellers/") ? decodedId : "";
+    if (!sellerPath) return null;
+
+    storagePath = sellerPath;
     fileName = storagePath.split("/").pop() || "";
-    previewPath = ""; // you already show watermarked preview in UI elsewhere
     photoId = `seller_${storagePath.replace(/\//g, "_")}`;
   } else {
     return null;
@@ -49,9 +76,9 @@ function buildPhotoFromQuery(sp) {
   return {
     id: photoId,
     type,
-    name,
-    displayName: name,
-    price,
+    name: rawName,
+    displayName: rawName,
+    price: finalPrice,
     fileName,
     previewPath,
     storagePath,
@@ -64,11 +91,10 @@ export default function Checkout() {
   const [sp] = useSearchParams();
 
   const photo = useMemo(() => buildPhotoFromQuery(sp), [sp]);
-
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // Guard: require buyer login
+  // Require buyer login
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
@@ -88,7 +114,7 @@ export default function Checkout() {
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      // 1) Create order on server
+      // Create Razorpay order (server)
       const orderRes = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -106,7 +132,6 @@ export default function Checkout() {
       const { orderId, amount, currency, keyId } = orderData;
       if (!orderId || !keyId) throw new Error("Order creation failed");
 
-      // 2) Open Razorpay Checkout (REAL payments supported by your live key)
       const rz = new window.Razorpay({
         key: keyId,
         amount,
@@ -118,10 +143,8 @@ export default function Checkout() {
           name: user.displayName || "",
           email: user.email || "",
         },
-        theme: { color: "#000000" },
         handler: async function (response) {
           try {
-            // 3) Verify payment on server + get signed download url
             const verifyRes = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -137,7 +160,6 @@ export default function Checkout() {
             const verifyData = await verifyRes.json().catch(() => ({}));
             if (!verifyRes.ok) throw new Error(verifyData?.error || "Payment verification failed");
 
-            // 4) Record purchase in Firestore (client side) for Buyer Dashboard
             await recordPurchase(
               user.uid,
               photo,
@@ -148,21 +170,18 @@ export default function Checkout() {
               verifyData.downloadUrl
             );
 
-            // 5) Go to buyer dashboard purchases tab
-            nav("/buyer-dashboard?tab=purchases&msg=" + encodeURIComponent("Payment successful. Download is ready."), {
-              replace: true,
-            });
+            nav(
+              "/buyer-dashboard?tab=purchases&msg=" +
+                encodeURIComponent("Payment successful. Download is ready."),
+              { replace: true }
+            );
           } catch (e) {
             setErr(e?.message || "Payment verification failed");
           } finally {
             setBusy(false);
           }
         },
-        modal: {
-          ondismiss: () => {
-            setBusy(false);
-          },
-        },
+        modal: { ondismiss: () => setBusy(false) },
       });
 
       rz.open();
@@ -172,7 +191,7 @@ export default function Checkout() {
     }
   };
 
-  // UI: keep your style (same layout class style)
+  // If parsing fails, show your same page (no UI style changes)
   if (!photo) {
     return (
       <div className="min-h-screen bg-white">
@@ -182,7 +201,10 @@ export default function Checkout() {
               <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
               <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
             </div>
-            <Link to="/explore" className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400">
+            <Link
+              to="/explore"
+              className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400"
+            >
               Back to Explore
             </Link>
           </div>
@@ -200,8 +222,6 @@ export default function Checkout() {
       </div>
     );
   }
-
-  const amountText = `₹${Number(photo.price || 0)}`;
 
   return (
     <div className="min-h-screen bg-white">
@@ -228,7 +248,7 @@ export default function Checkout() {
         <div className="mt-6 rounded-2xl border border-slate-200 p-6">
           <div className="rounded-2xl border border-slate-200 p-6">
             <div className="text-sm text-slate-600">Amount</div>
-            <div className="mt-2 text-3xl font-semibold tracking-tight">{amountText}</div>
+            <div className="mt-2 text-3xl font-semibold tracking-tight">₹{Number(photo.price || 0)}</div>
             <div className="mt-2 text-sm text-slate-600">
               After payment, your download will appear in Buyer Dashboard → Purchases.
             </div>
