@@ -1,29 +1,23 @@
+// FILE PATH: firestore.rules
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() {
-      return request.auth != null;
-    }
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
 
-    function isOwner(uid) {
-      return signedIn() && request.auth.uid == uid;
-    }
-
-    /*******************************
-     * Public, read-only collections
-     *******************************/
-    // Site config, plans catalog, etc.
+    // =========================
+    // Public read-only
+    // =========================
     match /config/{doc} {
       allow read: if true;
       allow write: if false;
     }
 
-    // Public photo metadata (if you use it later). Kept read-only from client.
     match /photos/{photoId} {
       allow read: if resource.data.visibility == "public";
-      allow create, update, delete: if false;
+      allow write: if false;
     }
 
     match /stats/{doc} {
@@ -31,96 +25,59 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    /*******************************
-     * Buyer profile (per-buyer access)
-     * Matches your code: doc(db, "buyers", uid)
-     *******************************/
+    // =========================
+    // Buyer profile (your app uses /buyers/{uid})
+    // =========================
     match /buyers/{uid} {
       allow read: if isOwner(uid);
 
-      // Create minimal buyer doc on first login (client)
       allow create: if isOwner(uid)
         && request.resource.data.keys().hasOnly([
-          'uid',
-          'email',
-          'name',
-          'photoURL',
-          'role',
-          'createdAt',
-          'updatedAt'
-        ])
-        && request.resource.data.role == "buyer";
+          'uid','email','name','photoURL','role','createdAt','updatedAt'
+        ]);
 
-      // Allow only safe updates from client
       allow update: if isOwner(uid)
         && request.resource.data.diff(resource.data).changedKeys()
-          .hasOnly(['updatedAt', 'name', 'photoURL']);
+            .hasOnly(['name','photoURL','updatedAt']);
 
       allow delete: if false;
     }
 
-    /*******************************
-     * Seller profile (client read for “block buyer if seller”)
-     * Your BuyerLogin checks sellers/{uid}
-     *******************************/
+    // =========================
+    // Seller docs (needed because SellerOnboarding writes from client)
+    // =========================
     match /sellers/{uid} {
-      // BuyerLogin reads this doc to block seller accounts from buyer login
-      allow read: if signedIn();
+      allow read: if isOwner(uid);
 
-      // Do NOT allow client writes here (your seller onboarding writes from client,
-      // but for strict production you should move seller writes to server later).
-      // For now, keep locked to prevent abuse.
-      allow create, update, delete: if false;
-    }
+      // Allow seller to create/update only their own doc, limited fields
+      allow create: if isOwner(uid);
 
-    /*****************************************
-     * Purchases (BUYER)
-     * Matches your code: addDoc(collection(db,"purchases"), {...})
-     *****************************************/
-    match /purchases/{purchaseId} {
-      // Buyer can read only their own purchases
-      allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
-
-      // Buyer can create only for themselves and only allowed fields
-      allow create: if signedIn()
-        && request.resource.data.buyerUid == request.auth.uid
-        && request.resource.data.keys().hasOnly([
-          'buyerUid',
-          'photoId',
-          'fileName',
-          'displayName',
-          'price',
-          'currency',
-          'storagePath',
-          'downloadUrl',
-          'createdAt',
-          'razorpay'
+      allow update: if isOwner(uid)
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'name','phone','upiId','status','planId','subscriptionId','photoURL','email','updatedAt','createdAt','uid'
         ]);
 
-      allow update, delete: if false;
+      allow delete: if false;
     }
 
-    /*****************************************
-     * Payments / orders / subscriptions (server-only)
-     *****************************************/
-    match /payments/{id} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+    // =========================
+    // Purchases (BUYER) — read-only for buyer.
+    // IMPORTANT: server writes purchases after verifying Razorpay signature.
+    // =========================
+    match /purchases/{purchaseId} {
+      allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
       allow create, update, delete: if false;
     }
 
-    match /orders/{id} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create, update, delete: if false;
-    }
+    // =========================
+    // Server-only (Admin SDK bypasses rules)
+    // =========================
+    match /razorpay_plans/{doc} { allow read, write: if false; }
+    match /subscriptions/{doc} { allow read, write: if false; }
+    match /orders/{doc} { allow read, write: if false; }
+    match /payments/{doc} { allow read, write: if false; }
 
-    match /subscriptions/{id} {
-      allow read: if signedIn() && resource.data.userId == request.auth.uid;
-      allow create, update, delete: if false;
-    }
-
-    /*********************************
-     * Fallback: deny everything else
-     *********************************/
+    // Deny everything else
     match /{document=**} {
       allow read, write: if false;
     }
