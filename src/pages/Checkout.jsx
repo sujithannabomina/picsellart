@@ -1,151 +1,111 @@
+// FILE PATH: src/pages/Checkout.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
+import { useLocation, useNavigate } from "react-router-dom";
 import loadRazorpay from "../utils/loadRazorpay";
-import { recordPurchase } from "../utils/purchases";
+import { useAuth } from "../hooks/useAuth";
 
-// Decode repeatedly because your URL has %252F (double-encoded)
-function decodeRepeated(v, times = 3) {
-  let out = v || "";
-  for (let i = 0; i < times; i++) {
-    try {
-      const dec = decodeURIComponent(out);
-      if (dec === out) break;
-      out = dec;
-    } catch {
-      break;
-    }
-  }
-  return out;
-}
-
-// IMPORTANT: if price is missing in URL, we must still allow checkout.
-// Using your current common amount shown in UI: ₹149
-const FALLBACK_PRICE_INR = 149;
-
-function buildPhotoFromQuery(sp) {
-  const type = sp.get("type") || "";
-  const rawId = sp.get("id") || "";
-  const rawName = sp.get("name") || sp.get("title") || "Photo";
-
-  // price sometimes missing in your URL -> fallback
-  const priceParam = sp.get("price");
-  const price = Number(priceParam);
-  const finalPrice = Number.isFinite(price) && price > 0 ? price : FALLBACK_PRICE_INR;
-
-  if (!type || !rawId) return null;
-
-  const decodedId = decodeRepeated(rawId, 5);
-
-  // Normalize to something containing "public/images/<file>"
-  // Your id formats seen:
-  // - sample-public%252Fimages%252Fsample1.jpg  (=> sample-public/images/sample1.jpg)
-  // - public/images/sample1.jpg
-  const normalized = decodedId.includes("public/images/")
-    ? decodedId.slice(decodedId.indexOf("public/images/"))
-    : decodedId.replace(/^sample-/, ""); // removes "sample-" prefix if present
-
-  let fileName = "";
-  let storagePath = "";
-  let photoId = "";
-  let previewPath = "";
-
-  if (type === "sample") {
-    fileName = normalized.split("/").pop() || "";
-    if (!fileName) return null;
-
-    previewPath = `public/images/${fileName}`;
-
-    // ORIGINAL (paid) file location from your Firebase Storage screenshot:
-    // Buyer/ folder contains originals
-    storagePath = `Buyer/${fileName}`;
-
-    photoId = `sample_${fileName}`;
-  } else if (type === "seller") {
-    // expects id to be storage path like sellers/<uid>/<file>
-    const sellerPath = decodedId.startsWith("sellers/") ? decodedId : "";
-    if (!sellerPath) return null;
-
-    storagePath = sellerPath;
-    fileName = storagePath.split("/").pop() || "";
-    photoId = `seller_${storagePath.replace(/\//g, "_")}`;
-  } else {
-    return null;
-  }
-
-  return {
-    id: photoId,
-    type,
-    name: rawName,
-    displayName: rawName,
-    price: finalPrice,
-    fileName,
-    previewPath,
-    storagePath,
-  };
+function safeNumber(n, fallback = 0) {
+  const x = Number(n);
+  return Number.isFinite(x) ? x : fallback;
 }
 
 export default function Checkout() {
   const { user, booting } = useAuth();
   const nav = useNavigate();
-  const [sp] = useSearchParams();
+  const location = useLocation();
 
-  const photo = useMemo(() => buildPhotoFromQuery(sp), [sp]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // Require buyer login
+  // Read query params
+  const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const type = params.get("type") || ""; // sample | seller
+  const id = params.get("id") || "";     // your existing id/url encoding
+  const price = safeNumber(params.get("price"), 149); // fallback if your current flow doesn’t pass price
+  const name = params.get("name") || "Photo";
+
+  // Require login
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
-      const next = `/checkout?${sp.toString()}`;
-      nav(`/buyer-login?next=${encodeURIComponent(next)}`, { replace: true });
+      nav(`/buyer-login?next=${encodeURIComponent(location.pathname + location.search)}`, { replace: true });
     }
-  }, [booting, user, nav, sp]);
+  }, [booting, user, nav, location.pathname, location.search]);
 
-  const payNow = async () => {
+  // Build a “photo object” compatible with your purchases.js and dashboards
+  // IMPORTANT: This does NOT change your UI; it just standardizes data to backend.
+  const photo = useMemo(() => {
+    // Your existing checkout URLs look like: id=sample-public%2Fimages%2Fsample1.jpg (or similar)
+    // We store that as storagePath so later rules/logic can use it.
+    const storagePath = decodeURIComponent(id || "");
+    const fileName = storagePath.split("/").pop() || "";
+    return {
+      id: storagePath || id || "unknown",
+      fileName,
+      displayName: name,
+      price,
+      storagePath,
+      // If your app already has a downloadUrl in query, keep it (optional)
+      downloadUrl: params.get("url") ? decodeURIComponent(params.get("url")) : "",
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, name, price, type]);
+
+  const amountINR = safeNumber(photo.price, 149);
+
+  const startPayment = async () => {
     setErr("");
     setBusy(true);
 
     try {
       if (!user?.uid) throw new Error("Please login first.");
-      if (!photo) throw new Error("Checkout unavailable. Unable to load this item right now.");
 
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      // Create Razorpay order (server)
-      const orderRes = await fetch("/api/razorpay/create-order", {
+      const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
+      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID");
+
+      // 1) Create order on server
+      const r1 = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           buyerUid: user.uid,
-          amountINR: Number(photo.price || 0),
-          photoId: photo.id,
-          title: photo.displayName || "PicSellArt Photo",
+          amountINR,
+          photo,
         }),
       });
 
-      const orderData = await orderRes.json().catch(() => ({}));
-      if (!orderRes.ok) throw new Error(orderData?.error || "Order creation failed");
+      const d1 = await r1.json().catch(() => ({}));
+      if (!r1.ok) throw new Error(d1?.error || "Order creation failed");
 
-      const { orderId, amount, currency, keyId } = orderData;
-      if (!orderId || !keyId) throw new Error("Order creation failed");
+      const { orderId, amount, currency } = d1;
+      if (!orderId) throw new Error("Order creation failed");
 
+      // 2) Open Razorpay checkout
       const rz = new window.Razorpay({
-        key: keyId,
+        key,
         amount,
-        currency: currency || "INR",
+        currency,
         name: "PicSellArt",
-        description: photo.displayName || "Photo purchase",
+        description: "Photo Purchase",
         order_id: orderId,
         prefill: {
           name: user.displayName || "",
           email: user.email || "",
         },
+        notes: {
+          purpose: "buyer_purchase",
+          buyerUid: user.uid,
+          photoId: photo.id,
+          storagePath: photo.storagePath || "",
+        },
+        theme: { color: "#2563eb" }, // matches your primary button blue
         handler: async function (response) {
           try {
-            const verifyRes = await fetch("/api/razorpay/verify-payment", {
+            // 3) Verify signature on server (production requirement)
+            const r2 = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -157,31 +117,24 @@ export default function Checkout() {
               }),
             });
 
-            const verifyData = await verifyRes.json().catch(() => ({}));
-            if (!verifyRes.ok) throw new Error(verifyData?.error || "Payment verification failed");
+            const d2 = await r2.json().catch(() => ({}));
+            if (!r2.ok) throw new Error(d2?.error || "Payment verification failed");
 
-            await recordPurchase(
-              user.uid,
-              photo,
-              {
-                order_id: response.razorpay_order_id,
-                payment_id: response.razorpay_payment_id,
-              },
-              verifyData.downloadUrl
-            );
-
-            nav(
-              "/buyer-dashboard?tab=purchases&msg=" +
-                encodeURIComponent("Payment successful. Download is ready."),
-              { replace: true }
-            );
+            // 4) Go to Buyer Dashboard purchases tab
+            nav("/buyer-dashboard?tab=purchases&msg=" + encodeURIComponent("Payment successful. Your purchase is ready."), {
+              replace: true,
+            });
           } catch (e) {
             setErr(e?.message || "Payment verification failed");
           } finally {
             setBusy(false);
           }
         },
-        modal: { ondismiss: () => setBusy(false) },
+        modal: {
+          ondismiss: () => {
+            setBusy(false);
+          },
+        },
       });
 
       rz.open();
@@ -191,52 +144,22 @@ export default function Checkout() {
     }
   };
 
-  // If parsing fails, show your same page (no UI style changes)
-  if (!photo) {
-    return (
-      <div className="min-h-screen bg-white">
-        <div className="mx-auto max-w-5xl px-4 py-10">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
-              <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
-            </div>
-            <Link
-              to="/explore"
-              className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400"
-            >
-              Back to Explore
-            </Link>
-          </div>
-
-          <div className="mt-8 rounded-2xl border border-slate-200 p-6">
-            <div className="font-medium">Checkout unavailable</div>
-            <div className="mt-1 text-sm text-slate-600">Unable to load this item right now.</div>
-            <div className="mt-4">
-              <Link className="psa-btn-primary rounded-2xl px-4 py-2 text-sm" to="/explore">
-                Go to Explore
-              </Link>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+  // UI stays same as your screenshots
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-5xl px-4 py-10">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
             <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
           </div>
-          <Link
-            to="/explore"
-            className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400"
+          <button
+            className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
+            onClick={() => nav("/explore")}
+            type="button"
           >
             Back to Explore
-          </Link>
+          </button>
         </div>
 
         {err ? (
@@ -245,10 +168,10 @@ export default function Checkout() {
           </div>
         ) : null}
 
-        <div className="mt-6 rounded-2xl border border-slate-200 p-6">
+        <div className="mt-8 rounded-2xl border border-slate-200 p-6">
           <div className="rounded-2xl border border-slate-200 p-6">
             <div className="text-sm text-slate-600">Amount</div>
-            <div className="mt-2 text-3xl font-semibold tracking-tight">₹{Number(photo.price || 0)}</div>
+            <div className="mt-2 text-3xl font-semibold">₹{amountINR}</div>
             <div className="mt-2 text-sm text-slate-600">
               After payment, your download will appear in Buyer Dashboard → Purchases.
             </div>
@@ -256,20 +179,21 @@ export default function Checkout() {
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <button
-              type="button"
-              onClick={payNow}
+              onClick={startPayment}
               disabled={busy || booting}
               className="psa-btn-primary rounded-2xl px-6 py-3 text-sm disabled:opacity-60"
+              type="button"
             >
               {busy ? "Processing..." : "Pay & Complete Purchase"}
             </button>
 
-            <Link
-              to="/explore"
+            <button
+              onClick={() => nav("/explore")}
               className="psa-btn-soft rounded-2xl border border-slate-200 px-6 py-3 text-sm hover:border-slate-400"
+              type="button"
             >
               Continue browsing
-            </Link>
+            </button>
           </div>
         </div>
       </div>
