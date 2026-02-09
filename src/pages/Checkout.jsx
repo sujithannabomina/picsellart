@@ -1,152 +1,162 @@
-// FILE PATH: src/pages/Checkout.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import loadRazorpay from "../utils/loadRazorpay";
+import { recordPurchase } from "../utils/purchases";
 
-function safeDecode(v) {
-  if (!v) return "";
-  try {
-    // handle double-encoding
-    const once = decodeURIComponent(v);
-    return decodeURIComponent(once);
-  } catch {
-    try {
-      return decodeURIComponent(v);
-    } catch {
-      return v;
-    }
-  }
-}
+// Helper: build a "photo" object from query params
+function buildPhotoFromQuery(sp) {
+  const type = sp.get("type") || "";
+  const id = sp.get("id") || "";
+  const price = Number(sp.get("price") || 0);
+  const name = sp.get("name") || "Photo";
 
-// Build photo object from your query params.
-// You can extend this later for seller items from Firestore.
-function buildPhotoFromQuery(type, id) {
-  if (!type || !id) return null;
+  if (!type || !id || !Number.isFinite(price) || price <= 0) return null;
 
-  // SAMPLE FLOW (your current URLs look like: id=sample-public%2Fimages%2Fsample12.jpg)
+  // Your existing urls look like:
+  // /checkout?type=sample&id=sample-public%2Fimages%2Fsample1.jpg
+  // We'll convert to:
+  // preview path (public/images/...) and original path (Buyer/...)
+  let fileName = "";
+  let previewPath = "";
+  let storagePath = "";
+  let photoId = "";
+
   if (type === "sample") {
-    const decoded = safeDecode(id);
+    // id may contain encoded "public/images/sampleX.jpg"
+    const decoded = decodeURIComponent(id);
+    // decoded example: "sample-public/images/sample1.jpg" or "public/images/sample1.jpg"
+    const normalized = decoded.includes("public/images/")
+      ? decoded.slice(decoded.indexOf("public/images/"))
+      : decoded;
 
-    // accepted formats:
-    // - "public/images/sample12.jpg"
-    // - "sample-public/images/sample12.jpg"
-    const path = decoded.startsWith("public/")
-      ? decoded
-      : decoded.includes("public/images/")
-        ? decoded.slice(decoded.indexOf("public/images/"))
-        : decoded.replace(/^sample-/, "");
-
-    if (!path || !path.startsWith("public/images/")) return null;
-
-    // your UI showed ₹149 in screenshots
-    return {
-      id: `sample-${path}`,
-      storagePath: path,
-      fileName: path.split("/").pop(),
-      displayName: "Sample Photo",
-      price: 149,
-      currency: "INR",
-    };
+    fileName = normalized.split("/").pop() || "";
+    previewPath = `public/images/${fileName}`;
+    storagePath = `Buyer/${fileName}`; // ORIGINALS stored here (private)
+    photoId = `sample_${fileName}`;
+  } else if (type === "seller") {
+    // For seller items your Explore/View must pass storagePath already OR encode it in id
+    const decoded = decodeURIComponent(id);
+    // expected: "sellers/<sellerUid>/<file>"
+    storagePath = decoded.startsWith("sellers/") ? decoded : "";
+    fileName = storagePath.split("/").pop() || "";
+    previewPath = ""; // you already show watermarked preview in UI elsewhere
+    photoId = `seller_${storagePath.replace(/\//g, "_")}`;
+  } else {
+    return null;
   }
 
-  // If you add seller checkout later, handle type === "seller" here
-  return null;
+  return {
+    id: photoId,
+    type,
+    name,
+    displayName: name,
+    price,
+    fileName,
+    previewPath,
+    storagePath,
+  };
 }
 
 export default function Checkout() {
   const { user, booting } = useAuth();
-  const [sp] = useSearchParams();
   const nav = useNavigate();
+  const [sp] = useSearchParams();
+
+  const photo = useMemo(() => buildPhotoFromQuery(sp), [sp]);
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  const type = sp.get("type") || "";
-  const id = sp.get("id") || "";
-
-  const photo = useMemo(() => buildPhotoFromQuery(type, id), [type, id]);
-
-  // Hard guard: must be buyer logged in
+  // Guard: require buyer login
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
-      const next = `/checkout?type=${encodeURIComponent(type)}&id=${encodeURIComponent(id)}`;
+      const next = `/checkout?${sp.toString()}`;
       nav(`/buyer-login?next=${encodeURIComponent(next)}`, { replace: true });
     }
-  }, [booting, user, nav, type, id]);
+  }, [booting, user, nav, sp]);
 
   const payNow = async () => {
     setErr("");
     setBusy(true);
 
     try {
-      if (!user?.uid) throw new Error("Please login as buyer.");
-      if (!photo) throw new Error("Unable to load this item right now.");
+      if (!user?.uid) throw new Error("Please login first.");
+      if (!photo) throw new Error("Checkout unavailable. Unable to load this item right now.");
 
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
-      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in env vars.");
-
       // 1) Create order on server
-      const res = await fetch("/api/razorpay/create-order", {
+      const orderRes = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          buyerUid: user.uid,
           amountINR: Number(photo.price || 0),
-          receipt: `buyer_${user.uid}_${Date.now()}`,
-          notes: {
-            purpose: "buyer_purchase",
-            buyerUid: user.uid,
-            photoId: photo.id,
-            storagePath: photo.storagePath,
-          },
+          photoId: photo.id,
+          title: photo.displayName || "PicSellArt Photo",
         }),
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || "Order creation failed");
+      const orderData = await orderRes.json().catch(() => ({}));
+      if (!orderRes.ok) throw new Error(orderData?.error || "Order creation failed");
 
-      // 2) Open Razorpay checkout
+      const { orderId, amount, currency, keyId } = orderData;
+      if (!orderId || !keyId) throw new Error("Order creation failed");
+
+      // 2) Open Razorpay Checkout (REAL payments supported by your live key)
       const rz = new window.Razorpay({
-        key,
-        order_id: data.orderId,
-        amount: data.amount,
-        currency: data.currency,
+        key: keyId,
+        amount,
+        currency: currency || "INR",
         name: "PicSellArt",
-        description: "Photo purchase",
+        description: photo.displayName || "Photo purchase",
+        order_id: orderId,
         prefill: {
           name: user.displayName || "",
           email: user.email || "",
         },
-        theme: { color: "#2563eb" }, // matches your blue buttons
+        theme: { color: "#000000" },
         handler: async function (response) {
-          // 3) Verify + write purchase server-side + get signed download URL
-          const vr = await fetch("/api/razorpay/verify-payment", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              buyerUid: user.uid,
-              photo: {
-                id: photo.id,
-                fileName: photo.fileName,
-                displayName: photo.displayName,
-                price: photo.price,
-                storagePath: photo.storagePath,
+          try {
+            // 3) Verify payment on server + get signed download url
+            const verifyRes = await fetch("/api/razorpay/verify-payment", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                buyerUid: user.uid,
+                photo,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyData = await verifyRes.json().catch(() => ({}));
+            if (!verifyRes.ok) throw new Error(verifyData?.error || "Payment verification failed");
+
+            // 4) Record purchase in Firestore (client side) for Buyer Dashboard
+            await recordPurchase(
+              user.uid,
+              photo,
+              {
+                order_id: response.razorpay_order_id,
+                payment_id: response.razorpay_payment_id,
               },
-              razorpay: response,
-            }),
-          });
+              verifyData.downloadUrl
+            );
 
-          const vdata = await vr.json().catch(() => ({}));
-          if (!vr.ok) throw new Error(vdata?.error || "Payment verification failed");
-
-          // 4) Send buyer to dashboard
-          nav("/buyer-dashboard?tab=purchases&msg=Payment%20successful.%20Your%20download%20is%20ready.", {
-            replace: true,
-          });
+            // 5) Go to buyer dashboard purchases tab
+            nav("/buyer-dashboard?tab=purchases&msg=" + encodeURIComponent("Payment successful. Download is ready."), {
+              replace: true,
+            });
+          } catch (e) {
+            setErr(e?.message || "Payment verification failed");
+          } finally {
+            setBusy(false);
+          }
         },
         modal: {
           ondismiss: () => {
@@ -157,12 +167,12 @@ export default function Checkout() {
 
       rz.open();
     } catch (e) {
-      setErr(e?.message || "Payment failed");
+      setErr(e?.message || "Order creation failed");
       setBusy(false);
     }
   };
 
-  // UI: keep same style you already use
+  // UI: keep your style (same layout class style)
   if (!photo) {
     return (
       <div className="min-h-screen bg-white">
@@ -172,13 +182,13 @@ export default function Checkout() {
               <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
               <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
             </div>
-            <Link to="/explore" className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400">
+            <Link to="/explore" className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400">
               Back to Explore
             </Link>
           </div>
 
           <div className="mt-8 rounded-2xl border border-slate-200 p-6">
-            <div className="font-semibold">Checkout unavailable</div>
+            <div className="font-medium">Checkout unavailable</div>
             <div className="mt-1 text-sm text-slate-600">Unable to load this item right now.</div>
             <div className="mt-4">
               <Link className="psa-btn-primary rounded-2xl px-4 py-2 text-sm" to="/explore">
@@ -191,6 +201,8 @@ export default function Checkout() {
     );
   }
 
+  const amountText = `₹${Number(photo.price || 0)}`;
+
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-5xl px-4 py-10">
@@ -199,7 +211,10 @@ export default function Checkout() {
             <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
             <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
           </div>
-          <Link to="/explore" className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400">
+          <Link
+            to="/explore"
+            className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400"
+          >
             Back to Explore
           </Link>
         </div>
@@ -210,27 +225,28 @@ export default function Checkout() {
           </div>
         ) : null}
 
-        <div className="mt-8 rounded-2xl border border-slate-200 p-6">
-          <div className="rounded-2xl border border-slate-200 p-5">
+        <div className="mt-6 rounded-2xl border border-slate-200 p-6">
+          <div className="rounded-2xl border border-slate-200 p-6">
             <div className="text-sm text-slate-600">Amount</div>
-            <div className="mt-1 text-2xl font-semibold">₹{Number(photo.price || 0)}</div>
-            <div className="mt-3 text-sm text-slate-600">
+            <div className="mt-2 text-3xl font-semibold tracking-tight">{amountText}</div>
+            <div className="mt-2 text-sm text-slate-600">
               After payment, your download will appear in Buyer Dashboard → Purchases.
             </div>
           </div>
 
-          <div className="mt-5 flex items-center justify-between">
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <button
-              className="psa-btn-primary rounded-2xl px-5 py-3 text-sm disabled:opacity-60"
+              type="button"
               onClick={payNow}
               disabled={busy || booting}
+              className="psa-btn-primary rounded-2xl px-6 py-3 text-sm disabled:opacity-60"
             >
-              {booting ? "Loading..." : busy ? "Processing..." : "Pay & Complete Purchase"}
+              {busy ? "Processing..." : "Pay & Complete Purchase"}
             </button>
 
             <Link
               to="/explore"
-              className="psa-btn-soft rounded-2xl border border-slate-200 px-5 py-3 text-sm hover:border-slate-400"
+              className="psa-btn-soft rounded-2xl border border-slate-200 px-6 py-3 text-sm hover:border-slate-400"
             >
               Continue browsing
             </Link>

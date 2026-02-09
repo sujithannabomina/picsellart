@@ -1,14 +1,9 @@
-// FILE PATH: src/lib/firebaseAdmin.js
-// Server-only. Used by /api routes.
-// Env required in Vercel:
-// - FIREBASE_SERVICE_ACCOUNT  (JSON string)
-// - FIREBASE_STORAGE_BUCKET   (optional, but recommended)
-
+// SERVER ONLY. Do NOT import in React UI.
 import admin from "firebase-admin";
 
 function getServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT env var (JSON string).");
+  if (!raw) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT env var.");
   try {
     return JSON.parse(raw);
   } catch {
@@ -26,6 +21,7 @@ if (!admin.apps.length) {
   });
 }
 
-export const db = admin.firestore();
-export const bucket = admin.storage().bucket();
-export { admin };
+const db = admin.firestore();
+const bucket = admin.storage().bucket(); // uses FIREBASE_STORAGE_BUCKET if set
+
+export { admin, db, bucket };

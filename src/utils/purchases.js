@@ -1,9 +1,9 @@
-// FILE PATH: src/utils/purchases.js
 import { db } from "../firebase";
 import {
-  addDoc,
-  collection,
+  doc,
+  setDoc,
   getDocs,
+  collection,
   query,
   where,
   orderBy,
@@ -12,22 +12,31 @@ import {
 
 const collectionName = "purchases";
 
-export const recordPurchase = async (buyerUid, photo, paymentInfo) => {
+export const recordPurchase = async (buyerUid, photo, paymentInfo, downloadUrl) => {
   if (!buyerUid) throw new Error("Missing buyer UID.");
-  const ref = collection(db, collectionName);
 
-  await addDoc(ref, {
-    buyerUid,
-    photoId: photo?.id || "",
-    fileName: photo?.fileName || "",
-    displayName: photo?.name || photo?.displayName || "Photo",
-    price: Number(photo?.price || 0),
-    currency: "INR",
-    storagePath: photo?.storagePath || "",
-    downloadUrl: photo?.originalUrl || photo?.url || photo?.downloadUrl || "",
-    createdAt: serverTimestamp(),
-    razorpay: paymentInfo || null,
-  });
+  const photoId = photo?.id || "";
+  if (!photoId) throw new Error("Missing photo id.");
+
+  const purchaseId = `${buyerUid}_${photoId}`.replace(/\//g, "_");
+  const ref = doc(db, collectionName, purchaseId);
+
+  await setDoc(
+    ref,
+    {
+      buyerUid,
+      photoId,
+      fileName: photo?.fileName || "",
+      displayName: photo?.name || photo?.displayName || "Photo",
+      price: Number(photo?.price || 0),
+      currency: "INR",
+      storagePath: photo?.storagePath || "",
+      downloadUrl: downloadUrl || "",
+      createdAt: serverTimestamp(),
+      razorpay: paymentInfo || null,
+    },
+    { merge: true }
+  );
 };
 
 export const getPurchasesForBuyer = async (buyerUid) => {

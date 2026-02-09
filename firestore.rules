@@ -1,15 +1,19 @@
-// FILE PATH: firestore.rules
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() { return request.auth != null; }
-    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function signedIn() {
+      return request.auth != null;
+    }
 
-    // =========================
-    // Public read-only
-    // =========================
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    /*******************************
+     * Public, read-only collections
+     *******************************/
     match /config/{doc} {
       allow read: if true;
       allow write: if false;
@@ -17,7 +21,7 @@ service cloud.firestore {
 
     match /photos/{photoId} {
       allow read: if resource.data.visibility == "public";
-      allow write: if false;
+      allow create, update, delete: if false;
     }
 
     match /stats/{doc} {
@@ -25,59 +29,70 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // =========================
-    // Buyer profile (your app uses /buyers/{uid})
-    // =========================
+    /*******************************
+     * Buyer profile (client writes)
+     *******************************/
     match /buyers/{uid} {
       allow read: if isOwner(uid);
 
-      allow create: if isOwner(uid)
+      // BuyerLogin ensureBuyerProfile() writes to /buyers/{uid}
+      allow create, update: if isOwner(uid)
         && request.resource.data.keys().hasOnly([
-          'uid','email','name','photoURL','role','createdAt','updatedAt'
+          'uid', 'email', 'name', 'photoURL', 'role', 'createdAt', 'updatedAt'
         ]);
-
-      allow update: if isOwner(uid)
-        && request.resource.data.diff(resource.data).changedKeys()
-            .hasOnly(['name','photoURL','updatedAt']);
 
       allow delete: if false;
     }
 
-    // =========================
-    // Seller docs (needed because SellerOnboarding writes from client)
-    // =========================
+    /*******************************
+     * Seller profile (client writes)
+     *******************************/
     match /sellers/{uid} {
       allow read: if isOwner(uid);
 
-      // Allow seller to create/update only their own doc, limited fields
-      allow create: if isOwner(uid);
-
-      allow update: if isOwner(uid)
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly([
-          'name','phone','upiId','status','planId','subscriptionId','photoURL','email','updatedAt','createdAt','uid'
-        ]);
+      // SellerOnboarding writes status/upiId/etc.
+      allow create, update: if isOwner(uid);
 
       allow delete: if false;
     }
 
-    // =========================
-    // Purchases (BUYER) — read-only for buyer.
-    // IMPORTANT: server writes purchases after verifying Razorpay signature.
-    // =========================
+    /*****************************************
+     * Purchases (BUYER)
+     *****************************************/
     match /purchases/{purchaseId} {
       allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
-      allow create, update, delete: if false;
+
+      // We will create deterministic doc IDs: `${buyerUid}_${photoId}`
+      allow create: if signedIn()
+        && request.resource.data.buyerUid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'buyerUid',
+          'photoId',
+          'fileName',
+          'displayName',
+          'price',
+          'currency',
+          'storagePath',
+          'downloadUrl',
+          'createdAt',
+          'razorpay'
+        ]);
+
+      allow update, delete: if false;
     }
 
-    // =========================
-    // Server-only (Admin SDK bypasses rules)
-    // =========================
-    match /razorpay_plans/{doc} { allow read, write: if false; }
-    match /subscriptions/{doc} { allow read, write: if false; }
-    match /orders/{doc} { allow read, write: if false; }
-    match /payments/{doc} { allow read, write: if false; }
+    /*****************************************
+     * Orders (server OR client verify route writes)
+     *****************************************/
+    match /orders/{orderId} {
+      // Buyer can read their own order status
+      allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
+      allow create, update, delete: if false; // server-only
+    }
 
-    // Deny everything else
+    /*********************************
+     * Fallback: deny everything else
+     *********************************/
     match /{document=**} {
       allow read, write: if false;
     }

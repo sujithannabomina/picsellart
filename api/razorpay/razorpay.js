@@ -1,4 +1,3 @@
-// FILE PATH: api/razorpay/razorpay.js
 import Razorpay from "razorpay";
 
 export function getRazorpay() {

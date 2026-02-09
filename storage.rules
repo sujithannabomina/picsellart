@@ -1,6 +1,4 @@
-// FILE PATH: storage.rules
 rules_version = '2';
-
 service firebase.storage {
   match /b/{bucket}/o {
 
@@ -17,28 +15,29 @@ service firebase.storage {
         && request.resource.size < 10 * 1024 * 1024;
     }
 
-    // 1) Public preview images (watermarked / sample)
-    // Your Explore must be able to show previews.
+    // 1) PUBLIC PREVIEWS (watermarked / low-res previews)
     match /public/images/{file=**} {
       allow read: if true;
       allow write: if false;
     }
 
-    // NOTE: You currently also have Buyer/ folder (capital B) with same 112 files.
-    // Keep read ON for now so nothing breaks, but you SHOULD remove duplicates later.
+    // 2) BUYER ORIGINALS (your 112 originals are here)
+    // IMPORTANT: keep private. Downloads happen via signed URL from server AFTER payment.
     match /Buyer/{file=**} {
-      allow read: if true;
+      allow read: if false;
       allow write: if false;
     }
 
-    // 2) Seller uploads (private)
+    // 3) SELLER UPLOADS (private to seller)
     match /sellers/{uid}/{file=**} {
       allow read: if isOwner(uid);
-      allow create, update: if isOwner(uid) && isImage() && under10MB();
+
+      allow create: if isOwner(uid) && isImage() && under10MB();
+      allow update: if isOwner(uid) && isImage() && under10MB();
       allow delete: if isOwner(uid);
     }
 
-    // 3) Buyer uploads (optional)
+    // 4) Optional buyer uploads (future)
     match /buyers/{uid}/{file=**} {
       allow read: if isOwner(uid);
       allow create, update: if isOwner(uid) && isImage() && under10MB();
