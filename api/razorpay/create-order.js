@@ -1,5 +1,5 @@
 // FILE PATH: api/razorpay/create-order.js
-const { getRazorpay } = require("./_lib/razorpay");
+const { getRazorpay } = require("./razorpay");
 const { db } = require("../_lib/firebaseAdmin");
 
 module.exports = async (req, res) => {
@@ -14,21 +14,19 @@ module.exports = async (req, res) => {
 
     const photoId = String(photo?.id || "");
     const fileName = String(photo?.fileName || "");
-    const displayName = String(photo?.displayName || "Photo");
+    const displayName = String(photo?.displayName || photo?.name || "Photo");
     const storagePath = String(photo?.storagePath || "");
 
-    if (!photoId || !fileName || !storagePath) {
-      return res.status(400).json({ error: "Missing photo details" });
-    }
+    if (!photoId) return res.status(400).json({ error: "Missing photo.id" });
 
     const rz = getRazorpay();
     const amountPaise = Math.round(amt * 100);
-
+    const currency = "INR";
     const receipt = `psa_${buyerUid.slice(0, 8)}_${Date.now()}`;
 
     const order = await rz.orders.create({
       amount: amountPaise,
-      currency: "INR",
+      currency,
       receipt,
       payment_capture: 1,
       notes: {
@@ -41,15 +39,15 @@ module.exports = async (req, res) => {
       },
     });
 
-    await db().collection("orders").doc(order.id).set(
+    await db.collection("orders").doc(order.id).set(
       {
         orderId: order.id,
         buyerUid,
         amountINR: amt,
         amountPaise,
-        currency: order.currency,
+        currency,
         receipt,
-        status: order.status || "created",
+        status: order.status,
         photo: { id: photoId, fileName, displayName, storagePath },
         createdAt: new Date().toISOString(),
       },
@@ -63,6 +61,7 @@ module.exports = async (req, res) => {
       receipt,
     });
   } catch (e) {
+    // IMPORTANT: return real error so you stop “guessing”
     return res.status(500).json({ error: e?.message || "Server error" });
   }
 };

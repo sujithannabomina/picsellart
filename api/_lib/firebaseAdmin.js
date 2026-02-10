@@ -1,37 +1,31 @@
 // FILE PATH: api/_lib/firebaseAdmin.js
 const admin = require("firebase-admin");
 
-function initAdmin() {
-  if (admin.apps.length) return admin;
+function getPrivateKey() {
+  const k = process.env.FIREBASE_PRIVATE_KEY;
+  if (!k) return undefined;
+  // Vercel env keeps \n as literal, convert it back
+  return k.replace(/\\n/g, "\n");
+}
 
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT in Vercel env.");
+if (!admin.apps.length) {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = getPrivateKey();
+  const storageBucket = process.env.FIREBASE_STORAGE_BUCKET;
 
-  let serviceAccount;
-  try {
-    serviceAccount = JSON.parse(raw);
-  } catch {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT must be valid JSON (stringified).");
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error(
+      "Missing Firebase Admin env vars. Required: FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY"
+    );
   }
 
-  const bucketFromEnv = process.env.FIREBASE_STORAGE_BUCKET;
-
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    storageBucket:
-      bucketFromEnv ||
-      (serviceAccount.project_id ? `${serviceAccount.project_id}.appspot.com` : undefined),
+    credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+    ...(storageBucket ? { storageBucket } : {}),
   });
-
-  return admin;
 }
 
-function db() {
-  return initAdmin().firestore();
-}
+const db = admin.firestore();
 
-function bucket() {
-  return initAdmin().storage().bucket();
-}
-
-module.exports = { initAdmin, db, bucket };
+module.exports = { admin, db };
