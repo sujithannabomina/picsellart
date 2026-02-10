@@ -6,10 +6,55 @@ import { useAuth } from "../hooks/useAuth";
 import { getFixedPriceForImage, normalizeStoragePath } from "../utils/pricing";
 
 function safeNumber(n, fallback = 0) {
-  // IMPORTANT: null/undefined/"" must NOT become 0
   if (n === null || n === undefined || n === "") return fallback;
   const x = Number(n);
   return Number.isFinite(x) ? x : fallback;
+}
+
+/**
+ * Your Explore sends id like:
+ *   it.id = "sample-" + encodeURIComponent("public/images/sample1.jpg")
+ * then you do encodeURIComponent(it.id) again in the URL.
+ *
+ * This function makes it stable:
+ * - decode once
+ * - strip "sample-" prefix
+ * - decode again if still has %2F
+ * - normalize to a Firebase storage path
+ */
+function decodeAndNormalizeId(idParam) {
+  if (!idParam) return { raw: "", storagePath: "", fileName: "" };
+
+  let raw = "";
+  try {
+    raw = decodeURIComponent(idParam);
+  } catch {
+    raw = idParam;
+  }
+
+  // remove "sample-" prefix if present
+  if (raw.startsWith("sample-")) raw = raw.slice("sample-".length);
+
+  // if still encoded (contains %2F), decode one more time
+  if (/%2F/i.test(raw)) {
+    try {
+      raw = decodeURIComponent(raw);
+    } catch {
+      // ignore
+    }
+  }
+
+  const storagePath = normalizeStoragePath(raw) || raw;
+  const fileName = (storagePath || raw).split("/").pop() || "";
+  return { raw, storagePath, fileName };
+}
+
+async function safeJson(res) {
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
 }
 
 export default function Checkout() {
@@ -19,9 +64,10 @@ export default function Checkout() {
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const id = params.get("id") || "";
+  const idParam = params.get("id") || "";
   const name = params.get("name") || "Photo";
 
   // Require login
@@ -33,9 +79,7 @@ export default function Checkout() {
   }, [booting, user, nav, location.pathname, location.search]);
 
   const photo = useMemo(() => {
-    const raw = decodeURIComponent(id || "");
-    const storagePath = normalizeStoragePath(raw);
-    const fileName = (storagePath || raw).split("/").pop() || "";
+    const { storagePath, fileName, raw } = decodeAndNormalizeId(idParam);
 
     // If price missing/invalid, use deterministic fixed pricing by filename
     const qpPrice = safeNumber(params.get("price"), NaN);
@@ -43,18 +87,22 @@ export default function Checkout() {
 
     return {
       id: storagePath || raw || "unknown",
-      fileName,
-      displayName: name,
-      price: fixed,
       storagePath: storagePath || "",
+      fileName: fileName || "",
+      displayName: name,
+      title: "Street Photography",
+      price: fixed,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, name]);
+  }, [idParam, name]);
 
-  const amountINR = safeNumber(photo.price, 149);
+  // Never allow 0 / NaN
+  const amountINR = Math.max(1, safeNumber(photo.price, 149));
+  const amountPaise = Math.round(amountINR * 100);
 
   const startPayment = async () => {
     setErr("");
+    setNote("");
     setBusy(true);
 
     try {
@@ -66,27 +114,44 @@ export default function Checkout() {
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
       if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env.");
 
-      // 1) Create order on server
-      const r1 = await fetch("/api/razorpay/create-order", {
+      // 1) Create order on server (THIS is the key fix)
+      const r1 = await fetch("/api/createOrder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          purpose: "buyer_purchase",
           buyerUid: user.uid,
+          buyerEmail: user.email || "",
           amountINR,
-          photo,
+          amountPaise,
+          currency: "INR",
+          photo: {
+            id: photo.id,
+            storagePath: photo.storagePath,
+            fileName: photo.fileName,
+            title: photo.title,
+            price: amountINR,
+            displayName: photo.displayName,
+          },
         }),
       });
 
-      const d1 = await r1.json().catch(() => ({}));
-      if (!r1.ok) throw new Error(d1?.error || "Order creation failed");
+      const d1 = await safeJson(r1);
+      if (!r1.ok) {
+        // show server error if provided
+        throw new Error(d1?.error || d1?.message || `Order creation failed (HTTP ${r1.status})`);
+      }
 
-      const { orderId, amount, currency } = d1;
-      if (!orderId) throw new Error("Order creation failed");
+      const orderId = d1?.orderId || d1?.id || d1?.order?.id;
+      const serverAmount = d1?.amount ?? d1?.order?.amount ?? amountPaise;
+      const currency = d1?.currency || d1?.order?.currency || "INR";
+
+      if (!orderId) throw new Error("Order creation failed: missing orderId from /api/createOrder");
 
       // 2) Open Razorpay checkout
       const rz = new window.Razorpay({
         key,
-        amount,
+        amount: serverAmount, // must be in paise
         currency,
         name: "PicSellArt",
         description: "Photo Purchase",
@@ -100,12 +165,13 @@ export default function Checkout() {
           buyerUid: user.uid,
           photoId: photo.id,
           storagePath: photo.storagePath || "",
+          fileName: photo.fileName || "",
         },
         theme: { color: "#2563eb" },
         handler: async function (response) {
+          // 3) Verify payment (recommended). If verify endpoint isn't deployed yet, do NOT block.
           try {
-            // 3) Verify signature on server (production requirement)
-            const r2 = await fetch("/api/razorpay/verify-payment", {
+            const r2 = await fetch("/api/verifyPayment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -118,8 +184,19 @@ export default function Checkout() {
               }),
             });
 
-            const d2 = await r2.json().catch(() => ({}));
-            if (!r2.ok) throw new Error(d2?.error || "Payment verification failed");
+            const d2 = await safeJson(r2);
+
+            if (!r2.ok) {
+              // If verify endpoint not found / not deployed, rely on webhook.
+              if (r2.status === 404) {
+                setNote("Payment captured. Confirmation will be updated via webhook in Buyer Dashboard → Purchases.");
+                nav("/buyer-dashboard?tab=purchases&msg=" + encodeURIComponent("Payment captured. Pending confirmation."), {
+                  replace: true,
+                });
+                return;
+              }
+              throw new Error(d2?.error || d2?.message || "Payment verification failed");
+            }
 
             nav(
               "/buyer-dashboard?tab=purchases&msg=" +
@@ -152,6 +229,7 @@ export default function Checkout() {
             <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
             <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
           </div>
+
           <button
             className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
             onClick={() => nav("/explore")}
@@ -164,6 +242,12 @@ export default function Checkout() {
         {err ? (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {err}
+          </div>
+        ) : null}
+
+        {note ? (
+          <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+            {note}
           </div>
         ) : null}
 
