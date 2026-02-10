@@ -1,65 +1,35 @@
-// FILE PATH: firestore.rules
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
-    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
 
-    // -----------------------------
-    // Public read-only collections
-    // -----------------------------
-    match /config/{doc} { allow read: if true; allow write: if false; }
-    match /stats/{doc} { allow read: if true; allow write: if false; }
-
-    // Photo metadata (optional, if you use it)
-    match /photos/{photoId} {
-      allow read: if resource.data.visibility == "public";
-      allow write: if false;
-    }
-
-    // -----------------------------
-    // Buyers (your code writes /buyers/{uid})
-    // -----------------------------
+    // Buyers profile
     match /buyers/{uid} {
-      allow read: if isOwner(uid);
-      allow create: if isOwner(uid);
-      allow update: if isOwner(uid);
+      allow read, create, update: if isSelf(uid);
       allow delete: if false;
     }
 
-    // -----------------------------
-    // Sellers (client should NOT write except onboarding flow you already have)
-    // Keep strict (reads may be used in BuyerLogin to block seller accounts)
-    // -----------------------------
+    // Sellers profile (keep strict)
     match /sellers/{uid} {
-      allow read: if signedIn() && request.auth.uid == uid; // seller reads own
-      allow write: if false; // SellerOnboarding writes via client currently; if you keep that, change later.
+      allow read, create, update: if isSelf(uid);
+      allow delete: if false;
     }
 
-    // -----------------------------
-    // Purchases (BuyerDashboard reads this)
-    // -----------------------------
-    match /purchases/{purchaseId} {
+    // Purchases: buyer can read only their purchases.
+    match /purchases/{docId} {
       allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
-
-      allow create: if false; // IMPORTANT: production = server creates after verify-payment
-
-      allow update, delete: if false;
+      allow create, update, delete: if false; // server-only writes
     }
 
-    // -----------------------------
-    // Orders (server only)
-    // -----------------------------
+    // Orders: server-only
     match /orders/{orderId} {
-      allow read: if false;
-      allow write: if false;
+      allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
+      allow create, update, delete: if false;
     }
 
-    // -----------------------------
-    // Everything else denied
-    // -----------------------------
+    // Default deny
     match /{document=**} {
       allow read, write: if false;
     }

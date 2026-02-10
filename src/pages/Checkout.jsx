@@ -3,16 +3,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import loadRazorpay from "../utils/loadRazorpay";
 import { useAuth } from "../hooks/useAuth";
+import { getFixedPriceForImage, normalizeStoragePath } from "../utils/pricing";
 
 function safeNumber(n, fallback = 0) {
+  // IMPORTANT: null/undefined/"" must NOT become 0
+  if (n === null || n === undefined || n === "") return fallback;
   const x = Number(n);
   return Number.isFinite(x) ? x : fallback;
-}
-
-function normalizeStoragePath(id) {
-  const s = decodeURIComponent(String(id || ""));
-  if (s.startsWith("sample-public/")) return s.replace(/^sample-public\//, "public/");
-  return s;
 }
 
 export default function Checkout() {
@@ -25,9 +22,9 @@ export default function Checkout() {
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const id = params.get("id") || "";
-  const price = safeNumber(params.get("price"), 149);
   const name = params.get("name") || "Photo";
 
+  // Require login
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
@@ -36,20 +33,25 @@ export default function Checkout() {
   }, [booting, user, nav, location.pathname, location.search]);
 
   const photo = useMemo(() => {
-    const storagePath = normalizeStoragePath(id);
-    const fileName = storagePath.split("/").pop() || "";
+    const raw = decodeURIComponent(id || "");
+    const storagePath = normalizeStoragePath(raw);
+    const fileName = (storagePath || raw).split("/").pop() || "";
+
+    // If price missing/invalid, use deterministic fixed pricing by filename
+    const qpPrice = safeNumber(params.get("price"), NaN);
+    const fixed = Number.isFinite(qpPrice) && qpPrice > 0 ? qpPrice : getFixedPriceForImage(fileName);
+
     return {
-      id: storagePath || "unknown",
+      id: storagePath || raw || "unknown",
       fileName,
       displayName: name,
-      price,
-      storagePath,
+      price: fixed,
+      storagePath: storagePath || "",
     };
-  }, [id, name, price]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, name]);
 
   const amountINR = safeNumber(photo.price, 149);
-
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
   const startPayment = async () => {
     setErr("");
@@ -62,13 +64,17 @@ export default function Checkout() {
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID");
+      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env.");
 
       // 1) Create order on server
-      const r1 = await fetch(`${API_BASE}/api/razorpay/create-order`, {
+      const r1 = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ buyerUid: user.uid, amountINR, photo }),
+        body: JSON.stringify({
+          buyerUid: user.uid,
+          amountINR,
+          photo,
+        }),
       });
 
       const d1 = await r1.json().catch(() => ({}));
@@ -85,7 +91,10 @@ export default function Checkout() {
         name: "PicSellArt",
         description: "Photo Purchase",
         order_id: orderId,
-        prefill: { name: user.displayName || "", email: user.email || "" },
+        prefill: {
+          name: user.displayName || "",
+          email: user.email || "",
+        },
         notes: {
           purpose: "buyer_purchase",
           buyerUid: user.uid,
@@ -95,12 +104,13 @@ export default function Checkout() {
         theme: { color: "#2563eb" },
         handler: async function (response) {
           try {
-            // 3) Verify on server
-            const r2 = await fetch(`${API_BASE}/api/razorpay/verify-payment`, {
+            // 3) Verify signature on server (production requirement)
+            const r2 = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 buyerUid: user.uid,
+                buyerEmail: user.email || "",
                 photo,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -122,7 +132,9 @@ export default function Checkout() {
             setBusy(false);
           }
         },
-        modal: { ondismiss: () => setBusy(false) },
+        modal: {
+          ondismiss: () => setBusy(false),
+        },
       });
 
       rz.open();
@@ -150,7 +162,9 @@ export default function Checkout() {
         </div>
 
         {err ? (
-          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {err}
+          </div>
         ) : null}
 
         <div className="mt-8 rounded-2xl border border-slate-200 p-6">

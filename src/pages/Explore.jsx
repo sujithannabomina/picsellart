@@ -1,3 +1,4 @@
+// FILE PATH: src/pages/Explore.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ref, getDownloadURL } from "firebase/storage";
@@ -5,16 +6,24 @@ import { storage } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import WatermarkedImage from "../components/WatermarkedImage";
 
-/**
- * FIXES:
- * - View button works (goes to /photo/:id)
- * - Buy button logic:
- *   - if logged in -> /checkout
- *   - if not -> /buyer-login then redirect back to checkout
- * - No blank on back/refresh (ViewPhoto doesn’t rely on location.state)
- * - Sleek fonts + consistent blue buttons
- * - Removes any “extra marked text” by keeping UI clean/minimal
- */
+// ✅ Stable “random-looking” price generator (same fileName => same price forever)
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+// ✅ Sample images: must fit Starter plan max ₹199
+function getFixedPriceForSample(fileName) {
+  const min = 129;
+  const max = 199;
+  const h = hashString(String(fileName || "").toLowerCase());
+  return min + (h % (max - min + 1));
+}
+
 export default function Explore() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -28,12 +37,14 @@ export default function Explore() {
     for (let i = 1; i <= 112; i++) {
       const fileName = `sample${i}.jpg`;
       const storagePath = `public/images/${fileName}`;
+
       arr.push({
         id: `sample-${encodeURIComponent(storagePath)}`,
         fileName,
         storagePath,
         title: "Street Photography",
-        price: 119 + i,
+        // ✅ FIXED pricing (not 119+i)
+        price: getFixedPriceForSample(fileName),
       });
     }
     return arr;
@@ -59,7 +70,7 @@ export default function Explore() {
   const pageItems = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
-  }, [filtered, page]);
+  }, [filtered, page, pageSize]);
 
   // Only fetch URLs for current page (fast + production-friendly)
   const [urlMap, setUrlMap] = useState({});
@@ -74,7 +85,6 @@ export default function Explore() {
             const url = await getDownloadURL(ref(storage, it.storagePath));
             next[it.id] = url;
           } catch {
-            // fallback if needed (optional)
             next[it.id] = `/images/${it.fileName}`;
           }
         })
@@ -87,12 +97,17 @@ export default function Explore() {
   }, [pageItems]);
 
   const onView = (it) => {
-    // ✅ Always go to ViewPhoto route (stable)
     navigate(`/photo/${encodeURIComponent(it.id)}`);
   };
 
   const onBuy = (it) => {
-    const checkoutUrl = `/checkout?type=sample&id=${encodeURIComponent(it.id)}`;
+    // ✅ IMPORTANT: pass price + name to checkout so it never becomes ₹0
+    const checkoutUrl =
+      `/checkout?type=sample` +
+      `&id=${encodeURIComponent(it.id)}` +
+      `&price=${encodeURIComponent(String(it.price))}` +
+      `&name=${encodeURIComponent(it.title)}`;
+
     if (user) {
       navigate(checkoutUrl);
     } else {
@@ -152,7 +167,6 @@ export default function Explore() {
         })}
       </div>
 
-      {/* Pagination */}
       <div className="mt-8 flex items-center justify-center gap-2">
         <button
           className="psa-btn-soft"

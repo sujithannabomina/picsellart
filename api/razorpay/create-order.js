@@ -1,89 +1,68 @@
 // FILE PATH: api/razorpay/create-order.js
-const { getRazorpay } = require("./razorpay");
-const { getDb } = require("../_lib/firebaseAdmin");
-
-function json(res, code, data) {
-  res.status(code).setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(data));
-}
-
-function normalizeStoragePath(p) {
-  const s = String(p || "");
-  // Your old flow sometimes sends: sample-public/images/sample1.jpg
-  if (s.startsWith("sample-public/")) return s.replace(/^sample-public\//, "public/");
-  return s;
-}
+const { getRazorpay } = require("./_lib/razorpay");
+const { db } = require("../_lib/firebaseAdmin");
 
 module.exports = async (req, res) => {
   try {
-    if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    const body = req.body || {};
-    const buyerUid = String(body.buyerUid || "");
-    const amountINR = Number(body.amountINR);
-    const photo = body.photo || {};
+    const { buyerUid, amountINR, photo } = req.body || {};
+    if (!buyerUid) return res.status(400).json({ error: "Missing buyerUid" });
 
-    if (!buyerUid) return json(res, 400, { error: "Missing buyerUid" });
-    if (!Number.isFinite(amountINR) || amountINR <= 0) return json(res, 400, { error: "Invalid amountINR" });
+    const amt = Number(amountINR);
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "Invalid amountINR" });
 
-    const photoId = String(photo.id || "");
-    const fileName = String(photo.fileName || "");
-    const displayName = String(photo.displayName || "Photo");
-    const storagePath = normalizeStoragePath(photo.storagePath || photoId || "");
-    const currency = "INR";
+    const photoId = String(photo?.id || "");
+    const fileName = String(photo?.fileName || "");
+    const displayName = String(photo?.displayName || "Photo");
+    const storagePath = String(photo?.storagePath || "");
 
-    if (!storagePath) return json(res, 400, { error: "Missing photo storagePath" });
-
-    const amountPaise = Math.round(amountINR * 100);
-    const receipt = `psa_${buyerUid.slice(0, 8)}_${Date.now()}`;
+    if (!photoId || !fileName || !storagePath) {
+      return res.status(400).json({ error: "Missing photo details" });
+    }
 
     const rz = getRazorpay();
+    const amountPaise = Math.round(amt * 100);
+
+    const receipt = `psa_${buyerUid.slice(0, 8)}_${Date.now()}`;
 
     const order = await rz.orders.create({
       amount: amountPaise,
-      currency,
+      currency: "INR",
       receipt,
       payment_capture: 1,
       notes: {
         purpose: "buyer_purchase",
         buyerUid,
-        photoId: photoId || storagePath,
+        photoId,
         fileName,
         displayName,
         storagePath,
       },
     });
 
-    // Firestore log (server-side)
-    const db = getDb();
-    await db.collection("orders").doc(order.id).set(
+    await db().collection("orders").doc(order.id).set(
       {
         orderId: order.id,
         buyerUid,
-        amountINR,
+        amountINR: amt,
         amountPaise,
-        currency,
+        currency: order.currency,
         receipt,
         status: order.status || "created",
-        photo: {
-          id: photoId || storagePath,
-          fileName,
-          displayName,
-          storagePath,
-        },
+        photo: { id: photoId, fileName, displayName, storagePath },
         createdAt: new Date().toISOString(),
-        source: "vercel_api",
       },
       { merge: true }
     );
 
-    return json(res, 200, {
+    return res.status(200).json({
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
       receipt,
     });
   } catch (e) {
-    return json(res, 500, { error: e?.message || "Server error" });
+    return res.status(500).json({ error: e?.message || "Server error" });
   }
 };
