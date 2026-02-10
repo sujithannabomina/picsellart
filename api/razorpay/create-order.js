@@ -1,48 +1,44 @@
 // FILE PATH: api/razorpay/create-order.js
 const { getRazorpay } = require("./razorpay");
-const { db } = require("../../src/lib/firebaseAdmin");
+const { getDb } = require("../_lib/firebaseAdmin");
 
-/**
- * Buyer one-time payment:
- * Creates a Razorpay ORDER and returns { orderId, amount, currency, receipt }
- *
- * Body:
- *  {
- *    buyerUid: string,
- *    amountINR: number,
- *    photo: { id, fileName, displayName, storagePath, downloadUrl }
- *  }
- */
+function json(res, code, data) {
+  res.status(code).setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(data));
+}
+
+function normalizeStoragePath(p) {
+  const s = String(p || "");
+  // Your old flow sometimes sends: sample-public/images/sample1.jpg
+  if (s.startsWith("sample-public/")) return s.replace(/^sample-public\//, "public/");
+  return s;
+}
+
 module.exports = async (req, res) => {
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
 
-    const { buyerUid, amountINR, photo } = req.body || {};
+    const body = req.body || {};
+    const buyerUid = String(body.buyerUid || "");
+    const amountINR = Number(body.amountINR);
+    const photo = body.photo || {};
 
-    if (!buyerUid) return res.status(400).json({ error: "Missing buyerUid" });
+    if (!buyerUid) return json(res, 400, { error: "Missing buyerUid" });
+    if (!Number.isFinite(amountINR) || amountINR <= 0) return json(res, 400, { error: "Invalid amountINR" });
 
-    const amt = Number(amountINR);
-    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: "Invalid amountINR" });
+    const photoId = String(photo.id || "");
+    const fileName = String(photo.fileName || "");
+    const displayName = String(photo.displayName || "Photo");
+    const storagePath = normalizeStoragePath(photo.storagePath || photoId || "");
+    const currency = "INR";
 
-    // Minimal photo validation (keeps your UI flow stable)
-    const photoId = String(photo?.id || "");
-    const fileName = String(photo?.fileName || "");
-    const displayName = String(photo?.displayName || photo?.name || "Photo");
-    const storagePath = String(photo?.storagePath || "");
-    const downloadUrl = String(photo?.downloadUrl || photo?.originalUrl || photo?.url || "");
+    if (!storagePath) return json(res, 400, { error: "Missing photo storagePath" });
 
-    if (!photoId && !fileName && !downloadUrl) {
-      return res.status(400).json({ error: "Missing photo details" });
-    }
+    const amountPaise = Math.round(amountINR * 100);
+    const receipt = `psa_${buyerUid.slice(0, 8)}_${Date.now()}`;
 
     const rz = getRazorpay();
 
-    const amountPaise = Math.round(amt * 100);
-    const currency = "INR";
-
-    const receipt = `psa_${buyerUid.slice(0, 8)}_${Date.now()}`;
-
-    // Create Razorpay order
     const order = await rz.orders.create({
       amount: amountPaise,
       currency,
@@ -51,42 +47,43 @@ module.exports = async (req, res) => {
       notes: {
         purpose: "buyer_purchase",
         buyerUid,
-        photoId,
+        photoId: photoId || storagePath,
         fileName,
         displayName,
         storagePath,
       },
     });
 
-    // Store order in Firestore (server-side log)
+    // Firestore log (server-side)
+    const db = getDb();
     await db.collection("orders").doc(order.id).set(
       {
         orderId: order.id,
         buyerUid,
-        amountINR: amt,
+        amountINR,
         amountPaise,
         currency,
         receipt,
-        status: order.status,
+        status: order.status || "created",
         photo: {
-          id: photoId,
+          id: photoId || storagePath,
           fileName,
           displayName,
           storagePath,
-          downloadUrl,
         },
         createdAt: new Date().toISOString(),
+        source: "vercel_api",
       },
       { merge: true }
     );
 
-    return res.status(200).json({
+    return json(res, 200, {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
       receipt,
     });
   } catch (e) {
-    return res.status(500).json({ error: e?.message || "Server error" });
+    return json(res, 500, { error: e?.message || "Server error" });
   }
 };

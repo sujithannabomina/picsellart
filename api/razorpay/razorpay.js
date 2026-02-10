@@ -1,6 +1,7 @@
-import Razorpay from "razorpay";
+// FILE PATH: api/razorpay/razorpay.js
+const Razorpay = require("razorpay");
 
-export function getRazorpay() {
+function getRazorpay() {
   const key_id = process.env.RAZORPAY_KEY_ID;
   const key_secret = process.env.RAZORPAY_KEY_SECRET;
 
@@ -10,3 +11,5 @@ export function getRazorpay() {
 
   return new Razorpay({ key_id, key_secret });
 }
+
+module.exports = { getRazorpay };

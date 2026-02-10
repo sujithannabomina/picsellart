@@ -9,6 +9,12 @@ function safeNumber(n, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 
+function normalizeStoragePath(id) {
+  const s = decodeURIComponent(String(id || ""));
+  if (s.startsWith("sample-public/")) return s.replace(/^sample-public\//, "public/");
+  return s;
+}
+
 export default function Checkout() {
   const { user, booting } = useAuth();
   const nav = useNavigate();
@@ -17,14 +23,11 @@ export default function Checkout() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // Read query params
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const type = params.get("type") || ""; // sample | seller
-  const id = params.get("id") || "";     // your existing id/url encoding
-  const price = safeNumber(params.get("price"), 149); // fallback if your current flow doesn’t pass price
+  const id = params.get("id") || "";
+  const price = safeNumber(params.get("price"), 149);
   const name = params.get("name") || "Photo";
 
-  // Require login
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
@@ -32,26 +35,21 @@ export default function Checkout() {
     }
   }, [booting, user, nav, location.pathname, location.search]);
 
-  // Build a “photo object” compatible with your purchases.js and dashboards
-  // IMPORTANT: This does NOT change your UI; it just standardizes data to backend.
   const photo = useMemo(() => {
-    // Your existing checkout URLs look like: id=sample-public%2Fimages%2Fsample1.jpg (or similar)
-    // We store that as storagePath so later rules/logic can use it.
-    const storagePath = decodeURIComponent(id || "");
+    const storagePath = normalizeStoragePath(id);
     const fileName = storagePath.split("/").pop() || "";
     return {
-      id: storagePath || id || "unknown",
+      id: storagePath || "unknown",
       fileName,
       displayName: name,
       price,
       storagePath,
-      // If your app already has a downloadUrl in query, keep it (optional)
-      downloadUrl: params.get("url") ? decodeURIComponent(params.get("url")) : "",
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, name, price, type]);
+  }, [id, name, price]);
 
   const amountINR = safeNumber(photo.price, 149);
+
+  const API_BASE = import.meta.env.VITE_API_BASE_URL || window.location.origin;
 
   const startPayment = async () => {
     setErr("");
@@ -63,18 +61,14 @@ export default function Checkout() {
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
+      const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
       if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID");
 
       // 1) Create order on server
-      const r1 = await fetch("/api/razorpay/create-order", {
+      const r1 = await fetch(`${API_BASE}/api/razorpay/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          buyerUid: user.uid,
-          amountINR,
-          photo,
-        }),
+        body: JSON.stringify({ buyerUid: user.uid, amountINR, photo }),
       });
 
       const d1 = await r1.json().catch(() => ({}));
@@ -91,21 +85,18 @@ export default function Checkout() {
         name: "PicSellArt",
         description: "Photo Purchase",
         order_id: orderId,
-        prefill: {
-          name: user.displayName || "",
-          email: user.email || "",
-        },
+        prefill: { name: user.displayName || "", email: user.email || "" },
         notes: {
           purpose: "buyer_purchase",
           buyerUid: user.uid,
           photoId: photo.id,
           storagePath: photo.storagePath || "",
         },
-        theme: { color: "#2563eb" }, // matches your primary button blue
+        theme: { color: "#2563eb" },
         handler: async function (response) {
           try {
-            // 3) Verify signature on server (production requirement)
-            const r2 = await fetch("/api/razorpay/verify-payment", {
+            // 3) Verify on server
+            const r2 = await fetch(`${API_BASE}/api/razorpay/verify-payment`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -120,21 +111,18 @@ export default function Checkout() {
             const d2 = await r2.json().catch(() => ({}));
             if (!r2.ok) throw new Error(d2?.error || "Payment verification failed");
 
-            // 4) Go to Buyer Dashboard purchases tab
-            nav("/buyer-dashboard?tab=purchases&msg=" + encodeURIComponent("Payment successful. Your purchase is ready."), {
-              replace: true,
-            });
+            nav(
+              "/buyer-dashboard?tab=purchases&msg=" +
+                encodeURIComponent("Payment successful. Your purchase is ready."),
+              { replace: true }
+            );
           } catch (e) {
             setErr(e?.message || "Payment verification failed");
           } finally {
             setBusy(false);
           }
         },
-        modal: {
-          ondismiss: () => {
-            setBusy(false);
-          },
-        },
+        modal: { ondismiss: () => setBusy(false) },
       });
 
       rz.open();
@@ -144,7 +132,6 @@ export default function Checkout() {
     }
   };
 
-  // UI stays same as your screenshots
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-5xl px-4 py-10">
@@ -163,9 +150,7 @@ export default function Checkout() {
         </div>
 
         {err ? (
-          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-            {err}
-          </div>
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>
         ) : null}
 
         <div className="mt-8 rounded-2xl border border-slate-200 p-6">

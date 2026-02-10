@@ -1,21 +1,21 @@
 // FILE PATH: api/razorpay/verify-payment.js
 const crypto = require("crypto");
-const { db } = require("../../src/lib/firebaseAdmin");
+const { getDb, getBucket } = require("../_lib/firebaseAdmin");
 
-/**
- * Verifies Razorpay signature (production requirement)
- * Body:
- * {
- *   buyerUid,
- *   photo,
- *   razorpay_order_id,
- *   razorpay_payment_id,
- *   razorpay_signature
- * }
- */
+function json(res, code, data) {
+  res.status(code).setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(data));
+}
+
+function normalizeStoragePath(p) {
+  const s = String(p || "");
+  if (s.startsWith("sample-public/")) return s.replace(/^sample-public\//, "public/");
+  return s;
+}
+
 module.exports = async (req, res) => {
   try {
-    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    if (req.method !== "POST") return json(res, 405, { error: "Method not allowed" });
 
     const {
       buyerUid,
@@ -25,58 +25,88 @@ module.exports = async (req, res) => {
       razorpay_signature,
     } = req.body || {};
 
-    if (!buyerUid) return res.status(400).json({ error: "Missing buyerUid" });
+    const buyer = String(buyerUid || "");
+    if (!buyer) return json(res, 400, { error: "Missing buyerUid" });
+
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return res.status(400).json({ error: "Missing razorpay fields" });
+      return json(res, 400, { error: "Missing Razorpay fields" });
     }
 
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (!secret) return res.status(500).json({ error: "Missing RAZORPAY_KEY_SECRET" });
+    const key_secret = process.env.RAZORPAY_KEY_SECRET;
+    if (!key_secret) return json(res, 500, { error: "Missing RAZORPAY_KEY_SECRET on server" });
 
+    // Verify signature
     const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-    const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
+    const expected = crypto.createHmac("sha256", key_secret).update(body).digest("hex");
 
-    const isValid = expected === razorpay_signature;
-    if (!isValid) return res.status(400).json({ error: "Signature verification failed" });
+    if (expected !== razorpay_signature) {
+      return json(res, 400, { error: "Invalid signature" });
+    }
 
-    // Mark order as paid
-    await db.collection("orders").doc(razorpay_order_id).set(
+    const p = photo || {};
+    const storagePath = normalizeStoragePath(p.storagePath || p.id || "");
+    const fileName = String(p.fileName || storagePath.split("/").pop() || "");
+    const displayName = String(p.displayName || "Photo");
+    const price = Number(p.price || 0);
+
+    if (!storagePath) return json(res, 400, { error: "Missing photo storagePath" });
+
+    // Create short-lived signed URL (works for sample images and seller images)
+    const bucket = getBucket();
+    const file = bucket.file(storagePath);
+
+    const [exists] = await file.exists();
+    if (!exists) {
+      return json(res, 404, { error: "File not found in storage: " + storagePath });
+    }
+
+    // 24 hours link (you can reduce later)
+    const [signedUrl] = await file.getSignedUrl({
+      action: "read",
+      expires: Date.now() + 24 * 60 * 60 * 1000,
+    });
+
+    // Write purchase record
+    const db = getDb();
+
+    const purchaseId = `${buyer}_${razorpay_payment_id}`;
+    await db.collection("purchases").doc(purchaseId).set(
       {
+        buyerUid: buyer,
+        photoId: String(p.id || storagePath),
+        fileName,
+        displayName,
+        price,
+        currency: "INR",
+        storagePath,
+        downloadUrl: signedUrl,
+        createdAt: new Date().toISOString(),
+        razorpay: {
+          orderId: razorpay_order_id,
+          paymentId: razorpay_payment_id,
+          signature: razorpay_signature,
+        },
         status: "paid",
-        paidAt: new Date().toISOString(),
-        paymentId: razorpay_payment_id,
-        signature: razorpay_signature,
+        source: "vercel_api",
       },
       { merge: true }
     );
 
-    // Create purchase record (this is what BuyerDashboard reads)
-    const photoId = String(photo?.id || "");
-    const fileName = String(photo?.fileName || "");
-    const displayName = String(photo?.displayName || photo?.name || "Photo");
-    const storagePath = String(photo?.storagePath || "");
-    const downloadUrl = String(photo?.downloadUrl || photo?.originalUrl || photo?.url || "");
-
-    const price = Number(photo?.price || 0);
-
-    await db.collection("purchases").add({
-      buyerUid,
-      photoId,
-      fileName,
-      displayName,
-      price,
-      currency: "INR",
-      storagePath,
-      downloadUrl,
-      createdAt: new Date().toISOString(),
-      razorpay: {
-        orderId: razorpay_order_id,
-        paymentId: razorpay_payment_id,
+    // Also update order doc (optional but nice)
+    await db.collection("orders").doc(razorpay_order_id).set(
+      {
+        status: "paid",
+        paidAt: new Date().toISOString(),
+        razorpay: {
+          paymentId: razorpay_payment_id,
+          signature: razorpay_signature,
+        },
       },
-    });
+      { merge: true }
+    );
 
-    return res.status(200).json({ ok: true });
+    return json(res, 200, { success: true, downloadUrl: signedUrl });
   } catch (e) {
-    return res.status(500).json({ error: e?.message || "Server error" });
+    return json(res, 500, { error: e?.message || "Server error" });
   }
 };
