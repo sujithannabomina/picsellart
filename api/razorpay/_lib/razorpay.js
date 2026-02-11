@@ -1,42 +1,26 @@
 // FILE PATH: api/razorpay/_lib/razorpay.js
+import Razorpay from "razorpay";
+import { safeEnv } from "../../_lib/utils.js";
 
-function must(name) {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing ${name} in Vercel env.`);
-  return v;
+let _client;
+
+export function getRazorpayClient() {
+  if (_client) return _client;
+
+  const key_id = safeEnv("RAZORPAY_KEY_ID");
+  const key_secret = safeEnv("RAZORPAY_KEY_SECRET");
+
+  if (!key_id) throw new Error("Missing RAZORPAY_KEY_ID");
+  if (!key_secret) throw new Error("Missing RAZORPAY_KEY_SECRET");
+
+  _client = new Razorpay({ key_id, key_secret });
+  return _client;
 }
 
-export function getRazorpayKeys() {
-  const keyId = must("RAZORPAY_KEY_ID");
-  const keySecret = must("RAZORPAY_KEY_SECRET");
-  return { keyId, keySecret };
+export function getRazorpayKeyId() {
+  return safeEnv("RAZORPAY_KEY_ID");
 }
 
-export async function razorpayRequest(path, { method = "GET", body } = {}) {
-  const { keyId, keySecret } = getRazorpayKeys();
-  const auth = Buffer.from(`${keyId}:${keySecret}`).toString("base64");
-
-  const url = `https://api.razorpay.com${path}`;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg =
-      data?.error?.description ||
-      data?.error?.message ||
-      data?.message ||
-      `Razorpay API error (${res.status})`;
-    const err = new Error(msg);
-    err.status = res.status;
-    err.data = data;
-    throw err;
-  }
-  return data;
+export function getWebhookSecret() {
+  return safeEnv("RAZORPAY_WEBHOOK_SECRET");
 }

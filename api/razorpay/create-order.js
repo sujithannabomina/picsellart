@@ -1,81 +1,87 @@
 // FILE PATH: api/razorpay/create-order.js
-import crypto from "crypto";
-import { allowCors, readJSON, requireMethod, sendJSON, nowISO } from "../_lib/utils.js";
-import { razorpayRequest } from "./_lib/razorpay.js";
-import { getDb } from "../_lib/firebaseAdmin.js";
+import { bad, ok, onlyPost, mask, safeEnv } from "../_lib/utils.js";
+import { verifyFirebaseToken, getDb } from "../_lib/firebaseAdmin.js";
+import { getRazorpayClient, getRazorpayKeyId } from "./_lib/razorpay.js";
 
 export default async function handler(req, res) {
   try {
-    if (allowCors(req, res)) return;
-    if (!requireMethod(req, res, "POST")) return;
+    if (!onlyPost(req, res)) return;
 
-    const db = getDb();
-    const body = await readJSON(req);
+    // 1) Verify Firebase login (server trusts this, not buyerUid from client)
+    const decoded = await verifyFirebaseToken(req);
+    const uid = decoded.uid;
 
-    const buyerUid = String(body?.buyerUid || "").trim();
-    const amountINR = Number(body?.amountINR || 0);
-    const photo = body?.photo || {};
+    // 2) Validate body
+    const body = req.body || {};
+    const amountINR = Number(body.amountINR);
+    const photo = body.photo || {};
 
-    if (!buyerUid) return sendJSON(res, 400, { error: "Missing buyerUid" });
     if (!Number.isFinite(amountINR) || amountINR <= 0) {
-      return sendJSON(res, 400, { error: "Invalid amountINR" });
+      return bad(res, 400, "Invalid amount");
     }
+    if (!photo?.id) return bad(res, 400, "Missing photo.id");
 
-    const amount = Math.round(amountINR * 100); // paise
-    const receipt = `psa_${buyerUid}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+    // Razorpay expects paise
+    const amount = Math.round(amountINR * 100);
 
-    // Create Razorpay Order
-    const order = await razorpayRequest("/v1/orders", {
-      method: "POST",
-      body: {
-        amount,
-        currency: "INR",
-        receipt,
-        payment_capture: 1,
-        notes: {
-          purpose: "buyer_purchase",
-          buyerUid,
-          photoId: String(photo?.id || ""),
-          storagePath: String(photo?.storagePath || ""),
-          fileName: String(photo?.fileName || ""),
-        },
+    const rzp = getRazorpayClient();
+
+    // 3) Create order
+    const receipt = `psa_${uid}_${Date.now()}`;
+
+    const order = await rzp.orders.create({
+      amount,
+      currency: "INR",
+      receipt,
+      notes: {
+        purpose: "buyer_purchase",
+        buyerUid: uid,
+        photoId: String(photo.id),
+        storagePath: String(photo.storagePath || ""),
       },
     });
 
-    // Store minimal server-side order record (optional but useful)
-    await db
-      .collection("orders")
-      .doc(order.id)
-      .set(
-        {
-          orderId: order.id,
-          buyerUid,
-          amountINR,
-          amount,
-          currency: "INR",
-          receipt,
-          status: "created",
-          photo: {
-            id: String(photo?.id || ""),
-            storagePath: String(photo?.storagePath || ""),
-            fileName: String(photo?.fileName || ""),
-            displayName: String(photo?.displayName || ""),
-            price: amountINR,
-          },
-          createdAt: nowISO(),
-          updatedAt: nowISO(),
+    // 4) Store an orders doc (optional but useful)
+    const db = getDb();
+    await db.collection("orders").doc(order.id).set(
+      {
+        buyerUid: uid,
+        buyerEmail: decoded.email || "",
+        status: "created",
+        createdAt: Date.now(),
+        amountINR,
+        amount,
+        currency: "INR",
+        photo: {
+          id: String(photo.id),
+          fileName: String(photo.fileName || ""),
+          displayName: String(photo.displayName || ""),
+          storagePath: String(photo.storagePath || ""),
         },
-        { merge: true }
-      );
+      },
+      { merge: true }
+    );
 
-    return sendJSON(res, 200, {
+    // 5) Return order + keyId (front-end uses VITE_RAZORPAY_KEY_ID, but this is extra safe)
+    return ok(res, {
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
-      receipt: order.receipt,
+      keyId: getRazorpayKeyId(),
     });
   } catch (e) {
-    console.error("create-order error:", e?.message || e);
-    return sendJSON(res, 500, { error: e?.message || "Order creation failed" });
+    // Authentication failed from Razorpay will land here too
+    const msg = e?.message || "create-order failed";
+
+    // If Razorpay auth fails, THIS is the real cause (keys mismatch / wrong env)
+    if (msg.toLowerCase().includes("authentication failed")) {
+      const kid = safeEnv("RAZORPAY_KEY_ID");
+      return bad(res, 500, "Authentication failed", {
+        hint: "Check RAZORPAY_KEY_ID + RAZORPAY_KEY_SECRET are correct pair (same mode: LIVE or TEST). Remove extra spaces/quotes in Vercel env.",
+        keyIdPreview: mask(kid, 10),
+      });
+    }
+
+    return bad(res, 500, msg);
   }
 }

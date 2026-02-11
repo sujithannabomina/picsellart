@@ -40,12 +40,19 @@ export default function Checkout() {
     const qpPrice = safeNumber(params.get("price"), NaN);
     const fixed = Number.isFinite(qpPrice) && qpPrice > 0 ? qpPrice : getFixedPriceForImage(fileName);
 
+    // IMPORTANT:
+    // For PRODUCTION paid downloads, this should be a PRIVATE original file path like:
+    // "Buyer/originals/sample1.jpg"
+    // Right now if you pass public/images, anyone can read it without paying.
+    const paidStoragePath =
+      params.get("paidPath") || ""; // optional override if you send it from Explore
+
     return {
       id: storagePath || raw || "unknown",
       fileName,
       displayName: name,
       price: fixed,
-      storagePath: storagePath || "",
+      storagePath: paidStoragePath || "", // server will sign this if present
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, name]);
@@ -65,22 +72,28 @@ export default function Checkout() {
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
       if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env.");
 
-      // 1) Create order (server)
+      // Firebase ID token for server auth
+      const idToken = await user.getIdToken?.();
+      if (!idToken) throw new Error("Auth token missing. Please logout and login again.");
+
+      // 1) Create order on server
       const r1 = await fetch("/api/razorpay/create-order", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify({
-          buyerUid: user.uid,
           amountINR,
           photo,
         }),
       });
 
       const d1 = await r1.json().catch(() => ({}));
-      if (!r1.ok) throw new Error(d1?.error || `Order creation failed (HTTP ${r1.status})`);
+      if (!r1.ok) throw new Error(d1?.error || "Order creation failed");
 
       const { orderId, amount, currency } = d1;
-      if (!orderId) throw new Error("Order creation failed.");
+      if (!orderId) throw new Error("Order creation failed");
 
       // 2) Open Razorpay checkout
       const rz = new window.Razorpay({
@@ -103,12 +116,17 @@ export default function Checkout() {
         theme: { color: "#2563eb" },
         handler: async function (response) {
           try {
+            const idToken2 = await user.getIdToken?.();
+            if (!idToken2) throw new Error("Auth token missing. Please login again.");
+
+            // 3) Verify signature on server
             const r2 = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${idToken2}`,
+              },
               body: JSON.stringify({
-                buyerUid: user.uid,
-                buyerEmail: user.email || "",
                 photo,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -117,7 +135,7 @@ export default function Checkout() {
             });
 
             const d2 = await r2.json().catch(() => ({}));
-            if (!r2.ok) throw new Error(d2?.error || `Payment verification failed (HTTP ${r2.status})`);
+            if (!r2.ok) throw new Error(d2?.error || "Payment verification failed");
 
             nav(
               "/buyer-dashboard?tab=purchases&msg=" +
@@ -130,7 +148,9 @@ export default function Checkout() {
             setBusy(false);
           }
         },
-        modal: { ondismiss: () => setBusy(false) },
+        modal: {
+          ondismiss: () => setBusy(false),
+        },
       });
 
       rz.open();

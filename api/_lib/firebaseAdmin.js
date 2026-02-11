@@ -1,50 +1,56 @@
 // FILE PATH: api/_lib/firebaseAdmin.js
 import admin from "firebase-admin";
+import { safeEnv } from "./utils.js";
 
 let _app;
 
-function getServiceAccountFromEnv() {
-  // You have this in Vercel: FIREBASE_SERVICE_ACCOUNT
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (!raw) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT in Vercel env.");
+function init() {
+  if (_app) return _app;
 
-  // It is usually stored as JSON string.
-  // Sometimes people paste it with escaped newlines - handle both.
+  const sa = safeEnv("FIREBASE_SERVICE_ACCOUNT");
+  if (!sa) throw new Error("Missing FIREBASE_SERVICE_ACCOUNT env");
+
+  let serviceAccount;
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed.private_key && typeof parsed.private_key === "string") {
-      parsed.private_key = parsed.private_key.replace(/\\n/g, "\n");
-    }
-    return parsed;
-  } catch (e) {
-    throw new Error("FIREBASE_SERVICE_ACCOUNT is not valid JSON.");
+    serviceAccount = JSON.parse(sa);
+  } catch {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT must be valid JSON string");
   }
+
+  // Optional bucket override (recommended). If not set, we use service account project default.
+  const storageBucket =
+    safeEnv("FIREBASE_STORAGE_BUCKET") ||
+    safeEnv("VITE_FIREBASE_STORAGE_BUCKET") ||
+    serviceAccount?.project_id;
+
+  _app = admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    ...(storageBucket ? { storageBucket } : {}),
+  });
+
+  return _app;
 }
 
 export function getAdmin() {
-  if (_app) return admin;
-
-  const serviceAccount = getServiceAccountFromEnv();
-  _app = admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    // Use either FIREBASE_STORAGE_BUCKET or VITE_FIREBASE_STORAGE_BUCKET
-    storageBucket:
-      process.env.FIREBASE_STORAGE_BUCKET ||
-      process.env.VITE_FIREBASE_STORAGE_BUCKET ||
-      serviceAccount.project_id
-        ? `${serviceAccount.project_id}.appspot.com`
-        : undefined,
-  });
-
-  return admin;
+  return init();
 }
 
 export function getDb() {
-  const a = getAdmin();
-  return a.firestore();
+  init();
+  return admin.firestore();
 }
 
 export function getBucket() {
-  const a = getAdmin();
-  return a.storage().bucket();
+  init();
+  return admin.storage().bucket();
+}
+
+// Server-side verify Firebase ID token (protects your API)
+export async function verifyFirebaseToken(req) {
+  const auth = req.headers.authorization || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+  if (!token) throw new Error("Missing Authorization bearer token");
+  init();
+  const decoded = await admin.auth().verifyIdToken(token);
+  return decoded; // { uid, email, ... }
 }

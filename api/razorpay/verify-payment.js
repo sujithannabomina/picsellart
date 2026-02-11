@@ -1,97 +1,117 @@
 // FILE PATH: api/razorpay/verify-payment.js
-import crypto from "crypto";
-import { allowCors, readJSON, requireMethod, sendJSON, nowISO } from "../_lib/utils.js";
-import { getRazorpayKeys } from "./_lib/razorpay.js";
-import { getBucket, getDb } from "../_lib/firebaseAdmin.js";
+import crypto from "node:crypto";
+import { bad, ok, onlyPost, safeEnv } from "../_lib/utils.js";
+import { verifyFirebaseToken, getBucket, getDb } from "../_lib/firebaseAdmin.js";
+import { getRazorpayClient } from "./_lib/razorpay.js";
 
-function computeSignature(orderId, paymentId, secret) {
-  return crypto
-    .createHmac("sha256", secret)
-    .update(`${orderId}|${paymentId}`)
-    .digest("hex");
+function verifySignature({ order_id, payment_id, signature, secret }) {
+  const body = `${order_id}|${payment_id}`;
+  const expected = crypto.createHmac("sha256", secret).update(body).digest("hex");
+  return expected === signature;
 }
 
 export default async function handler(req, res) {
   try {
-    if (allowCors(req, res)) return;
-    if (!requireMethod(req, res, "POST")) return;
+    if (!onlyPost(req, res)) return;
 
-    const db = getDb();
-    const bucket = getBucket();
-    const { keySecret } = getRazorpayKeys();
+    const decoded = await verifyFirebaseToken(req);
+    const uid = decoded.uid;
 
-    const body = await readJSON(req);
+    const body = req.body || {};
+    const photo = body.photo || {};
 
-    const buyerUid = String(body?.buyerUid || "").trim();
-    const buyerEmail = String(body?.buyerEmail || "").trim();
-    const photo = body?.photo || {};
+    const razorpay_order_id = body.razorpay_order_id;
+    const razorpay_payment_id = body.razorpay_payment_id;
+    const razorpay_signature = body.razorpay_signature;
 
-    const razorpay_order_id = String(body?.razorpay_order_id || "").trim();
-    const razorpay_payment_id = String(body?.razorpay_payment_id || "").trim();
-    const razorpay_signature = String(body?.razorpay_signature || "").trim();
-
-    if (!buyerUid) return sendJSON(res, 400, { error: "Missing buyerUid" });
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-      return sendJSON(res, 400, { error: "Missing Razorpay payment fields" });
+      return bad(res, 400, "Missing Razorpay fields");
     }
 
-    // 1) Verify signature
-    const expected = computeSignature(razorpay_order_id, razorpay_payment_id, keySecret);
-    if (expected !== razorpay_signature) {
-      return sendJSON(res, 400, { error: "Invalid payment signature" });
+    const secret = safeEnv("RAZORPAY_KEY_SECRET");
+    if (!secret) return bad(res, 500, "Missing RAZORPAY_KEY_SECRET");
+
+    const valid = verifySignature({
+      order_id: razorpay_order_id,
+      payment_id: razorpay_payment_id,
+      signature: razorpay_signature,
+      secret,
+    });
+
+    if (!valid) return bad(res, 400, "Invalid payment signature");
+
+    // Optional: fetch payment from Razorpay (extra validation)
+    const rzp = getRazorpayClient();
+    const payment = await rzp.payments.fetch(razorpay_payment_id);
+
+    if (payment?.status !== "captured" && payment?.status !== "authorized") {
+      return bad(res, 400, "Payment not completed", { status: payment?.status });
     }
 
-    // 2) Create a signed download URL
-    // Works for public/images too; later you can move originals to private and it will still work.
-    const storagePath = String(photo?.storagePath || photo?.id || "").replace(/^\/+/, "");
+    // Create a signed download URL for the paid/original file.
+    // NOTE: This assumes originals are in Storage under "Buyer/..."
+    // You can store photo.storagePath like: "Buyer/originals/sample1.jpg"
+    const bucket = getBucket();
+    const storagePath = String(photo.storagePath || "");
     let downloadUrl = "";
 
     if (storagePath) {
       const file = bucket.file(storagePath);
-      const [exists] = await file.exists();
-      if (exists) {
-        const [url] = await file.getSignedUrl({
-          action: "read",
-          expires: Date.now() + 10 * 60 * 1000, // 10 minutes
-        });
-        downloadUrl = url;
-      }
+      // 7 days signed URL (works for dashboard downloads)
+      const expires = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      const [url] = await file.getSignedUrl({
+        action: "read",
+        expires,
+      });
+      downloadUrl = url;
     }
 
-    // 3) Write purchase record (server-only writes; your rules allow read by buyer)
-    const purchaseDocId = `${buyerUid}_${razorpay_order_id}`;
-    await db
-      .collection("purchases")
-      .doc(purchaseDocId)
-      .set(
-        {
-          id: purchaseDocId,
-          buyerUid,
-          buyerEmail,
+    const db = getDb();
+
+    // Update order
+    await db.collection("orders").doc(razorpay_order_id).set(
+      {
+        status: "paid",
+        paidAt: Date.now(),
+        razorpay_payment_id,
+        razorpay_signature,
+        payment: {
+          id: razorpay_payment_id,
+          status: payment?.status || "",
+          amount: payment?.amount || 0,
+          currency: payment?.currency || "INR",
+          method: payment?.method || "",
+        },
+      },
+      { merge: true }
+    );
+
+    // Write purchase doc (server-only writes; your rules already enforce that)
+    const purchaseId = `${razorpay_order_id}_${razorpay_payment_id}`;
+
+    await db.collection("purchases").doc(purchaseId).set(
+      {
+        id: purchaseId,
+        buyerUid: uid,
+        buyerEmail: decoded.email || "",
+        createdAt: Date.now(),
+        price: Math.round((payment?.amount || 0) / 100),
+        currency: payment?.currency || "INR",
+        displayName: String(photo.displayName || ""),
+        fileName: String(photo.fileName || ""),
+        photoId: String(photo.id || ""),
+        storagePath,
+        downloadUrl, // signed URL
+        razorpay: {
           orderId: razorpay_order_id,
           paymentId: razorpay_payment_id,
-          signature: razorpay_signature,
-          price: Number(photo?.price || 0),
-          displayName: String(photo?.displayName || ""),
-          fileName: String(photo?.fileName || ""),
-          storagePath,
-          downloadUrl, // dashboard uses this
-          status: "paid",
-          createdAt: nowISO(),
-          updatedAt: nowISO(),
         },
-        { merge: true }
-      );
+      },
+      { merge: true }
+    );
 
-    // 4) Update order status too
-    await db
-      .collection("orders")
-      .doc(razorpay_order_id)
-      .set({ status: "paid", paymentId: razorpay_payment_id, updatedAt: nowISO() }, { merge: true });
-
-    return sendJSON(res, 200, { ok: true, purchaseId: purchaseDocId, downloadUrl });
+    return ok(res, { success: true, purchaseId, downloadUrl });
   } catch (e) {
-    console.error("verify-payment error:", e?.message || e);
-    return sendJSON(res, 500, { error: e?.message || "Payment verification failed" });
+    return bad(res, 500, e?.message || "verify-payment failed");
   }
 }

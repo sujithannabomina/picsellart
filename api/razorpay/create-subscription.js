@@ -1,74 +1,58 @@
 // FILE PATH: api/razorpay/create-subscription.js
-import crypto from "crypto";
-import { allowCors, readJSON, requireMethod, sendJSON, nowISO } from "../_lib/utils.js";
-import { razorpayRequest } from "./_lib/razorpay.js";
-import { getDb } from "../_lib/firebaseAdmin.js";
-
-const PLAN_PRICE_INR = {
-  starter: 100,
-  pro: 300,
-  elite: 800,
-};
+import { bad, ok, onlyPost } from "../_lib/utils.js";
+import { verifyFirebaseToken, getDb } from "../_lib/firebaseAdmin.js";
+import { getRazorpayClient } from "./_lib/razorpay.js";
 
 export default async function handler(req, res) {
   try {
-    if (allowCors(req, res)) return;
-    if (!requireMethod(req, res, "POST")) return;
+    if (!onlyPost(req, res)) return;
 
-    const db = getDb();
-    const body = await readJSON(req);
+    const decoded = await verifyFirebaseToken(req);
+    const uid = decoded.uid;
 
-    const sellerUid = String(body?.sellerUid || "").trim();
-    const planId = String(body?.planId || "").trim(); // starter | pro | elite
-    const amountINR = Number(body?.amountINR || PLAN_PRICE_INR[planId] || 0);
+    const body = req.body || {};
+    const plan = body.plan || {}; // { id: starter|pro|elite, priceINR }
+    const planId = String(plan.id || "");
+    const priceINR = Number(plan.priceINR);
 
-    if (!sellerUid) return sendJSON(res, 400, { error: "Missing sellerUid" });
-    if (!PLAN_PRICE_INR[planId]) return sendJSON(res, 400, { error: "Invalid planId" });
-    if (!Number.isFinite(amountINR) || amountINR <= 0) {
-      return sendJSON(res, 400, { error: "Invalid amountINR" });
-    }
+    if (!planId) return bad(res, 400, "Missing plan.id");
+    if (!Number.isFinite(priceINR) || priceINR <= 0) return bad(res, 400, "Invalid plan price");
 
-    const amount = Math.round(amountINR * 100);
-    const receipt = `psa_plan_${sellerUid}_${planId}_${Date.now()}_${crypto
-      .randomBytes(4)
-      .toString("hex")}`;
+    // If you already created Razorpay Plans on dashboard, you should pass razorpay_plan_id.
+    // If not, simplest production route is to treat this as a 1-time order like buyer purchase.
+    // Below is a safe 1-time order for seller plan fee:
+    const amount = Math.round(priceINR * 100);
 
-    const order = await razorpayRequest("/v1/orders", {
-      method: "POST",
-      body: {
-        amount,
-        currency: "INR",
-        receipt,
-        payment_capture: 1,
-        notes: {
-          purpose: "seller_plan",
-          sellerUid,
-          planId,
-        },
+    const rzp = getRazorpayClient();
+    const receipt = `sellerplan_${uid}_${Date.now()}`;
+
+    const order = await rzp.orders.create({
+      amount,
+      currency: "INR",
+      receipt,
+      notes: {
+        purpose: "seller_plan",
+        sellerUid: uid,
+        planId,
       },
     });
 
-    await db
-      .collection("sellerPlanOrders")
-      .doc(order.id)
-      .set(
-        {
-          orderId: order.id,
-          sellerUid,
-          planId,
-          amountINR,
-          amount,
-          currency: "INR",
-          status: "created",
-          createdAt: nowISO(),
-          updatedAt: nowISO(),
-        },
-        { merge: true }
-      );
+    const db = getDb();
+    await db.collection("sellerOrders").doc(order.id).set(
+      {
+        sellerUid: uid,
+        sellerEmail: decoded.email || "",
+        planId,
+        status: "created",
+        createdAt: Date.now(),
+        amount,
+        currency: "INR",
+      },
+      { merge: true }
+    );
 
-    return sendJSON(res, 200, { orderId: order.id, amount: order.amount, currency: order.currency });
+    return ok(res, { orderId: order.id, amount: order.amount, currency: order.currency });
   } catch (e) {
-    console.error("create-subscription error:", e?.message || e);
-    return sendJSON(res, 500, { error: e?.message || "Plan order creation failed" });
+    return bad(res, 500, e?.message || "create-subscription failed");
   }
 }
