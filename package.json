@@ -11,11 +11,12 @@
     "lint": "echo \"No linting configured\""
   },
   "engines": {
-    "node": "22.x"
+    "node": "20.x"
   },
   "dependencies": {
     "@firebase/util": "^1.10.0",
     "firebase": "^11.0.1",
+    "firebase-admin": "^12.7.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0"
