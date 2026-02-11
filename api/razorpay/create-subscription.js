@@ -1,33 +1,74 @@
-// api/razorpay/create-subscription.js
-import { allowCors, ok, bad } from "../_lib/utils.js";
-import { createRazorpaySubscription } from "../_lib/razorpay.js";
+// FILE PATH: api/razorpay/create-subscription.js
+import crypto from "crypto";
+import { allowCors, readJSON, requireMethod, sendJSON, nowISO } from "../_lib/utils.js";
+import { razorpayRequest } from "./_lib/razorpay.js";
+import { getDb } from "../_lib/firebaseAdmin.js";
+
+const PLAN_PRICE_INR = {
+  starter: 100,
+  pro: 300,
+  elite: 800,
+};
 
 export default async function handler(req, res) {
   try {
     if (allowCors(req, res)) return;
+    if (!requireMethod(req, res, "POST")) return;
 
-    if (req.method !== "POST") {
-      return bad(res, 405, "Method not allowed. Use POST.");
+    const db = getDb();
+    const body = await readJSON(req);
+
+    const sellerUid = String(body?.sellerUid || "").trim();
+    const planId = String(body?.planId || "").trim(); // starter | pro | elite
+    const amountINR = Number(body?.amountINR || PLAN_PRICE_INR[planId] || 0);
+
+    if (!sellerUid) return sendJSON(res, 400, { error: "Missing sellerUid" });
+    if (!PLAN_PRICE_INR[planId]) return sendJSON(res, 400, { error: "Invalid planId" });
+    if (!Number.isFinite(amountINR) || amountINR <= 0) {
+      return sendJSON(res, 400, { error: "Invalid amountINR" });
     }
 
-    const body = req.body || {};
-    const sellerUid = String(body.sellerUid || "").trim();
-    const planId = String(body.planId || "").trim();
+    const amount = Math.round(amountINR * 100);
+    const receipt = `psa_plan_${sellerUid}_${planId}_${Date.now()}_${crypto
+      .randomBytes(4)
+      .toString("hex")}`;
 
-    if (!sellerUid) return bad(res, 400, "Missing sellerUid.");
-    if (!planId) return bad(res, 400, "Missing planId (Razorpay Plan ID).");
-
-    const sub = await createRazorpaySubscription({
-      plan_id: planId,
-      total_count: 1,
-      customer_notify: 1,
-      notes: { purpose: "seller_plan", sellerUid },
+    const order = await razorpayRequest("/v1/orders", {
+      method: "POST",
+      body: {
+        amount,
+        currency: "INR",
+        receipt,
+        payment_capture: 1,
+        notes: {
+          purpose: "seller_plan",
+          sellerUid,
+          planId,
+        },
+      },
     });
 
-    return ok(res, { subscriptionId: sub.id, status: sub.status });
+    await db
+      .collection("sellerPlanOrders")
+      .doc(order.id)
+      .set(
+        {
+          orderId: order.id,
+          sellerUid,
+          planId,
+          amountINR,
+          amount,
+          currency: "INR",
+          status: "created",
+          createdAt: nowISO(),
+          updatedAt: nowISO(),
+        },
+        { merge: true }
+      );
+
+    return sendJSON(res, 200, { orderId: order.id, amount: order.amount, currency: order.currency });
   } catch (e) {
-    return bad(res, 500, "Subscription creation failed", {
-      detail: e?.message || "Unknown error",
-    });
+    console.error("create-subscription error:", e?.message || e);
+    return sendJSON(res, 500, { error: e?.message || "Plan order creation failed" });
   }
 }

@@ -11,14 +11,6 @@ function safeNumber(n, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 
-async function readJsonSafe(res) {
-  try {
-    return await res.json();
-  } catch {
-    return {};
-  }
-}
-
 export default function Checkout() {
   const { user, booting } = useAuth();
   const nav = useNavigate();
@@ -31,7 +23,6 @@ export default function Checkout() {
   const id = params.get("id") || "";
   const name = params.get("name") || "Photo";
 
-  // Require login
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
@@ -49,8 +40,6 @@ export default function Checkout() {
     const qpPrice = safeNumber(params.get("price"), NaN);
     const fixed = Number.isFinite(qpPrice) && qpPrice > 0 ? qpPrice : getFixedPriceForImage(fileName);
 
-    // IMPORTANT: your sample images are in Storage "public/images/..."
-    // normalizeStoragePath should resolve to something like: "public/images/sample1.jpg"
     return {
       id: storagePath || raw || "unknown",
       fileName,
@@ -64,7 +53,6 @@ export default function Checkout() {
   const amountINR = safeNumber(photo.price, 149);
 
   const startPayment = async () => {
-    if (busy) return;
     setErr("");
     setBusy(true);
 
@@ -74,11 +62,10 @@ export default function Checkout() {
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      // Client uses publishable key only
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in env.");
+      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env.");
 
-      // 1) Create order on server (REAL MONEY SAFE)
+      // 1) Create order (server)
       const r1 = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -89,19 +76,17 @@ export default function Checkout() {
         }),
       });
 
-      const d1 = await readJsonSafe(r1);
-      if (!r1.ok) {
-        throw new Error(d1?.error || `Order creation failed (HTTP ${r1.status})`);
-      }
+      const d1 = await r1.json().catch(() => ({}));
+      if (!r1.ok) throw new Error(d1?.error || `Order creation failed (HTTP ${r1.status})`);
 
-      const { orderId, amount, currency } = d1 || {};
-      if (!orderId) throw new Error("Order creation failed (missing orderId)");
+      const { orderId, amount, currency } = d1;
+      if (!orderId) throw new Error("Order creation failed.");
 
       // 2) Open Razorpay checkout
       const rz = new window.Razorpay({
         key,
         amount,
-        currency: currency || "INR",
+        currency,
         name: "PicSellArt",
         description: "Photo Purchase",
         order_id: orderId,
@@ -118,7 +103,6 @@ export default function Checkout() {
         theme: { color: "#2563eb" },
         handler: async function (response) {
           try {
-            // 3) Verify signature on server (PRODUCTION REQUIRED)
             const r2 = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -132,10 +116,8 @@ export default function Checkout() {
               }),
             });
 
-            const d2 = await readJsonSafe(r2);
-            if (!r2.ok) {
-              throw new Error(d2?.error || `Payment verification failed (HTTP ${r2.status})`);
-            }
+            const d2 = await r2.json().catch(() => ({}));
+            if (!r2.ok) throw new Error(d2?.error || `Payment verification failed (HTTP ${r2.status})`);
 
             nav(
               "/buyer-dashboard?tab=purchases&msg=" +
@@ -148,9 +130,7 @@ export default function Checkout() {
             setBusy(false);
           }
         },
-        modal: {
-          ondismiss: () => setBusy(false),
-        },
+        modal: { ondismiss: () => setBusy(false) },
       });
 
       rz.open();
