@@ -11,45 +11,7 @@ function safeNumber(n, fallback = 0) {
   return Number.isFinite(x) ? x : fallback;
 }
 
-/**
- * Your Explore sends id like:
- *   it.id = "sample-" + encodeURIComponent("public/images/sample1.jpg")
- * then you do encodeURIComponent(it.id) again in the URL.
- *
- * This function makes it stable:
- * - decode once
- * - strip "sample-" prefix
- * - decode again if still has %2F
- * - normalize to a Firebase storage path
- */
-function decodeAndNormalizeId(idParam) {
-  if (!idParam) return { raw: "", storagePath: "", fileName: "" };
-
-  let raw = "";
-  try {
-    raw = decodeURIComponent(idParam);
-  } catch {
-    raw = idParam;
-  }
-
-  // remove "sample-" prefix if present
-  if (raw.startsWith("sample-")) raw = raw.slice("sample-".length);
-
-  // if still encoded (contains %2F), decode one more time
-  if (/%2F/i.test(raw)) {
-    try {
-      raw = decodeURIComponent(raw);
-    } catch {
-      // ignore
-    }
-  }
-
-  const storagePath = normalizeStoragePath(raw) || raw;
-  const fileName = (storagePath || raw).split("/").pop() || "";
-  return { raw, storagePath, fileName };
-}
-
-async function safeJson(res) {
+async function readJsonSafe(res) {
   try {
     return await res.json();
   } catch {
@@ -64,45 +26,46 @@ export default function Checkout() {
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [note, setNote] = useState("");
 
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const idParam = params.get("id") || "";
+  const id = params.get("id") || "";
   const name = params.get("name") || "Photo";
 
   // Require login
   useEffect(() => {
     if (booting) return;
     if (!user?.uid) {
-      nav(`/buyer-login?next=${encodeURIComponent(location.pathname + location.search)}`, { replace: true });
+      nav(`/buyer-login?next=${encodeURIComponent(location.pathname + location.search)}`, {
+        replace: true,
+      });
     }
   }, [booting, user, nav, location.pathname, location.search]);
 
   const photo = useMemo(() => {
-    const { storagePath, fileName, raw } = decodeAndNormalizeId(idParam);
+    const raw = decodeURIComponent(id || "");
+    const storagePath = normalizeStoragePath(raw);
+    const fileName = (storagePath || raw).split("/").pop() || "";
 
-    // If price missing/invalid, use deterministic fixed pricing by filename
     const qpPrice = safeNumber(params.get("price"), NaN);
     const fixed = Number.isFinite(qpPrice) && qpPrice > 0 ? qpPrice : getFixedPriceForImage(fileName);
 
+    // IMPORTANT: your sample images are in Storage "public/images/..."
+    // normalizeStoragePath should resolve to something like: "public/images/sample1.jpg"
     return {
       id: storagePath || raw || "unknown",
-      storagePath: storagePath || "",
-      fileName: fileName || "",
+      fileName,
       displayName: name,
-      title: "Street Photography",
       price: fixed,
+      storagePath: storagePath || "",
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idParam, name]);
+  }, [id, name]);
 
-  // Never allow 0 / NaN
-  const amountINR = Math.max(1, safeNumber(photo.price, 149));
-  const amountPaise = Math.round(amountINR * 100);
+  const amountINR = safeNumber(photo.price, 149);
 
   const startPayment = async () => {
+    if (busy) return;
     setErr("");
-    setNote("");
     setBusy(true);
 
     try {
@@ -111,48 +74,34 @@ export default function Checkout() {
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
+      // Client uses publishable key only
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
-      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env.");
+      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in env.");
 
-      // 1) Create order on server (THIS is the key fix)
-      const r1 = await fetch("/api/createOrder", {
+      // 1) Create order on server (REAL MONEY SAFE)
+      const r1 = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          purpose: "buyer_purchase",
           buyerUid: user.uid,
-          buyerEmail: user.email || "",
           amountINR,
-          amountPaise,
-          currency: "INR",
-          photo: {
-            id: photo.id,
-            storagePath: photo.storagePath,
-            fileName: photo.fileName,
-            title: photo.title,
-            price: amountINR,
-            displayName: photo.displayName,
-          },
+          photo,
         }),
       });
 
-      const d1 = await safeJson(r1);
+      const d1 = await readJsonSafe(r1);
       if (!r1.ok) {
-        // show server error if provided
-        throw new Error(d1?.error || d1?.message || `Order creation failed (HTTP ${r1.status})`);
+        throw new Error(d1?.error || `Order creation failed (HTTP ${r1.status})`);
       }
 
-      const orderId = d1?.orderId || d1?.id || d1?.order?.id;
-      const serverAmount = d1?.amount ?? d1?.order?.amount ?? amountPaise;
-      const currency = d1?.currency || d1?.order?.currency || "INR";
-
-      if (!orderId) throw new Error("Order creation failed: missing orderId from /api/createOrder");
+      const { orderId, amount, currency } = d1 || {};
+      if (!orderId) throw new Error("Order creation failed (missing orderId)");
 
       // 2) Open Razorpay checkout
       const rz = new window.Razorpay({
         key,
-        amount: serverAmount, // must be in paise
-        currency,
+        amount,
+        currency: currency || "INR",
         name: "PicSellArt",
         description: "Photo Purchase",
         order_id: orderId,
@@ -165,13 +114,12 @@ export default function Checkout() {
           buyerUid: user.uid,
           photoId: photo.id,
           storagePath: photo.storagePath || "",
-          fileName: photo.fileName || "",
         },
         theme: { color: "#2563eb" },
         handler: async function (response) {
-          // 3) Verify payment (recommended). If verify endpoint isn't deployed yet, do NOT block.
           try {
-            const r2 = await fetch("/api/verifyPayment", {
+            // 3) Verify signature on server (PRODUCTION REQUIRED)
+            const r2 = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -184,18 +132,9 @@ export default function Checkout() {
               }),
             });
 
-            const d2 = await safeJson(r2);
-
+            const d2 = await readJsonSafe(r2);
             if (!r2.ok) {
-              // If verify endpoint not found / not deployed, rely on webhook.
-              if (r2.status === 404) {
-                setNote("Payment captured. Confirmation will be updated via webhook in Buyer Dashboard → Purchases.");
-                nav("/buyer-dashboard?tab=purchases&msg=" + encodeURIComponent("Payment captured. Pending confirmation."), {
-                  replace: true,
-                });
-                return;
-              }
-              throw new Error(d2?.error || d2?.message || "Payment verification failed");
+              throw new Error(d2?.error || `Payment verification failed (HTTP ${r2.status})`);
             }
 
             nav(
@@ -229,7 +168,6 @@ export default function Checkout() {
             <h1 className="text-3xl font-semibold tracking-tight">Checkout</h1>
             <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
           </div>
-
           <button
             className="psa-btn-soft rounded-2xl border border-slate-200 px-4 py-2 text-sm hover:border-slate-400"
             onClick={() => nav("/explore")}
@@ -242,12 +180,6 @@ export default function Checkout() {
         {err ? (
           <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {err}
-          </div>
-        ) : null}
-
-        {note ? (
-          <div className="mt-6 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
-            {note}
           </div>
         ) : null}
 

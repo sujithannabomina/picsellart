@@ -4,6 +4,10 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getPurchasesForBuyer } from "../utils/purchases";
 
+// ✅ Added: generate download link when missing
+import { getDownloadURL, ref as sRef } from "firebase/storage";
+import { storage } from "../firebase"; // IMPORTANT: your project must export storage from src/firebase.js
+
 function TabButton({ active, children, onClick }) {
   return (
     <button
@@ -43,7 +47,6 @@ export default function BuyerDashboard() {
     if (t === "purchases" || t === "overview") setTab(t);
     if (msg) setBanner(msg);
 
-    // Clean URL (keeps UI stable when user hits Back)
     if (t || msg) nav("/buyer-dashboard", { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -59,9 +62,25 @@ export default function BuyerDashboard() {
     setPLoading(true);
     try {
       const items = await getPurchasesForBuyer(uid);
-      setPurchases(items || []);
+
+      // ✅ Production improvement:
+      // If server didn’t store downloadUrl OR it expired, generate it from Storage path.
+      const enriched = await Promise.all(
+        (items || []).map(async (p) => {
+          if (p?.downloadUrl) return p;
+          if (!p?.storagePath) return p;
+
+          try {
+            const url = await getDownloadURL(sRef(storage, p.storagePath));
+            return { ...p, downloadUrl: url };
+          } catch {
+            return p; // keep "Download not ready" if storage rules block it
+          }
+        })
+      );
+
+      setPurchases(enriched || []);
     } catch {
-      // Professional message (no raw Firebase/permission errors shown)
       setPErr("We couldn’t load your purchases right now. Please try again.");
     } finally {
       setPLoading(false);
@@ -96,7 +115,6 @@ export default function BuyerDashboard() {
     }
   };
 
-  // While booting, show safe shell (prevents white blank)
   if (booting) {
     return (
       <div className="min-h-screen bg-white">
@@ -233,7 +251,9 @@ export default function BuyerDashboard() {
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div>
                           <div className="font-medium">{title}</div>
-                          <div className="mt-1 text-sm text-slate-600">Price: ₹{Number(p.price || 0)}</div>
+                          <div className="mt-1 text-sm text-slate-600">
+                            Price: ₹{Number(p.price || 0)}
+                          </div>
                         </div>
                         <div className="flex gap-2">
                           {canDownload ? (

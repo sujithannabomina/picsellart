@@ -1,53 +1,27 @@
-import { db } from "../firebase";
-import {
-  doc,
-  setDoc,
-  getDocs,
-  collection,
-  query,
-  where,
-  orderBy,
-  serverTimestamp,
-} from "firebase/firestore";
+// FILE PATH: src/utils/purchases.js
+import { collection, getDocs, orderBy, query } from "firebase/firestore";
+import { db } from "../firebase"; // IMPORTANT: your project must already export db from src/firebase.js
 
-const collectionName = "purchases";
+export async function getPurchasesForBuyer(uid) {
+  if (!uid) return [];
 
-export const recordPurchase = async (buyerUid, photo, paymentInfo, downloadUrl) => {
-  if (!buyerUid) throw new Error("Missing buyer UID.");
-
-  const photoId = photo?.id || "";
-  if (!photoId) throw new Error("Missing photo id.");
-
-  const purchaseId = `${buyerUid}_${photoId}`.replace(/\//g, "_");
-  const ref = doc(db, collectionName, purchaseId);
-
-  await setDoc(
-    ref,
-    {
-      buyerUid,
-      photoId,
-      fileName: photo?.fileName || "",
-      displayName: photo?.name || photo?.displayName || "Photo",
-      price: Number(photo?.price || 0),
-      currency: "INR",
-      storagePath: photo?.storagePath || "",
-      downloadUrl: downloadUrl || "",
-      createdAt: serverTimestamp(),
-      razorpay: paymentInfo || null,
-    },
-    { merge: true }
-  );
-};
-
-export const getPurchasesForBuyer = async (buyerUid) => {
-  if (!buyerUid) return [];
-  const ref = collection(db, collectionName);
-
-  const q = query(ref, where("buyerUid", "==", buyerUid), orderBy("createdAt", "desc"));
+  const ref = collection(db, "buyers", uid, "purchases");
+  const q = query(ref, orderBy("createdAt", "desc"));
   const snap = await getDocs(q);
 
-  return snap.docs.map((docSnap) => ({
-    id: docSnap.id,
-    ...docSnap.data(),
-  }));
-};
+  const items = [];
+  snap.forEach((doc) => {
+    const d = doc.data() || {};
+    items.push({
+      id: d.id || doc.id,
+      price: Number(d?.photo?.price || d?.price || d?.amountINR || 0),
+      fileName: d?.photo?.fileName || d?.fileName || "",
+      displayName: d?.photo?.displayName || d?.displayName || "",
+      storagePath: d?.photo?.storagePath || d?.storagePath || "",
+      downloadUrl: d?.downloadUrl || "",
+      createdAt: d?.createdAt || "",
+    });
+  });
+
+  return items;
+}
