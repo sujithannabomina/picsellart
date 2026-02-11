@@ -1,7 +1,7 @@
 // api/createOrder.js
 import crypto from "crypto";
-import { getRazorpay } from "./_lib/razorpay.js";
 import { allowCors, ok, bad } from "./_lib/utils.js";
+import { createRazorpayOrder } from "./_lib/razorpay.js";
 
 export default async function handler(req, res) {
   try {
@@ -19,13 +19,12 @@ export default async function handler(req, res) {
     if (!buyerUid) return bad(res, 400, "Missing buyerUid.");
     if (!Number.isFinite(amountINR) || amountINR <= 0) return bad(res, 400, "Invalid amount.");
 
-    // Razorpay uses paise
+    // Razorpay expects amount in paise
     const amount = Math.round(amountINR * 100);
 
-    const rz = getRazorpay();
     const receipt = `psa_${buyerUid}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
 
-    const order = await rz.orders.create({
+    const order = await createRazorpayOrder({
       amount,
       currency: "INR",
       receipt,
@@ -47,6 +46,8 @@ export default async function handler(req, res) {
       currency: order.currency,
     });
   } catch (e) {
-    return bad(res, 500, "Order creation failed", { detail: e?.message || "Unknown error" });
+    return bad(res, 500, "Order creation failed", {
+      detail: e?.message || "Unknown error",
+    });
   }
 }
