@@ -1,4 +1,3 @@
-// FILE PATH: api/razorpay/webhook.js
 import crypto from "node:crypto";
 import { bad, ok, readRawBody } from "../_lib/utils.js";
 import { getWebhookSecret } from "./_lib/razorpay.js";
@@ -11,8 +10,8 @@ function verifyWebhookSignature(rawBody, signature, secret) {
 
 export const config = {
   api: {
-    bodyParser: false, // IMPORTANT: we need raw body
-  },
+    bodyParser: false
+  }
 };
 
 export default async function handler(req, res) {
@@ -29,12 +28,11 @@ export default async function handler(req, res) {
 
     const payload = JSON.parse(raw.toString("utf-8"));
 
-    // Store webhook (optional)
     const db = getDb();
     await db.collection("webhooks").add({
       createdAt: Date.now(),
       event: payload?.event || "",
-      payload,
+      payload
     });
 
     return ok(res, { received: true });

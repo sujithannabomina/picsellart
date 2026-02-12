@@ -1,4 +1,3 @@
-// FILE PATH: api/razorpay/_lib/razorpay.js
 import Razorpay from "razorpay";
 import { safeEnv } from "../../_lib/utils.js";
 

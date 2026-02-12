@@ -1,6 +1,5 @@
-// FILE PATH: api/razorpay/verify-payment.js
 import crypto from "node:crypto";
-import { bad, ok, onlyPost, safeEnv } from "../_lib/utils.js";
+import { bad, ok, onlyPost, safeEnv, readJsonBody } from "../_lib/utils.js";
 import { verifyFirebaseToken, getBucket, getDb } from "../_lib/firebaseAdmin.js";
 import { getRazorpayClient } from "./_lib/razorpay.js";
 
@@ -17,7 +16,7 @@ export default async function handler(req, res) {
     const decoded = await verifyFirebaseToken(req);
     const uid = decoded.uid;
 
-    const body = req.body || {};
+    const body = await readJsonBody(req);
     const photo = body.photo || {};
 
     const razorpay_order_id = body.razorpay_order_id;
@@ -35,12 +34,12 @@ export default async function handler(req, res) {
       order_id: razorpay_order_id,
       payment_id: razorpay_payment_id,
       signature: razorpay_signature,
-      secret,
+      secret
     });
 
     if (!valid) return bad(res, 400, "Invalid payment signature");
 
-    // Optional: fetch payment from Razorpay (extra validation)
+    // Extra validation: fetch payment from Razorpay
     const rzp = getRazorpayClient();
     const payment = await rzp.payments.fetch(razorpay_payment_id);
 
@@ -48,21 +47,15 @@ export default async function handler(req, res) {
       return bad(res, 400, "Payment not completed", { status: payment?.status });
     }
 
-    // Create a signed download URL for the paid/original file.
-    // NOTE: This assumes originals are in Storage under "Buyer/..."
-    // You can store photo.storagePath like: "Buyer/originals/sample1.jpg"
+    // Signed download URL for paid/original
     const bucket = getBucket();
     const storagePath = String(photo.storagePath || "");
     let downloadUrl = "";
 
     if (storagePath) {
       const file = bucket.file(storagePath);
-      // 7 days signed URL (works for dashboard downloads)
-      const expires = Date.now() + 7 * 24 * 60 * 60 * 1000;
-      const [url] = await file.getSignedUrl({
-        action: "read",
-        expires,
-      });
+      const expires = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 days
+      const [url] = await file.getSignedUrl({ action: "read", expires });
       downloadUrl = url;
     }
 
@@ -73,6 +66,8 @@ export default async function handler(req, res) {
       {
         status: "paid",
         paidAt: Date.now(),
+        buyerUid: uid,
+        buyerEmail: decoded.email || "",
         razorpay_payment_id,
         razorpay_signature,
         payment: {
@@ -80,13 +75,13 @@ export default async function handler(req, res) {
           status: payment?.status || "",
           amount: payment?.amount || 0,
           currency: payment?.currency || "INR",
-          method: payment?.method || "",
-        },
+          method: payment?.method || ""
+        }
       },
       { merge: true }
     );
 
-    // Write purchase doc (server-only writes; your rules already enforce that)
+    // Purchase doc
     const purchaseId = `${razorpay_order_id}_${razorpay_payment_id}`;
 
     await db.collection("purchases").doc(purchaseId).set(
@@ -101,17 +96,20 @@ export default async function handler(req, res) {
         fileName: String(photo.fileName || ""),
         photoId: String(photo.id || ""),
         storagePath,
-        downloadUrl, // signed URL
+        downloadUrl,
         razorpay: {
           orderId: razorpay_order_id,
-          paymentId: razorpay_payment_id,
-        },
+          paymentId: razorpay_payment_id
+        }
       },
       { merge: true }
     );
 
     return ok(res, { success: true, purchaseId, downloadUrl });
   } catch (e) {
+    if (e?.code === "AUTH_MISSING") {
+      return bad(res, 401, "Auth token missing. Please logout and login again.");
+    }
     return bad(res, 500, e?.message || "verify-payment failed");
   }
 }

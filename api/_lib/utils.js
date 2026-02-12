@@ -1,5 +1,3 @@
-// FILE PATH: api/_lib/utils.js
-
 export function json(res, status, data) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -23,17 +21,29 @@ export function onlyPost(req, res) {
   return true;
 }
 
-// Vercel node function: safely read raw body (needed for webhooks)
+// Vercel node function: safely read raw body (needed for webhooks + reliable JSON parsing)
 export async function readRawBody(req) {
   const chunks = [];
   for await (const chunk of req) chunks.push(chunk);
   return Buffer.concat(chunks);
 }
 
+// Some Vercel runtimes won't populate req.body the way you expect.
+// This makes JSON parsing production-safe.
+export async function readJsonBody(req) {
+  if (req.body && typeof req.body === "object") return req.body;
+  const raw = await readRawBody(req);
+  if (!raw || raw.length === 0) return {};
+  try {
+    return JSON.parse(raw.toString("utf-8"));
+  } catch {
+    return {};
+  }
+}
+
 export function safeEnv(name, fallback = "") {
   const v = process.env[name];
   if (!v) return fallback;
-  // Remove accidental wrapping quotes and trim spaces (very common in Vercel)
   return String(v).trim().replace(/^"(.*)"$/, "$1").replace(/^'(.*)'$/, "$1");
 }
 

@@ -1,9 +1,9 @@
-// FILE PATH: src/pages/Checkout.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import loadRazorpay from "../utils/loadRazorpay";
 import { useAuth } from "../hooks/useAuth";
 import { getFixedPriceForImage, normalizeStoragePath } from "../utils/pricing";
+import { auth } from "../firebase"; // IMPORTANT: use real Firebase auth user for token
 
 function safeNumber(n, fallback = 0) {
   if (n === null || n === undefined || n === "") return fallback;
@@ -27,7 +27,7 @@ export default function Checkout() {
     if (booting) return;
     if (!user?.uid) {
       nav(`/buyer-login?next=${encodeURIComponent(location.pathname + location.search)}`, {
-        replace: true,
+        replace: true
       });
     }
   }, [booting, user, nav, location.pathname, location.search]);
@@ -40,24 +40,30 @@ export default function Checkout() {
     const qpPrice = safeNumber(params.get("price"), NaN);
     const fixed = Number.isFinite(qpPrice) && qpPrice > 0 ? qpPrice : getFixedPriceForImage(fileName);
 
-    // IMPORTANT:
-    // For PRODUCTION paid downloads, this should be a PRIVATE original file path like:
-    // "Buyer/originals/sample1.jpg"
-    // Right now if you pass public/images, anyone can read it without paying.
-    const paidStoragePath =
-      params.get("paidPath") || ""; // optional override if you send it from Explore
+    const paidStoragePath = params.get("paidPath") || "";
 
     return {
       id: storagePath || raw || "unknown",
       fileName,
       displayName: name,
       price: fixed,
-      storagePath: paidStoragePath || "", // server will sign this if present
+      storagePath: paidStoragePath || ""
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, name]);
 
   const amountINR = safeNumber(photo.price, 149);
+
+  async function getFreshIdToken() {
+    const u = auth.currentUser;
+    if (!u) return "";
+    try {
+      // Force refresh token to avoid stale/empty edge cases on production
+      return await u.getIdToken(true);
+    } catch {
+      return "";
+    }
+  }
 
   const startPayment = async () => {
     setErr("");
@@ -66,27 +72,23 @@ export default function Checkout() {
     try {
       if (!user?.uid) throw new Error("Please login first.");
 
-      const ok = await loadRazorpay();
-      if (!ok) throw new Error("Razorpay SDK failed to load.");
+      const okSdk = await loadRazorpay();
+      if (!okSdk) throw new Error("Razorpay SDK failed to load.");
 
       const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
       if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env.");
 
-      // Firebase ID token for server auth
-      const idToken = await user.getIdToken?.();
+      const idToken = await getFreshIdToken();
       if (!idToken) throw new Error("Auth token missing. Please logout and login again.");
 
-      // 1) Create order on server
+      // 1) Create order
       const r1 = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
+          Authorization: `Bearer ${idToken}`
         },
-        body: JSON.stringify({
-          amountINR,
-          photo,
-        }),
+        body: JSON.stringify({ amountINR, photo })
       });
 
       const d1 = await r1.json().catch(() => ({}));
@@ -95,7 +97,6 @@ export default function Checkout() {
       const { orderId, amount, currency } = d1;
       if (!orderId) throw new Error("Order creation failed");
 
-      // 2) Open Razorpay checkout
       const rz = new window.Razorpay({
         key,
         amount,
@@ -105,33 +106,32 @@ export default function Checkout() {
         order_id: orderId,
         prefill: {
           name: user.displayName || "",
-          email: user.email || "",
+          email: user.email || ""
         },
         notes: {
           purpose: "buyer_purchase",
           buyerUid: user.uid,
           photoId: photo.id,
-          storagePath: photo.storagePath || "",
+          storagePath: photo.storagePath || ""
         },
         theme: { color: "#2563eb" },
         handler: async function (response) {
           try {
-            const idToken2 = await user.getIdToken?.();
+            const idToken2 = await getFreshIdToken();
             if (!idToken2) throw new Error("Auth token missing. Please login again.");
 
-            // 3) Verify signature on server
             const r2 = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
-                Authorization: `Bearer ${idToken2}`,
+                Authorization: `Bearer ${idToken2}`
               },
               body: JSON.stringify({
                 photo,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
+                razorpay_signature: response.razorpay_signature
+              })
             });
 
             const d2 = await r2.json().catch(() => ({}));
@@ -149,8 +149,8 @@ export default function Checkout() {
           }
         },
         modal: {
-          ondismiss: () => setBusy(false),
-        },
+          ondismiss: () => setBusy(false)
+        }
       });
 
       rz.open();
