@@ -32,14 +32,14 @@ export default function Checkout() {
   const id = q.get("id") || "";
   const amount = Number(q.get("amount") || 169);
 
+  // FRONTEND env (must exist in Vercel)
   const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
 
-  // NEW (optional): if you set VITE_CREATE_ORDER_URL, Checkout can call your function URL directly.
-  // Example value: https://createorder-o67lgxsola-el.a.run.app
-  const directCreateOrderUrl = import.meta.env.VITE_CREATE_ORDER_URL;
-
-  // REQUIRED: set this in Vercel as VITE_VERIFY_PAYMENT_URL
-  // Example value: https://asia-south1-picsellart-619a7.cloudfunctions.net/verifyPayment
+  // MUST exist in Vercel (call Firebase Functions directly)
+  // Example:
+  // VITE_CREATE_ORDER_URL = https://createorder-o67lgxsola-el.a.run.app
+  // VITE_VERIFY_PAYMENT_URL = https://asia-south1-picsellart-619a7.cloudfunctions.net/verifyPayment
+  const createOrderUrl = import.meta.env.VITE_CREATE_ORDER_URL;
   const verifyUrl = import.meta.env.VITE_VERIFY_PAYMENT_URL;
 
   useEffect(() => {
@@ -62,6 +62,11 @@ export default function Checkout() {
         setLoading(false);
         return;
       }
+      if (!createOrderUrl) {
+        setErr("Missing VITE_CREATE_ORDER_URL in Vercel env.");
+        setLoading(false);
+        return;
+      }
       if (!verifyUrl) {
         setErr("Missing VITE_VERIFY_PAYMENT_URL in Vercel env.");
         setLoading(false);
@@ -75,11 +80,8 @@ export default function Checkout() {
         return;
       }
 
-      // 1) Create Order
-      // Prefer direct function URL (if provided), else use Vercel API proxy route.
-      const createEndpoint = directCreateOrderUrl || "/api/razorpay/create-order";
-
-      const createRes = await fetch(createEndpoint, {
+      // 1) Create Order (Firebase Function URL)
+      const createRes = await fetch(createOrderUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -107,7 +109,7 @@ export default function Checkout() {
 
         handler: async function (response) {
           try {
-            // 3) Verify payment (Firebase Function)
+            // 3) Verify Payment (Firebase Function URL)
             const vr = await fetch(verifyUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -133,20 +135,15 @@ export default function Checkout() {
           }
         },
 
-        prefill: {
-          email: user.email || "",
-        },
-
+        prefill: { email: user.email || "" },
         theme: { color: "#2563eb" },
-        modal: {
-          ondismiss: () => setLoading(false),
-        },
+        modal: { ondismiss: () => setLoading(false) },
       });
 
       rzp.open();
     } catch (e) {
       console.error(e);
-      setErr(e?.message || "create-order failed");
+      setErr(e?.message || "Payment failed");
       setLoading(false);
     }
   }
