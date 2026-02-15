@@ -30,9 +30,17 @@ export default function Checkout() {
 
   const type = q.get("type") || "sample";
   const id = q.get("id") || "";
-  const amount = Number(q.get("amount") || 169); // fallback
+  const amount = Number(q.get("amount") || 169);
 
   const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+
+  // NEW (optional): if you set VITE_CREATE_ORDER_URL, Checkout can call your function URL directly.
+  // Example value: https://createorder-o67lgxsola-el.a.run.app
+  const directCreateOrderUrl = import.meta.env.VITE_CREATE_ORDER_URL;
+
+  // REQUIRED: set this in Vercel as VITE_VERIFY_PAYMENT_URL
+  // Example value: https://asia-south1-picsellart-619a7.cloudfunctions.net/verifyPayment
+  const verifyUrl = import.meta.env.VITE_VERIFY_PAYMENT_URL;
 
   useEffect(() => {
     setErr("");
@@ -54,6 +62,11 @@ export default function Checkout() {
         setLoading(false);
         return;
       }
+      if (!verifyUrl) {
+        setErr("Missing VITE_VERIFY_PAYMENT_URL in Vercel env.");
+        setLoading(false);
+        return;
+      }
 
       const ok = await loadRazorpayScript();
       if (!ok) {
@@ -62,8 +75,11 @@ export default function Checkout() {
         return;
       }
 
-      // 1) Create order (via Vercel proxy)
-      const createRes = await fetch("/api/razorpay/create-order", {
+      // 1) Create Order
+      // Prefer direct function URL (if provided), else use Vercel API proxy route.
+      const createEndpoint = directCreateOrderUrl || "/api/razorpay/create-order";
+
+      const createRes = await fetch(createEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -75,7 +91,7 @@ export default function Checkout() {
         }),
       });
 
-      const createData = await createRes.json();
+      const createData = await createRes.json().catch(() => ({}));
       if (!createRes.ok || !createData.orderId) {
         throw new Error(createData?.error || "create-order failed");
       }
@@ -88,36 +104,39 @@ export default function Checkout() {
         name: "PicSellArt",
         description: "Purchase",
         order_id: createData.orderId,
+
         handler: async function (response) {
           try {
-            // 3) Verify payment (call your Firebase function directly)
-            // Change this to your function URL if you want:
-            // const VERIFY_URL = "https://<your-cloudrun>/verifyPayment";
-            // If you prefer to verify via another Vercel API route, we can add it.
-            const VERIFY_URL = import.meta.env.VITE_VERIFY_PAYMENT_URL;
+            // 3) Verify payment (Firebase Function)
+            const vr = await fetch(verifyUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...response,
+                itemId: id,
+                buyerUid: user.uid,
+                amount,
+              }),
+            });
 
-            if (VERIFY_URL) {
-              const vr = await fetch(VERIFY_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  ...response,
-                  itemId: id,
-                  buyerUid: user.uid,
-                  amount,
-                }),
-              });
-              const vd = await vr.json().catch(() => ({}));
-              if (!vr.ok || !vd.ok) throw new Error(vd?.error || "verify-payment failed");
+            const vd = await vr.json().catch(() => ({}));
+            if (!vr.ok || !vd.ok) {
+              throw new Error(vd?.error || "verify-payment failed");
             }
 
             navigate("/buyer-dashboard?tab=purchases");
           } catch (e) {
             console.error(e);
-            setErr(e.message || "Payment succeeded but verification failed.");
+            setErr(e?.message || "Payment succeeded but verification failed.");
+          } finally {
+            setLoading(false);
           }
         },
-        prefill: {},
+
+        prefill: {
+          email: user.email || "",
+        },
+
         theme: { color: "#2563eb" },
         modal: {
           ondismiss: () => setLoading(false),
@@ -125,10 +144,9 @@ export default function Checkout() {
       });
 
       rzp.open();
-      setLoading(false);
     } catch (e) {
       console.error(e);
-      setErr(e.message || "create-order failed");
+      setErr(e?.message || "create-order failed");
       setLoading(false);
     }
   }
