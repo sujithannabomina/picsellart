@@ -1,171 +1,197 @@
-// functions/index.js
+import corsPkg from "cors";
+import crypto from "crypto";
+import Razorpay from "razorpay";
+
 import { onRequest } from "firebase-functions/v2/https";
-import { setGlobalOptions } from "firebase-functions/v2";
+import { defineSecret } from "firebase-functions/params";
+
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
-import Razorpay from "razorpay";
-import CryptoJS from "crypto-js";
-
-setGlobalOptions({ region: "asia-south1" });
 
 initializeApp();
-const db = getFirestore();
 
-// ====== REQUIRED ENV on Firebase Functions runtime ======
-// RAZORPAY_KEY_ID
-// RAZORPAY_KEY_SECRET
-// RAZORPAY_WEBHOOK_SECRET
-//
-// Set them in Firebase console:
-// Firebase -> Functions -> (your function) -> Runtime environment variables
-// or via CLI if you use it.
+const cors = corsPkg({ origin: true });
 
-function getRazorpay() {
-  const key_id = process.env.RAZORPAY_KEY_ID;
-  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+// ✅ Lock region so your URLs don’t change and Firebase won’t ask to delete old ones
+const REGION = "asia-south1";
+
+// ✅ V2 Secrets (these MUST be set in Firebase Secrets Manager via firebase CLI)
+const RAZORPAY_KEY_ID = defineSecret("RAZORPAY_KEY_ID");
+const RAZORPAY_KEY_SECRET = defineSecret("RAZORPAY_KEY_SECRET");
+const RAZORPAY_WEBHOOK_SECRET = defineSecret("RAZORPAY_WEBHOOK_SECRET"); // optional
+
+function getRazorpayClient() {
+  // In v2, secrets must be read via .value()
+  const key_id = RAZORPAY_KEY_ID.value();
+  const key_secret = RAZORPAY_KEY_SECRET.value();
 
   if (!key_id || !key_secret) {
-    throw new Error("Missing Razorpay server env (RAZORPAY_KEY_ID/SECRET)");
+    throw new Error("Missing Razorpay secrets in Functions: RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET");
   }
 
   return new Razorpay({ key_id, key_secret });
 }
 
-function cors(res) {
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-}
+/**
+ * ✅ createOrder
+ * Input (from your frontend):
+ * {
+ *   amount: number (INR),
+ *   currency?: "INR",
+ *   itemId: string,
+ *   buyerUid: string,
+ *   type?: "image"
+ * }
+ *
+ * Output (for Razorpay Checkout):
+ * { orderId, amount, currency }
+ *  - amount is in PAISE (Razorpay requirement)
+ */
+export const createOrder = onRequest(
+  {
+    region: REGION,
+    secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET],
+  },
+  (req, res) => {
+    cors(req, res, async () => {
+      try {
+        if (req.method === "OPTIONS") return res.status(204).send("");
+        if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-export const createorder = onRequest(async (req, res) => {
-  cors(res);
-  if (req.method === "OPTIONS") return res.status(204).send("");
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+        const { amount, currency = "INR", itemId, buyerUid, type = "image" } = req.body || {};
+        const amtINR = Number(amount);
 
-  try {
-    const razorpay = getRazorpay();
+        if (!Number.isFinite(amtINR) || amtINR < 1) return res.status(400).json({ error: "Invalid amount" });
+        if (!itemId) return res.status(400).json({ error: "Missing itemId" });
+        if (!buyerUid) return res.status(400).json({ error: "Missing buyerUid" });
 
-    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+        const razorpay = getRazorpayClient();
 
-    const amount = Number(body?.amount); // amount in rupees or paise? we'll standardize to paise below
-    const currency = body?.currency || "INR";
+        const order = await razorpay.orders.create({
+          amount: Math.round(amtINR * 100), // ✅ paise
+          currency,
+          receipt: `psa_${buyerUid}_${Date.now()}`,
+          notes: { itemId, buyerUid, type },
+        });
 
-    // IMPORTANT: Razorpay expects amount in paise for INR.
-    // If your UI sends rupees (e.g., 169), convert to paise:
-    const amount_paise = Number.isInteger(amount) ? Math.round(amount * 100) : Math.round(Number(amount) * 100);
-    if (!amount_paise || amount_paise < 100) {
-      return res.status(400).json({ error: "Invalid amount" });
-    }
-
-    const imageId = body?.imageId || null; // what user is buying
-    const buyerUid = body?.buyerUid || null; // optional
-
-    const receipt = body?.receipt || `rcpt_${Date.now()}`;
-
-    const notes = {
-      ...(imageId ? { imageId: String(imageId) } : {}),
-      ...(buyerUid ? { buyerUid: String(buyerUid) } : {}),
-      ...(body?.notes && typeof body.notes === "object" ? body.notes : {}),
-    };
-
-    const order = await razorpay.orders.create({
-      amount: amount_paise,
-      currency,
-      receipt,
-      notes,
+        // ✅ return amount in paise (order.amount) + currency from Razorpay
+        return res.status(200).json({
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+        });
+      } catch (err) {
+        console.error("createOrder error:", err);
+        return res.status(500).json({
+          error: err?.message || "create-order failed",
+        });
+      }
     });
+  }
+);
 
-    // Optional: store a pending order in Firestore
-    await db.collection("orders").doc(order.id).set(
-      {
-        status: "created",
-        orderId: order.id,
-        amount: order.amount,
-        currency: order.currency,
-        receipt: order.receipt,
-        notes: order.notes || {},
-        createdAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
+/**
+ * ✅ verifyPayment
+ * Input:
+ * {
+ *   razorpay_order_id,
+ *   razorpay_payment_id,
+ *   razorpay_signature,
+ *   itemId,
+ *   buyerUid,
+ *   amount? (optional INR)
+ * }
+ */
+export const verifyPayment = onRequest(
+  {
+    region: REGION,
+    secrets: [RAZORPAY_KEY_SECRET],
+  },
+  (req, res) => {
+    cors(req, res, async () => {
+      try {
+        if (req.method === "OPTIONS") return res.status(204).send("");
+        if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-    // Send key_id back to client (safe), never send key_secret
-    return res.status(200).json({
-      keyId: process.env.RAZORPAY_KEY_ID,
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      notes: order.notes || {},
+        const {
+          razorpay_order_id,
+          razorpay_payment_id,
+          razorpay_signature,
+          itemId,
+          buyerUid,
+          amount,
+        } = req.body || {};
+
+        if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+          return res.status(400).json({ error: "Missing Razorpay fields" });
+        }
+        if (!itemId || !buyerUid) {
+          return res.status(400).json({ error: "Missing itemId/buyerUid" });
+        }
+
+        const key_secret = RAZORPAY_KEY_SECRET.value();
+        if (!key_secret) throw new Error("Missing RAZORPAY_KEY_SECRET secret in Functions");
+
+        const body = `${razorpay_order_id}|${razorpay_payment_id}`;
+        const expected = crypto.createHmac("sha256", key_secret).update(body).digest("hex");
+
+        if (expected !== razorpay_signature) {
+          return res.status(400).json({ error: "Signature mismatch" });
+        }
+
+        const db = getFirestore();
+        const purchaseId = `${buyerUid}_${razorpay_order_id}`;
+
+        await db.collection("purchases").doc(purchaseId).set(
+          {
+            buyerUid,
+            itemId,
+            amount: Number(amount) || null,
+            razorpay: {
+              orderId: razorpay_order_id,
+              paymentId: razorpay_payment_id,
+              signature: razorpay_signature,
+            },
+            createdAt: FieldValue.serverTimestamp(),
+            status: "paid",
+          },
+          { merge: true }
+        );
+
+        return res.status(200).json({ ok: true });
+      } catch (err) {
+        console.error("verifyPayment error:", err);
+        return res.status(500).json({
+          error: err?.message || "verify-payment failed",
+        });
+      }
     });
-  } catch (err) {
-    console.error("createorder error:", err);
-    return res.status(500).json({ error: "create-order failed" });
   }
-});
+);
 
-export const webhook = onRequest(async (req, res) => {
-  cors(res);
-  if (req.method === "OPTIONS") return res.status(204).send("");
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+/**
+ * ✅ webhook (optional)
+ * If you use it later, you MUST verify webhook signature with RAZORPAY_WEBHOOK_SECRET.
+ */
+export const webhook = onRequest(
+  {
+    region: REGION,
+    secrets: [RAZORPAY_WEBHOOK_SECRET],
+  },
+  async (req, res) => {
+    try {
+      // Optional strict signature verification (recommended if you enable webhook in Razorpay)
+      // const secret = RAZORPAY_WEBHOOK_SECRET.value();
+      // const signature = req.headers["x-razorpay-signature"];
+      // if (!secret || !signature) return res.status(400).json({ error: "Missing webhook secret/signature" });
+      // const expected = crypto.createHmac("sha256", secret).update(JSON.stringify(req.body)).digest("hex");
+      // if (expected !== signature) return res.status(400).json({ error: "Invalid webhook signature" });
 
-  try {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    if (!webhookSecret) throw new Error("Missing RAZORPAY_WEBHOOK_SECRET");
-
-    const signature = req.headers["x-razorpay-signature"];
-    const rawBody =
-      typeof req.body === "string" ? req.body : JSON.stringify(req.body);
-
-    // Verify signature
-    const expected = CryptoJS.HmacSHA256(rawBody, webhookSecret).toString();
-    if (!signature || signature !== expected) {
-      console.error("Webhook signature mismatch");
-      return res.status(400).json({ error: "Invalid signature" });
+      console.log("Webhook received:", req.body);
+      return res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error("webhook error:", err);
+      return res.status(500).json({ error: err?.message || "webhook failed" });
     }
-
-    const payload = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-
-    const event = payload?.event || "";
-    const paymentEntity = payload?.payload?.payment?.entity;
-    const orderEntity = payload?.payload?.order?.entity;
-
-    const paymentId = paymentEntity?.id || null;
-    const orderId = paymentEntity?.order_id || orderEntity?.id || null;
-    const status = paymentEntity?.status || null;
-
-    if (!orderId) {
-      return res.status(200).json({ ok: true, note: "No order_id in webhook" });
-    }
-
-    // Update Firestore order status
-    await db.collection("orders").doc(orderId).set(
-      {
-        status: status || event || "updated",
-        paymentId: paymentId || null,
-        event,
-        updatedAt: FieldValue.serverTimestamp(),
-        raw: payload,
-      },
-      { merge: true }
-    );
-
-    // Optional: create buyer purchase record if payment captured
-    if (status === "captured") {
-      const notes = paymentEntity?.notes || {};
-      await db.collection("purchases").add({
-        orderId,
-        paymentId,
-        amount: paymentEntity?.amount,
-        currency: paymentEntity?.currency,
-        buyerUid: notes?.buyerUid || null,
-        imageId: notes?.imageId || null,
-        createdAt: FieldValue.serverTimestamp(),
-      });
-    }
-
-    return res.status(200).json({ ok: true });
-  } catch (err) {
-    console.error("webhook error:", err);
-    return res.status(500).json({ error: "webhook failed" });
   }
-});
+);
