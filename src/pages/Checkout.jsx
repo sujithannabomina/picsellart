@@ -32,7 +32,6 @@ export default function Checkout() {
   const id = q.get("id") || "";
   const amount = Number(q.get("amount") || 169);
 
-  // Frontend envs (Vercel)
   const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
   const createOrderUrl = import.meta.env.VITE_CREATE_ORDER_URL;
   const verifyUrl = import.meta.env.VITE_VERIFY_PAYMENT_URL;
@@ -66,7 +65,14 @@ export default function Checkout() {
         }),
       });
 
-      const createData = await createRes.json().catch(() => ({}));
+      const createText = await createRes.text();
+      let createData = {};
+      try {
+        createData = JSON.parse(createText);
+      } catch {
+        createData = { error: createText };
+      }
+
       if (!createRes.ok || !createData.orderId) {
         throw new Error(createData?.error || "create-order failed");
       }
@@ -82,7 +88,7 @@ export default function Checkout() {
 
         handler: async function (response) {
           try {
-            // 3) Verify Payment (Firebase Function URL)
+            // 3) Verify Payment
             const vr = await fetch(verifyUrl, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -121,7 +127,7 @@ export default function Checkout() {
     <div className="max-w-5xl mx-auto px-4 py-10">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-slate-900">Checkout</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-slate-900">Checkout</h1>
           <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
         </div>
 
@@ -142,7 +148,7 @@ export default function Checkout() {
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="rounded-xl border border-slate-100 p-6">
           <div className="text-sm font-semibold text-slate-500">Amount</div>
-          <div className="mt-2 text-5xl font-semibold text-slate-900">₹{amount}</div>
+          <div className="mt-2 text-5xl font-bold text-slate-900">₹{amount}</div>
           <p className="mt-3 text-slate-600">
             After payment, your download will appear in Buyer Dashboard → Purchases.
           </p>

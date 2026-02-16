@@ -71,10 +71,13 @@ export const createOrder = onRequest(
 
         const razorpay = getRazorpayClient();
 
+        // ✅ FIX: Shortened receipt to stay under 40 chars (Razorpay limit)
+        // Changed from: `psa_${buyerUid}_${Date.now()}` (too long)
+        // To: `psa${Date.now()}` (under 40 chars)
         const order = await razorpay.orders.create({
           amount: Math.round(amtINR * 100),
           currency,
-          receipt: `psa_${buyerUid}_${Date.now()}`,
+          receipt: `psa${Date.now()}`,
           notes: { itemId, buyerUid, type },
         });
 
