@@ -32,19 +32,12 @@ export default function Checkout() {
   const id = q.get("id") || "";
   const amount = Number(q.get("amount") || 169);
 
-  // FRONTEND env (must exist in Vercel)
+  // Frontend envs (Vercel)
   const razorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
-
-  // MUST exist in Vercel (call Firebase Functions directly)
-  // Example:
-  // VITE_CREATE_ORDER_URL = https://createorder-o67lgxsola-el.a.run.app
-  // VITE_VERIFY_PAYMENT_URL = https://asia-south1-picsellart-619a7.cloudfunctions.net/verifyPayment
   const createOrderUrl = import.meta.env.VITE_CREATE_ORDER_URL;
   const verifyUrl = import.meta.env.VITE_VERIFY_PAYMENT_URL;
 
-  useEffect(() => {
-    setErr("");
-  }, [type, id, amount]);
+  useEffect(() => setErr(""), [type, id, amount]);
 
   async function handlePay() {
     try {
@@ -52,33 +45,13 @@ export default function Checkout() {
       setLoading(true);
 
       const user = auth.currentUser;
-      if (!user) {
-        setErr("Please login to continue.");
-        setLoading(false);
-        return;
-      }
-      if (!razorpayKey) {
-        setErr("Missing Razorpay Key ID (VITE_RAZORPAY_KEY_ID).");
-        setLoading(false);
-        return;
-      }
-      if (!createOrderUrl) {
-        setErr("Missing VITE_CREATE_ORDER_URL in Vercel env.");
-        setLoading(false);
-        return;
-      }
-      if (!verifyUrl) {
-        setErr("Missing VITE_VERIFY_PAYMENT_URL in Vercel env.");
-        setLoading(false);
-        return;
-      }
+      if (!user) return setErr("Please login to continue."), setLoading(false);
+      if (!razorpayKey) return setErr("Missing VITE_RAZORPAY_KEY_ID in Vercel env."), setLoading(false);
+      if (!createOrderUrl) return setErr("Missing VITE_CREATE_ORDER_URL in Vercel env."), setLoading(false);
+      if (!verifyUrl) return setErr("Missing VITE_VERIFY_PAYMENT_URL in Vercel env."), setLoading(false);
 
       const ok = await loadRazorpayScript();
-      if (!ok) {
-        setErr("Failed to load Razorpay.");
-        setLoading(false);
-        return;
-      }
+      if (!ok) return setErr("Failed to load Razorpay."), setLoading(false);
 
       // 1) Create Order (Firebase Function URL)
       const createRes = await fetch(createOrderUrl, {
@@ -122,13 +95,10 @@ export default function Checkout() {
             });
 
             const vd = await vr.json().catch(() => ({}));
-            if (!vr.ok || !vd.ok) {
-              throw new Error(vd?.error || "verify-payment failed");
-            }
+            if (!vr.ok || !vd.ok) throw new Error(vd?.error || "verify-payment failed");
 
             navigate("/buyer-dashboard?tab=purchases");
           } catch (e) {
-            console.error(e);
             setErr(e?.message || "Payment succeeded but verification failed.");
           } finally {
             setLoading(false);
@@ -142,7 +112,6 @@ export default function Checkout() {
 
       rzp.open();
     } catch (e) {
-      console.error(e);
       setErr(e?.message || "Payment failed");
       setLoading(false);
     }
@@ -152,7 +121,7 @@ export default function Checkout() {
     <div className="max-w-5xl mx-auto px-4 py-10">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-slate-900">Checkout</h1>
+          <h1 className="text-4xl font-bold text-slate-900">Checkout</h1>
           <p className="mt-2 text-slate-600">Complete your purchase to download the full file.</p>
         </div>
 
@@ -173,7 +142,7 @@ export default function Checkout() {
       <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="rounded-xl border border-slate-100 p-6">
           <div className="text-sm font-semibold text-slate-500">Amount</div>
-          <div className="mt-2 text-5xl font-extrabold text-slate-900">₹{amount}</div>
+          <div className="mt-2 text-5xl font-semibold text-slate-900">₹{amount}</div>
           <p className="mt-3 text-slate-600">
             After payment, your download will appear in Buyer Dashboard → Purchases.
           </p>
