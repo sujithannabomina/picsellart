@@ -72,8 +72,6 @@ export const createOrder = onRequest(
         const razorpay = getRazorpayClient();
 
         // ✅ FIX: Shortened receipt to stay under 40 chars (Razorpay limit)
-        // Changed from: `psa_${buyerUid}_${Date.now()}` (too long)
-        // To: `psa${Date.now()}` (under 40 chars)
         const order = await razorpay.orders.create({
           amount: Math.round(amtINR * 100),
           currency,
@@ -124,12 +122,40 @@ export const verifyPayment = onRequest(
         const db = getFirestore();
         const purchaseId = `${buyerUid}_${razorpay_order_id}`;
 
+        // ✅ FIX: Fetch item details from Firestore to get photo info
+        let itemData = null;
+        try {
+          const itemDoc = await db.collection("items").doc(itemId).get();
+          if (itemDoc.exists) {
+            itemData = itemDoc.data();
+          }
+        } catch (err) {
+          console.error("Could not fetch item details:", err);
+          // Continue anyway - we'll save what we have
+        }
+
+        // ✅ FIX: Save complete purchase record with all required fields
         await db.collection("purchases").doc(purchaseId).set(
           {
             buyerUid,
             itemId,
-            amount: Number(amount) || null,
-            razorpay: { orderId: razorpay_order_id, paymentId: razorpay_payment_id, signature: razorpay_signature },
+            
+            // ✅ FIX: Both amount and price (dashboard reads "price")
+            amount: Number(amount) || 0,
+            price: Number(amount) || 0,
+            
+            // ✅ FIX: Photo details from item data
+            fileName: itemData?.fileName || itemData?.displayName || "Photo",
+            displayName: itemData?.displayName || itemData?.fileName || "Photo",
+            storagePath: itemData?.storagePath || "",
+            downloadUrl: itemData?.downloadUrl || "",
+            
+            // ✅ Payment details
+            razorpay: { 
+              orderId: razorpay_order_id, 
+              paymentId: razorpay_payment_id, 
+              signature: razorpay_signature 
+            },
             createdAt: FieldValue.serverTimestamp(),
             status: "paid",
           },
