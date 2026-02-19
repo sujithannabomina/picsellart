@@ -1,10 +1,12 @@
 // FILE PATH: src/pages/BuyerDashboard.jsx
-// ✅ FIXED: Proper file download (saves to device, not opens in tab)
+// ✅ FIXED: Uses Firebase Storage SDK to bypass CORS issues
 
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { getPurchasesForBuyer } from "../utils/purchases";
+import { ref, getBlob } from "firebase/storage";
+import { storage } from "../firebase";
 
 export default function BuyerDashboard() {
   const { user, logout } = useAuth();
@@ -41,24 +43,19 @@ export default function BuyerDashboard() {
     };
   }, [user]);
 
-  // ✅ PROPER DOWNLOAD FUNCTION - Downloads file instead of opening
+  // ✅ FIXED: Uses Firebase Storage SDK instead of fetch (bypasses CORS)
   const handleDownload = async (purchase) => {
-    if (!purchase.downloadUrl) {
-      alert("Download URL not available");
+    if (!purchase.storagePath) {
+      alert("Download not available - missing storage path");
       return;
     }
 
     setDownloading((prev) => ({ ...prev, [purchase.id]: true }));
 
     try {
-      // Fetch the image as a blob
-      const response = await fetch(purchase.downloadUrl);
-      
-      if (!response.ok) {
-        throw new Error("Failed to fetch image");
-      }
-
-      const blob = await response.blob();
+      // ✅ Use Firebase Storage SDK to get the blob
+      const fileRef = ref(storage, purchase.storagePath);
+      const blob = await getBlob(fileRef);
       
       // Create a temporary URL for the blob
       const blobUrl = window.URL.createObjectURL(blob);
@@ -81,7 +78,13 @@ export default function BuyerDashboard() {
       
     } catch (error) {
       console.error("Download error:", error);
-      alert("Failed to download image. Please try again.");
+      
+      // ✅ Fallback: Open in new tab if Firebase SDK fails
+      if (purchase.downloadUrl) {
+        window.open(purchase.downloadUrl, "_blank");
+      } else {
+        alert("Failed to download image. Please contact support.");
+      }
     } finally {
       setDownloading((prev) => ({ ...prev, [purchase.id]: false }));
     }
@@ -162,7 +165,7 @@ export default function BuyerDashboard() {
           <div className="psa-card p-6">
             <div className="text-sm text-slate-600">Available Downloads</div>
             <div className="mt-2 text-3xl font-semibold">
-              {purchases.filter((p) => p.downloadUrl).length}
+              {purchases.filter((p) => p.storagePath || p.downloadUrl).length}
             </div>
           </div>
         </div>
@@ -190,55 +193,59 @@ export default function BuyerDashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {purchases.map((purchase) => (
-                <div key={purchase.id} className="psa-card p-6">
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <div className="font-semibold text-slate-900">
-                        {purchase.displayName || purchase.fileName || "Photo"}
-                      </div>
-                      <div className="mt-1 text-sm text-slate-600">
-                        Price: ₹{purchase.price || 0}
-                      </div>
-                      {purchase.createdAt && (
-                        <div className="mt-1 text-xs text-slate-500">
-                          Purchased:{" "}
-                          {purchase.createdAt.toDate?.().toLocaleDateString("en-IN", {
-                            year: "numeric",
-                            month: "short",
-                            day: "numeric",
-                          }) || "Unknown"}
+              {purchases.map((purchase) => {
+                const hasDownload = purchase.storagePath || purchase.downloadUrl;
+                
+                return (
+                  <div key={purchase.id} className="psa-card p-6">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="font-semibold text-slate-900">
+                          {purchase.displayName || purchase.fileName || "Photo"}
                         </div>
-                      )}
-                    </div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          Price: ₹{purchase.price || 0}
+                        </div>
+                        {purchase.createdAt && (
+                          <div className="mt-1 text-xs text-slate-500">
+                            Purchased:{" "}
+                            {purchase.createdAt.toDate?.().toLocaleDateString("en-IN", {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }) || "Unknown"}
+                          </div>
+                        )}
+                      </div>
 
-                    <div className="flex gap-2">
-                      {purchase.downloadUrl ? (
+                      <div className="flex gap-2">
+                        {hasDownload ? (
+                          <button
+                            onClick={() => handleDownload(purchase)}
+                            disabled={downloading[purchase.id]}
+                            className="psa-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {downloading[purchase.id] ? "Downloading..." : "Download"}
+                          </button>
+                        ) : (
+                          <button
+                            disabled
+                            className="psa-btn-soft opacity-50 cursor-not-allowed"
+                          >
+                            Download not ready
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleDownload(purchase)}
-                          disabled={downloading[purchase.id]}
-                          className="psa-btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                          onClick={() => navigate("/explore")}
+                          className="psa-btn-soft"
                         >
-                          {downloading[purchase.id] ? "Downloading..." : "Download"}
+                          Buy more
                         </button>
-                      ) : (
-                        <button
-                          disabled
-                          className="psa-btn-soft opacity-50 cursor-not-allowed"
-                        >
-                          Download not ready
-                        </button>
-                      )}
-                      <button
-                        onClick={() => navigate("/explore")}
-                        className="psa-btn-soft"
-                      >
-                        Buy more
-                      </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
