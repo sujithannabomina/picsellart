@@ -291,7 +291,7 @@ export default function SellerUpload() {
                 inputMode="numeric"
               />
               <p className="text-xs text-slate-500 mt-1">
-                You earn 80% (₹{price INR ? Math.round(priceINR * 0.8) : 0}), Platform fee: 20%
+                You earn 80% (₹{priceINR ? Math.round(priceINR * 0.8) : 0}), Platform fee: 20%
               </p>
             </div>
 
