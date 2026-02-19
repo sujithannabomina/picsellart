@@ -1,37 +1,39 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function signedIn() { return request.auth != null; }
-    function isSelf(uid) { return signedIn() && request.auth.uid == uid; }
-
-    // Buyers profile
-    match /buyers/{uid} {
-      allow read, create, update: if isSelf(uid);
-      allow delete: if false;
+    
+    // ✅ Items collection - PUBLIC READ (anyone can browse)
+    match /items/{itemId} {
+      allow read: if true; // Anyone can read (for Explore page)
+      allow write: if false; // Only backend can write
     }
-
-    // Sellers profile (keep strict)
-    match /sellers/{uid} {
-      allow read, create, update: if isSelf(uid);
-      allow delete: if false;
+    
+    // ✅ Purchases - PRIVATE (only buyer can read their own)
+    match /purchases/{purchaseId} {
+      allow read: if request.auth != null && 
+                     resource.data.buyerUid == request.auth.uid;
+      allow write: if false; // Only backend can write
     }
-
-    // Purchases: buyer can read only their purchases.
-    match /purchases/{docId} {
-      allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
-      allow create, update, delete: if false; // server-only writes
+    
+    // ✅ Sellers - PRIVATE (only seller can read their own)
+    match /sellers/{sellerId} {
+      allow read: if request.auth != null && 
+                     request.auth.uid == sellerId;
+      allow write: if false; // Only backend can write
     }
-
-    // Orders: server-only
-    match /orders/{orderId} {
-      allow read: if signedIn() && resource.data.buyerUid == request.auth.uid;
-      allow create, update, delete: if false;
+    
+    // ✅ Buyers - PRIVATE (only buyer can read their own)
+    match /buyers/{buyerId} {
+      allow read: if request.auth != null && 
+                     request.auth.uid == buyerId;
+      allow write: if false; // Only backend can write
     }
-
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
+    
+    // ✅ Users - PRIVATE
+    match /users/{userId} {
+      allow read: if request.auth != null && 
+                     request.auth.uid == userId;
+      allow write: if false;
     }
   }
 }
