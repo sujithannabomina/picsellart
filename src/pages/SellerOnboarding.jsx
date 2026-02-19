@@ -1,5 +1,5 @@
 // FILE PATH: src/pages/SellerOnboarding.jsx
-// ✅ SIMPLIFIED: Uses regular Razorpay payment (not subscriptions)
+// ✅ FIXED: Properly handles payment → profile transition
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,6 +16,7 @@ export default function SellerOnboarding() {
   const [step, setStep] = useState("plan"); // plan | profile
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [checkingStatus, setCheckingStatus] = useState(true); // ✅ NEW: Loading state
 
   const [selectedPlanId, setSelectedPlanId] = useState("pro");
   const selectedPlan = useMemo(() => getPlan(selectedPlanId), [selectedPlanId]);
@@ -26,26 +27,60 @@ export default function SellerOnboarding() {
     upiId: "",
   });
 
+  // ✅ FIXED: Check status only once on mount, then stop checking
   useEffect(() => {
     if (booting) return;
-    if (!user) return;
+    if (!user) {
+      setCheckingStatus(false);
+      return;
+    }
+
+    let cancelled = false;
 
     (async () => {
-      const ref = doc(db, "sellers", user.uid);
-      const snap = await getDoc(ref);
+      try {
+        const ref = doc(db, "sellers", user.uid);
+        const snap = await getDoc(ref);
 
-      if (snap.exists()) {
-        const d = snap.data();
-        if (d.status === "active") nav("/seller-dashboard", { replace: true });
-        if (d.status === "pending_profile") setStep("profile");
+        if (cancelled) return;
+
+        if (snap.exists()) {
+          const d = snap.data();
+          
+          // If already active, redirect to dashboard
+          if (d.status === "active") {
+            nav("/seller-dashboard", { replace: true });
+            return;
+          }
+          
+          // If pending profile, show profile form
+          if (d.status === "pending_profile") {
+            setStep("profile");
+            setProfile((p) => ({
+              ...p,
+              displayName: d.name || user.displayName || "",
+              phone: d.phone || "",
+              upiId: d.upiId || "",
+            }));
+          }
+        }
+
+        // Set initial display name from user
+        setProfile((p) => ({
+          ...p,
+          displayName: p.displayName || user.displayName || "",
+        }));
+      } catch (error) {
+        console.error("Error checking seller status:", error);
+      } finally {
+        if (!cancelled) setCheckingStatus(false);
       }
-
-      setProfile((p) => ({
-        ...p,
-        displayName: user.displayName || "",
-      }));
     })();
-  }, [user, booting, nav]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, booting, nav]); // ✅ Only run once when user changes
 
   const ensureLoggedIn = async () => {
     if (user) return user;
@@ -53,7 +88,6 @@ export default function SellerOnboarding() {
     return u;
   };
 
-  // ✅ SIMPLIFIED: Regular payment (not subscription)
   const startSellerActivation = async () => {
     setErr("");
     setBusy(true);
@@ -67,7 +101,6 @@ export default function SellerOnboarding() {
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      // ✅ Use same createOrder endpoint as buyer purchases
       const createOrderUrl = import.meta.env.VITE_CREATE_ORDER_URL;
       if (!createOrderUrl) throw new Error("Missing VITE_CREATE_ORDER_URL");
 
@@ -103,7 +136,7 @@ export default function SellerOnboarding() {
         description: `Seller Plan: ${selectedPlan.title}`,
         handler: async function (response) {
           try {
-            // ✅ Verify payment
+            // Verify payment
             const verifyUrl = import.meta.env.VITE_VERIFY_PAYMENT_URL;
             const vr = await fetch(verifyUrl, {
               method: "POST",
@@ -140,9 +173,12 @@ export default function SellerOnboarding() {
               { merge: true }
             );
 
+            // ✅ CRITICAL: Move to profile step immediately
             setStep("profile");
+            setBusy(false); // ✅ Stop loading state
           } catch (e) {
             setErr(e?.message || "Verification failed");
+            setBusy(false);
           }
         },
         prefill: {
@@ -156,14 +192,15 @@ export default function SellerOnboarding() {
         },
         theme: { color: "#000000" },
         modal: {
-          ondismiss: () => {},
+          ondismiss: () => {
+            setBusy(false); // ✅ Reset loading on dismiss
+          },
         },
       });
 
       rz.open();
     } catch (e) {
       setErr(e?.message || "Activation failed");
-    } finally {
       setBusy(false);
     }
   };
@@ -199,6 +236,15 @@ export default function SellerOnboarding() {
     }
   };
 
+  // ✅ Show loading while checking status
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-3xl px-4 py-12">
@@ -206,7 +252,9 @@ export default function SellerOnboarding() {
           Seller Setup
         </h1>
         <p className="mt-2 text-slate-600">
-          Complete activation and profile to start uploading.
+          {step === "plan" 
+            ? "Select a plan to activate your seller account."
+            : "Complete your profile to start uploading."}
         </p>
 
         {err ? (
