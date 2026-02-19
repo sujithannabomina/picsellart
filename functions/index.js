@@ -1,82 +1,77 @@
-// functions/index.js
-import corsPkg from "cors";
-import crypto from "crypto";
-import Razorpay from "razorpay";
+// FILE PATH: functions/index.js
+// ✅ COMPLETE SELLER EARNINGS TRACKING SYSTEM
 
-import { onRequest } from "firebase-functions/v2/https";
-import { defineSecret } from "firebase-functions/params";
+const { onRequest } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const { getFirestore, FieldValue } = require("firebase-admin/firestore");
+const admin = require("firebase-admin");
+const crypto = require("crypto");
+const Razorpay = require("razorpay");
 
-import { initializeApp } from "firebase-admin/app";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-
-initializeApp();
-
-// IMPORTANT: set your allowed origins (add both with/without www)
-const ALLOWED_ORIGINS = new Set([
-  "https://picsellart.com",
-  "https://www.picsellart.com",
-]);
-
-function setCorsHeaders(req, res) {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-  }
-  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-}
-
-const cors = corsPkg({
-  origin: (origin, cb) => {
-    // allow non-browser tools too (no origin)
-    if (!origin) return cb(null, true);
-    return cb(null, ALLOWED_ORIGINS.has(origin));
-  },
-});
+admin.initializeApp();
 
 const REGION = "asia-south1";
-
 const RAZORPAY_KEY_ID = defineSecret("RAZORPAY_KEY_ID");
 const RAZORPAY_KEY_SECRET = defineSecret("RAZORPAY_KEY_SECRET");
-const RAZORPAY_WEBHOOK_SECRET = defineSecret("RAZORPAY_WEBHOOK_SECRET");
 
-function getRazorpayClient() {
-  const key_id = RAZORPAY_KEY_ID.value();
-  const key_secret = RAZORPAY_KEY_SECRET.value();
-  if (!key_id || !key_secret) throw new Error("Missing Razorpay secrets");
-  return new Razorpay({ key_id, key_secret });
+// ✅ Commission rate (20% platform fee, 80% to seller)
+const COMMISSION_RATE = 0.2;
+
+function setCorsHeaders(req, res) {
+  const allowedOrigins = [
+    "https://picsellart.com",
+    "https://www.picsellart.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+  ];
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.set("Access-Control-Allow-Origin", origin);
+  }
+  res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.set("Access-Control-Max-Age", "3600");
 }
 
+function getRazorpayClient() {
+  return new Razorpay({
+    key_id: RAZORPAY_KEY_ID.value(),
+    key_secret: RAZORPAY_KEY_SECRET.value(),
+  });
+}
+
+// ✅ CREATE ORDER (existing function)
 export const createOrder = onRequest(
   {
     region: REGION,
     secrets: [RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET],
-    invoker: "public", // ✅ makes it callable from browser
+    invoker: "public",
   },
   (req, res) => {
     setCorsHeaders(req, res);
     if (req.method === "OPTIONS") return res.status(204).send("");
 
-    cors(req, res, async () => {
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+    (async () => {
       try {
-        if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+        const { amount, currency = "INR", itemId, buyerUid, type } = req.body || {};
 
-        const { amount, currency = "INR", itemId, buyerUid, type = "image" } = req.body || {};
-        const amtINR = Number(amount);
-
-        if (!Number.isFinite(amtINR) || amtINR < 1) return res.status(400).json({ error: "Invalid amount" });
-        if (!itemId) return res.status(400).json({ error: "Missing itemId" });
-        if (!buyerUid) return res.status(400).json({ error: "Missing buyerUid" });
+        if (!amount || !buyerUid) {
+          return res.status(400).json({ error: "Missing required fields" });
+        }
 
         const razorpay = getRazorpayClient();
+        const amountPaise = Math.round(Number(amount) * 100);
 
-        // ✅ FIX: Shortened receipt to stay under 40 chars (Razorpay limit)
         const order = await razorpay.orders.create({
-          amount: Math.round(amtINR * 100),
+          amount: amountPaise,
           currency,
-          receipt: `psa${Date.now()}`,
-          notes: { itemId, buyerUid, type },
+          notes: {
+            itemId: itemId || "",
+            buyerUid,
+            type: type || "photo",
+          },
         });
 
         return res.status(200).json({
@@ -86,100 +81,258 @@ export const createOrder = onRequest(
         });
       } catch (err) {
         console.error("createOrder error:", err);
-        return res.status(500).json({ error: err?.message || "create-order failed" });
+        return res.status(500).json({ error: err?.message || "Order creation failed" });
       }
-    });
+    })();
   }
 );
 
+// ✅ VERIFY PAYMENT (with seller earnings tracking)
 export const verifyPayment = onRequest(
   {
     region: REGION,
     secrets: [RAZORPAY_KEY_SECRET],
-    invoker: "public", // ✅ callable from browser
+    invoker: "public",
   },
   (req, res) => {
     setCorsHeaders(req, res);
     if (req.method === "OPTIONS") return res.status(204).send("");
 
-    cors(req, res, async () => {
-      try {
-        if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-        const { razorpay_order_id, razorpay_payment_id, razorpay_signature, itemId, buyerUid, amount } = req.body || {};
+    (async () => {
+      try {
+        const {
+          razorpay_order_id,
+          razorpay_payment_id,
+          razorpay_signature,
+          itemId,
+          buyerUid,
+          amount,
+        } = req.body || {};
 
         if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-          return res.status(400).json({ error: "Missing Razorpay fields" });
+          return res.status(400).json({ error: "Missing payment fields" });
         }
-        if (!itemId || !buyerUid) return res.status(400).json({ error: "Missing itemId/buyerUid" });
 
+        // ✅ Verify signature
         const key_secret = RAZORPAY_KEY_SECRET.value();
         const body = `${razorpay_order_id}|${razorpay_payment_id}`;
-        const expected = crypto.createHmac("sha256", key_secret).update(body).digest("hex");
+        const expectedSignature = crypto
+          .createHmac("sha256", key_secret)
+          .update(body)
+          .digest("hex");
 
-        if (expected !== razorpay_signature) return res.status(400).json({ error: "Signature mismatch" });
-
-        const db = getFirestore();
-        const purchaseId = `${buyerUid}_${razorpay_order_id}`;
-
-        // ✅ FIX: Fetch item details from Firestore to get photo info
-        let itemData = null;
-        try {
-          const itemDoc = await db.collection("items").doc(itemId).get();
-          if (itemDoc.exists) {
-            itemData = itemDoc.data();
-          }
-        } catch (err) {
-          console.error("Could not fetch item details:", err);
-          // Continue anyway - we'll save what we have
+        if (expectedSignature !== razorpay_signature) {
+          return res.status(400).json({ error: "Invalid signature" });
         }
 
-        // ✅ FIX: Save complete purchase record with all required fields
-        await db.collection("purchases").doc(purchaseId).set(
-          {
-            buyerUid,
-            itemId,
+        const db = getFirestore();
+
+        // ✅ Get item details (includes seller info)
+        let itemData = null;
+        let sellerId = null;
+        let itemType = "sample";
+
+        if (itemId) {
+          try {
+            const itemDoc = await db.collection("items").doc(itemId).get();
+            if (itemDoc.exists) {
+              itemData = itemDoc.data();
+              sellerId = itemData.uploadedBy || null;
+              itemType = itemData.type || "sample";
+            }
+          } catch (err) {
+            console.error("Error fetching item:", err);
+          }
+        }
+
+        // ✅ Calculate earnings
+        const salePrice = Number(amount) || 0;
+        const platformFee = Math.round(salePrice * COMMISSION_RATE);
+        const sellerEarning = salePrice - platformFee;
+
+        // ✅ Create purchase record
+        const purchaseRef = db.collection("purchases").doc();
+        await purchaseRef.set({
+          buyerUid,
+          itemId: itemId || "",
+          amount: salePrice,
+          price: salePrice,
+          orderId: razorpay_order_id,
+          paymentId: razorpay_payment_id,
+          
+          // ✅ Item details
+          fileName: itemData?.fileName || "",
+          displayName: itemData?.displayName || "Photo",
+          storagePath: itemData?.storagePath || "",
+          downloadUrl: itemData?.downloadUrl || "",
+          
+          // ✅ Seller info
+          sellerId: sellerId,
+          itemType: itemType,
+          
+          createdAt: FieldValue.serverTimestamp(),
+        });
+
+        // ✅ Create sale record (only for seller uploads, not samples)
+        if (sellerId && itemType === "seller") {
+          await db.collection("sales").add({
+            // Sale identification
+            saleId: purchaseRef.id,
+            purchaseId: purchaseRef.id,
             
-            // ✅ FIX: Both amount and price (dashboard reads "price")
-            amount: Number(amount) || 0,
-            price: Number(amount) || 0,
+            // Parties involved
+            sellerId: sellerId,
+            buyerId: buyerUid,
             
-            // ✅ FIX: Photo details from item data
-            fileName: itemData?.fileName || itemData?.displayName || "Photo",
-            displayName: itemData?.displayName || itemData?.fileName || "Photo",
-            storagePath: itemData?.storagePath || "",
-            downloadUrl: itemData?.downloadUrl || "",
+            // Item details
+            itemId: itemId,
+            itemName: itemData?.displayName || "Photo",
+            itemFileName: itemData?.fileName || "",
             
-            // ✅ Payment details
-            razorpay: { 
-              orderId: razorpay_order_id, 
-              paymentId: razorpay_payment_id, 
-              signature: razorpay_signature 
-            },
+            // Financial details
+            salePrice: salePrice,
+            sellerEarning: sellerEarning,
+            platformFee: platformFee,
+            commissionRate: COMMISSION_RATE,
+            
+            // Payment details
+            paymentId: razorpay_payment_id,
+            orderId: razorpay_order_id,
+            
+            // Payout tracking
+            payoutStatus: "pending", // pending, processing, paid, failed
+            payoutDate: null,
+            payoutTransactionId: null,
+            
+            // Timestamps
+            soldAt: FieldValue.serverTimestamp(),
             createdAt: FieldValue.serverTimestamp(),
-            status: "paid",
-          },
-          { merge: true }
-        );
+          });
+
+          // ✅ Update seller's total earnings
+          const sellerRef = db.collection("sellers").doc(sellerId);
+          await sellerRef.update({
+            totalSales: FieldValue.increment(1),
+            totalEarnings: FieldValue.increment(sellerEarning),
+            pendingEarnings: FieldValue.increment(sellerEarning),
+            lastSaleAt: FieldValue.serverTimestamp(),
+          });
+        }
 
         return res.status(200).json({ ok: true });
       } catch (err) {
         console.error("verifyPayment error:", err);
-        return res.status(500).json({ error: err?.message || "verify-payment failed" });
+        return res.status(500).json({ error: err?.message || "Verification failed" });
       }
-    });
+    })();
   }
 );
 
+// ✅ NEW: Get Seller Earnings
+export const getSellerEarnings = onRequest(
+  {
+    region: REGION,
+    invoker: "public",
+  },
+  (req, res) => {
+    setCorsHeaders(req, res);
+    if (req.method === "OPTIONS") return res.status(204).send("");
+
+    if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+    (async () => {
+      try {
+        const { sellerId } = req.body || {};
+
+        if (!sellerId) {
+          return res.status(400).json({ error: "Missing sellerId" });
+        }
+
+        const db = getFirestore();
+
+        // Get seller data
+        const sellerDoc = await db.collection("sellers").doc(sellerId).get();
+        if (!sellerDoc.exists) {
+          return res.status(404).json({ error: "Seller not found" });
+        }
+
+        const sellerData = sellerDoc.data();
+
+        // Get all sales for this seller
+        const salesSnapshot = await db
+          .collection("sales")
+          .where("sellerId", "==", sellerId)
+          .orderBy("soldAt", "desc")
+          .get();
+
+        const sales = [];
+        let totalEarnings = 0;
+        let pendingEarnings = 0;
+        let paidEarnings = 0;
+
+        salesSnapshot.forEach((doc) => {
+          const sale = { id: doc.id, ...doc.data() };
+          sales.push(sale);
+
+          totalEarnings += sale.sellerEarning || 0;
+          if (sale.payoutStatus === "pending") {
+            pendingEarnings += sale.sellerEarning || 0;
+          } else if (sale.payoutStatus === "paid") {
+            paidEarnings += sale.sellerEarning || 0;
+          }
+        });
+
+        return res.status(200).json({
+          sellerId,
+          upiId: sellerData.upiId || "",
+          totalEarnings,
+          pendingEarnings,
+          paidEarnings,
+          totalSales: sales.length,
+          sales,
+        });
+      } catch (err) {
+        console.error("getSellerEarnings error:", err);
+        return res.status(500).json({ error: err?.message || "Failed to fetch earnings" });
+      }
+    })();
+  }
+);
+
+// ✅ WEBHOOK (existing function)
 export const webhook = onRequest(
   {
     region: REGION,
-    secrets: [RAZORPAY_WEBHOOK_SECRET],
+    secrets: [RAZORPAY_KEY_SECRET],
     invoker: "public",
   },
-  async (req, res) => {
-    setCorsHeaders(req, res);
-    if (req.method === "OPTIONS") return res.status(204).send("");
-    return res.status(200).json({ ok: true });
+  (req, res) => {
+    if (req.method !== "POST") return res.status(405).send("Method not allowed");
+
+    (async () => {
+      try {
+        const signature = req.headers["x-razorpay-signature"];
+        const body = JSON.stringify(req.body);
+        const key_secret = RAZORPAY_KEY_SECRET.value();
+        const expectedSignature = crypto
+          .createHmac("sha256", key_secret)
+          .update(body)
+          .digest("hex");
+
+        if (signature !== expectedSignature) {
+          return res.status(400).send("Invalid signature");
+        }
+
+        const event = req.body.event;
+        console.log("Webhook event:", event);
+
+        return res.status(200).send("OK");
+      } catch (err) {
+        console.error("Webhook error:", err);
+        return res.status(500).send("Error");
+      }
+    })();
   }
 );
