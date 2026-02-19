@@ -1,5 +1,5 @@
 // FILE PATH: src/pages/BuyerDashboard.jsx
-// ✅ FIXED: Uses Firebase Storage SDK to bypass CORS issues
+// ✅ COMPLETE FIX: Better error handling, logging, and fallback options
 
 import React, { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -30,9 +30,22 @@ export default function BuyerDashboard() {
         const data = await getPurchasesForBuyer(user.uid);
         if (!cancelled) {
           setPurchases(data);
+          
+          // ✅ Debug: Log purchase data
+          console.log("📦 Purchases loaded:", data.length);
+          data.forEach((p, i) => {
+            console.log(`Purchase ${i + 1}:`, {
+              id: p.id,
+              fileName: p.fileName,
+              storagePath: p.storagePath,
+              downloadUrl: p.downloadUrl,
+              hasStoragePath: !!p.storagePath,
+              hasDownloadUrl: !!p.downloadUrl,
+            });
+          });
         }
       } catch (err) {
-        console.error("Error fetching purchases:", err);
+        console.error("❌ Error fetching purchases:", err);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -43,47 +56,90 @@ export default function BuyerDashboard() {
     };
   }, [user]);
 
-  // ✅ FIXED: Uses Firebase Storage SDK instead of fetch (bypasses CORS)
+  // ✅ COMPLETE DOWNLOAD FUNCTION with extensive logging and fallbacks
   const handleDownload = async (purchase) => {
+    console.log("🔽 Download attempt for:", purchase.id);
+    console.log("   storagePath:", purchase.storagePath);
+    console.log("   downloadUrl:", purchase.downloadUrl);
+    console.log("   fileName:", purchase.fileName);
+
+    // ✅ Check 1: Do we have storagePath?
     if (!purchase.storagePath) {
-      alert("Download not available - missing storage path");
+      console.error("❌ No storagePath in purchase record!");
+      
+      // Fallback: Try opening downloadUrl if available
+      if (purchase.downloadUrl) {
+        console.log("⚠️ Fallback: Opening downloadUrl in new tab");
+        window.open(purchase.downloadUrl, "_blank");
+        return;
+      }
+      
+      alert("Download not available. This purchase is missing required data. Please contact support.");
       return;
     }
 
     setDownloading((prev) => ({ ...prev, [purchase.id]: true }));
 
     try {
-      // ✅ Use Firebase Storage SDK to get the blob
+      console.log("🔄 Attempting Firebase Storage download...");
+      
+      // ✅ Use Firebase Storage SDK
       const fileRef = ref(storage, purchase.storagePath);
+      console.log("📁 Storage reference created for:", purchase.storagePath);
+      
       const blob = await getBlob(fileRef);
+      console.log("✅ Blob fetched, size:", blob.size, "bytes");
       
-      // Create a temporary URL for the blob
+      // Create download link
       const blobUrl = window.URL.createObjectURL(blob);
-      
-      // Create a temporary anchor element
       const link = document.createElement("a");
       link.href = blobUrl;
       
-      // Set filename (use displayName or fileName from purchase)
+      // Set filename
       const filename = purchase.fileName || purchase.displayName || `photo-${purchase.id}.jpg`;
       link.download = filename;
+      console.log("💾 Downloading as:", filename);
       
-      // Append to document, click, and remove
+      // Trigger download
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
-      // Clean up the blob URL
-      window.URL.revokeObjectURL(blobUrl);
+      // Cleanup
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+        console.log("✅ Download complete, blob URL revoked");
+      }, 100);
       
     } catch (error) {
-      console.error("Download error:", error);
+      console.error("❌ Download error:", error);
+      console.error("   Error code:", error.code);
+      console.error("   Error message:", error.message);
       
-      // ✅ Fallback: Open in new tab if Firebase SDK fails
+      // ✅ Fallback 1: Try downloadUrl
       if (purchase.downloadUrl) {
-        window.open(purchase.downloadUrl, "_blank");
+        console.log("⚠️ Firebase SDK failed, trying downloadUrl...");
+        try {
+          const response = await fetch(purchase.downloadUrl);
+          const blob = await response.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = purchase.fileName || "photo.jpg";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+          console.log("✅ Downloaded via fetch fallback");
+        } catch (fetchError) {
+          console.error("❌ Fetch fallback also failed:", fetchError);
+          
+          // ✅ Fallback 2: Open in new tab
+          console.log("⚠️ Final fallback: Opening in new tab");
+          window.open(purchase.downloadUrl, "_blank");
+        }
       } else {
-        alert("Failed to download image. Please contact support.");
+        alert(`Download failed: ${error.message}. Please contact support with purchase ID: ${purchase.id}`);
       }
     } finally {
       setDownloading((prev) => ({ ...prev, [purchase.id]: false }));
@@ -214,6 +270,13 @@ export default function BuyerDashboard() {
                               month: "short",
                               day: "numeric",
                             }) || "Unknown"}
+                          </div>
+                        )}
+                        
+                        {/* ✅ Debug info (remove in production) */}
+                        {!purchase.storagePath && (
+                          <div className="mt-2 text-xs text-red-600">
+                            ⚠️ Missing storagePath - contact support
                           </div>
                         )}
                       </div>
