@@ -1,0 +1,11 @@
+{
+  "name": "picsellart-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "setup-items": "node scripts/setupItems.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0"
+  }
+}

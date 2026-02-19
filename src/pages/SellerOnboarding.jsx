@@ -1,4 +1,6 @@
 // FILE PATH: src/pages/SellerOnboarding.jsx
+// ✅ SIMPLIFIED: Uses regular Razorpay payment (not subscriptions)
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
@@ -51,66 +53,97 @@ export default function SellerOnboarding() {
     return u;
   };
 
-  const startAutoPayActivation = async () => {
+  // ✅ SIMPLIFIED: Regular payment (not subscription)
+  const startSellerActivation = async () => {
     setErr("");
     setBusy(true);
 
     try {
       const u = await ensureLoggedIn();
 
-      // extra safety: selectedPlanId must exist
-      if (!selectedPlanId || !selectedPlan) throw new Error("Please select a plan.");
+      if (!selectedPlanId || !selectedPlan)
+        throw new Error("Please select a plan.");
 
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
 
-      const res = await fetch("/api/razorpay/create-subscription", {
+      // ✅ Use same createOrder endpoint as buyer purchases
+      const createOrderUrl = import.meta.env.VITE_CREATE_ORDER_URL;
+      if (!createOrderUrl) throw new Error("Missing VITE_CREATE_ORDER_URL");
+
+      const res = await fetch(createOrderUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ uid: u.uid, planId: selectedPlanId }),
+        body: JSON.stringify({
+          amount: selectedPlan.priceINR,
+          currency: "INR",
+          itemId: `seller-plan-${selectedPlanId}`,
+          buyerUid: u.uid,
+          type: "seller_plan",
+        }),
       });
 
-      let data = {};
-      try {
-        data = await res.json();
-      } catch {
-        data = {};
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.orderId) {
+        throw new Error(data?.error || "Failed to create seller activation order.");
       }
 
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to create account activation.");
-      }
+      const { orderId } = data;
 
-      const { subscriptionId, shortRef } = data;
-
-      const key = import.meta.env.VITE_RAZORPAY_KEY_ID || import.meta.env.VITE_RAZORPAY_KEY;
-      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID in Vercel env vars.");
+      const key = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      if (!key) throw new Error("Missing VITE_RAZORPAY_KEY_ID");
 
       const rz = new window.Razorpay({
         key,
-        subscription_id: subscriptionId,
+        amount: Math.round(selectedPlan.priceINR * 100),
+        currency: "INR",
+        order_id: orderId,
         name: "PicSellArt",
-        description: "Seller Account Activation (AutoPay enabled)",
-        handler: async function () {
-          const sellerRef = doc(db, "sellers", u.uid);
+        description: `Seller Plan: ${selectedPlan.title}`,
+        handler: async function (response) {
+          try {
+            // ✅ Verify payment
+            const verifyUrl = import.meta.env.VITE_VERIFY_PAYMENT_URL;
+            const vr = await fetch(verifyUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ...response,
+                itemId: `seller-plan-${selectedPlanId}`,
+                buyerUid: u.uid,
+                amount: selectedPlan.priceINR,
+              }),
+            });
 
-          await setDoc(
-            sellerRef,
-            {
-              uid: u.uid,
-              email: u.email || "",
-              name: u.displayName || "",
-              photoURL: u.photoURL || "",
-              planId: selectedPlanId,
-              subscriptionId,
-              status: "pending_profile",
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
+            const vd = await vr.json().catch(() => ({}));
+            if (!vr.ok || !vd.ok)
+              throw new Error(vd?.error || "Payment verification failed");
 
-          setStep("profile");
+            // ✅ Create seller document
+            const sellerRef = doc(db, "sellers", u.uid);
+
+            await setDoc(
+              sellerRef,
+              {
+                uid: u.uid,
+                email: u.email || "",
+                name: u.displayName || "",
+                photoURL: u.photoURL || "",
+                planId: selectedPlanId,
+                orderId: response.razorpay_order_id,
+                paymentId: response.razorpay_payment_id,
+                status: "pending_profile",
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+
+            setStep("profile");
+          } catch (e) {
+            setErr(e?.message || "Verification failed");
+          }
         },
         prefill: {
           name: u.displayName || "",
@@ -120,9 +153,7 @@ export default function SellerOnboarding() {
           purpose: "seller_activation",
           planId: selectedPlanId,
           sellerUid: u.uid,
-          ref: shortRef,
         },
-        // keep your theme (UI handled by page styles)
         theme: { color: "#000000" },
         modal: {
           ondismiss: () => {},
@@ -144,11 +175,13 @@ export default function SellerOnboarding() {
       if (!user) throw new Error("Please login first.");
 
       const upiClean = (profile.upiId || "").trim();
-      if (!upiClean) throw new Error("UPI ID is required for withdrawals/earnings.");
+      if (!upiClean)
+        throw new Error("UPI ID is required for withdrawals/earnings.");
 
       const sellerRef = doc(db, "sellers", user.uid);
       const snap = await getDoc(sellerRef);
-      if (!snap.exists()) throw new Error("Please complete account activation first.");
+      if (!snap.exists())
+        throw new Error("Please complete account activation first.");
 
       await updateDoc(sellerRef, {
         name: profile.displayName || user.displayName || "",
@@ -169,8 +202,12 @@ export default function SellerOnboarding() {
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-3xl px-4 py-12">
-        <h1 className="text-3xl font-semibold tracking-tight">Seller Setup</h1>
-        <p className="mt-2 text-slate-600">Complete activation and profile to start uploading.</p>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Seller Setup
+        </h1>
+        <p className="mt-2 text-slate-600">
+          Complete activation and profile to start uploading.
+        </p>
 
         {err ? (
           <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -182,7 +219,6 @@ export default function SellerOnboarding() {
           <>
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               {SELLER_PLANS.map((p) => {
-                // ✅ bulletproof max price key (supports both names)
                 const maxPrice = p.maxPriceINR ?? p.maxPricePerImageINR ?? 0;
 
                 return (
@@ -200,22 +236,28 @@ export default function SellerOnboarding() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-lg font-semibold">{p.title}</div>
-                        <div className="mt-1 text-sm text-slate-600">{p.badge}</div>
+                        <div className="mt-1 text-sm text-slate-600">
+                          {p.badge}
+                        </div>
                       </div>
                       <div className="text-lg font-semibold">₹{p.priceINR}</div>
                     </div>
 
-                    <div className="mt-4 text-sm text-slate-700">{p.description}</div>
+                    <div className="mt-4 text-sm text-slate-700">
+                      {p.description}
+                    </div>
 
                     <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
                       <div>
-                        Upload limit: <span className="font-medium">{p.maxUploads}</span>
+                        Upload limit:{" "}
+                        <span className="font-medium">{p.maxUploads}</span>
                       </div>
                       <div>
-                        Max price per image: <span className="font-medium">₹{maxPrice}</span>
+                        Max price per image:{" "}
+                        <span className="font-medium">₹{maxPrice}</span>
                       </div>
                       <div className="mt-2 text-xs text-slate-500">
-                        AutoPay will be enabled. You can manage/cancel it from your UPI app.
+                        One-time payment for 6 months access
                       </div>
                     </div>
                   </button>
@@ -224,7 +266,7 @@ export default function SellerOnboarding() {
             </div>
 
             <button
-              onClick={startAutoPayActivation}
+              onClick={startSellerActivation}
               disabled={busy}
               className="psa-btn-primary mt-8 w-full rounded-2xl py-3 disabled:opacity-60"
             >
@@ -232,7 +274,7 @@ export default function SellerOnboarding() {
             </button>
 
             <div className="mt-3 text-xs text-slate-500">
-              You are authorizing recurring renewal through UPI AutoPay. This page does not show it as a “subscription plan”.
+              One-time payment. No recurring charges.
             </div>
           </>
         ) : (
@@ -240,35 +282,50 @@ export default function SellerOnboarding() {
             <div className="mt-8 rounded-2xl border border-slate-200 p-6">
               <h2 className="text-xl font-semibold">Seller Profile</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Enter your details. <span className="font-medium">UPI details are for withdrawals/earnings.</span>
+                Enter your details.{" "}
+                <span className="font-medium">
+                  UPI details are for withdrawals/earnings.
+                </span>
               </p>
 
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-slate-700">Display Name</label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Display Name
+                  </label>
                   <input
                     value={profile.displayName}
-                    onChange={(e) => setProfile((p) => ({ ...p, displayName: e.target.value }))}
+                    onChange={(e) =>
+                      setProfile((p) => ({ ...p, displayName: e.target.value }))
+                    }
                     className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     placeholder="Your name"
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-slate-700">Phone (optional)</label>
+                  <label className="text-sm font-medium text-slate-700">
+                    Phone (optional)
+                  </label>
                   <input
                     value={profile.phone}
-                    onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))}
+                    onChange={(e) =>
+                      setProfile((p) => ({ ...p, phone: e.target.value }))
+                    }
                     className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     placeholder="10-digit number"
                   />
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="text-sm font-medium text-slate-700">UPI ID (for withdrawals/earnings)</label>
+                  <label className="text-sm font-medium text-slate-700">
+                    UPI ID (for withdrawals/earnings)
+                  </label>
                   <input
                     value={profile.upiId}
-                    onChange={(e) => setProfile((p) => ({ ...p, upiId: e.target.value }))}
+                    onChange={(e) =>
+                      setProfile((p) => ({ ...p, upiId: e.target.value }))
+                    }
                     className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     placeholder="example@upi"
                   />
