@@ -1,9 +1,9 @@
 // FILE PATH: src/pages/Explore.jsx
-// ✅ FIXED: Now queries Firestore items collection (shows samples + seller uploads)
+// ✅ FIXED: Queries Firestore items WITHOUT orderBy (no index needed)
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import WatermarkedImage from "../components/WatermarkedImage";
@@ -16,9 +16,10 @@ export default function Explore() {
   const [page, setPage] = useState(1);
   const pageSize = 12;
 
-  // ✅ NEW: Fetch items from Firestore
+  // ✅ Fetch items from Firestore
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -26,11 +27,15 @@ export default function Explore() {
     async function fetchItems() {
       try {
         setLoading(true);
+        setError("");
+        
         const itemsRef = collection(db, "items");
         
-        // ✅ Query all items (samples + seller uploads)
-        const q = query(itemsRef, orderBy("createdAt", "desc"));
+        // ✅ FIXED: Removed orderBy to avoid needing index
+        const q = query(itemsRef);
         const snapshot = await getDocs(q);
+
+        console.log("Fetched items count:", snapshot.size); // Debug log
 
         const fetchedItems = snapshot.docs.map((doc) => {
           const data = doc.data();
@@ -43,7 +48,15 @@ export default function Explore() {
             downloadUrl: data.downloadUrl || "",
             uploadedBy: data.uploadedBy || "platform",
             type: data.type || "sample",
+            createdAt: data.createdAt || null,
           };
+        });
+
+        // ✅ Sort in JavaScript (newest first)
+        fetchedItems.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
         });
 
         if (!cancelled) {
@@ -53,6 +66,7 @@ export default function Explore() {
       } catch (err) {
         console.error("Error fetching items:", err);
         if (!cancelled) {
+          setError(err.message || "Failed to load items");
           setItems([]);
           setLoading(false);
         }
@@ -79,7 +93,7 @@ export default function Explore() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
   useEffect(() => {
-    if (page > totalPages) setPage(1);
+    if (page > totalPages && totalPages > 0) setPage(1);
   }, [page, totalPages]);
 
   const pageItems = useMemo(() => {
@@ -126,7 +140,18 @@ export default function Explore() {
         </div>
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
+          <p className="text-red-700 font-medium">Error loading items</p>
+          <p className="text-sm text-red-600 mt-2">{error}</p>
+          <button 
+            onClick={() => window.location.reload()} 
+            className="mt-4 psa-btn-primary"
+          >
+            Retry
+          </button>
+        </div>
+      ) : loading ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {[...Array(8)].map((_, i) => (
             <div key={i} className="psa-card overflow-hidden">
@@ -144,6 +169,10 @@ export default function Explore() {
         </div>
       ) : (
         <>
+          <div className="text-sm text-slate-600 mb-4">
+            Showing {filtered.length} items
+          </div>
+
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {pageItems.map((it) => (
               <div key={it.id} className="psa-card overflow-hidden">
@@ -193,28 +222,30 @@ export default function Explore() {
             ))}
           </div>
 
-          <div className="mt-8 flex items-center justify-center gap-2">
-            <button
-              className="psa-btn-soft"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
-              Prev
-            </button>
+          {totalPages > 1 && (
+            <div className="mt-8 flex items-center justify-center gap-2">
+              <button
+                className="psa-btn-soft"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+              >
+                Prev
+              </button>
 
-            <div className="text-sm text-slate-600">
-              Page <span className="font-semibold text-slate-900">{page}</span>{" "}
-              of <span className="font-semibold text-slate-900">{totalPages}</span>
+              <div className="text-sm text-slate-600">
+                Page <span className="font-semibold text-slate-900">{page}</span>{" "}
+                of <span className="font-semibold text-slate-900">{totalPages}</span>
+              </div>
+
+              <button
+                className="psa-btn-soft"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+              >
+                Next
+              </button>
             </div>
-
-            <button
-              className="psa-btn-soft"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-            >
-              Next
-            </button>
-          </div>
+          )}
         </>
       )}
     </div>
