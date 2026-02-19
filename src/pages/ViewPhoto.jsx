@@ -1,3 +1,6 @@
+// FILE PATH: src/pages/ViewPhoto.jsx
+// ✅ FIXED: Shows full image without cropping
+
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ref, getDownloadURL } from "firebase/storage";
@@ -19,14 +22,6 @@ function safeDecode(value, times = 2) {
   return v;
 }
 
-/**
- * FIXES:
- * - Works even on refresh/back (no location.state dependency)
- * - Accepts ids like:
- *   - sample-public%2Fimages%2Fsample1.jpg (encoded)
- *   - sample-public/images/sample1.jpg
- *   - sample1.jpg (direct)
- */
 export default function ViewPhoto() {
   const { user } = useAuth();
   const { id } = useParams();
@@ -37,18 +32,15 @@ export default function ViewPhoto() {
   const storagePath = useMemo(() => {
     if (!decodedId) return "";
 
-    // If Explore passed "sample-<encodedPath>"
     if (decodedId.startsWith("sample-")) {
       const raw = decodedId.replace("sample-", "");
       return safeDecode(raw, 3);
     }
 
-    // If someone typed /photo/sample1.jpg
     if (decodedId.endsWith(".jpg") || decodedId.endsWith(".png") || decodedId.endsWith(".jpeg")) {
       return `public/images/${decodedId}`;
     }
 
-    // If already a storage path
     return decodedId;
   }, [decodedId]);
 
@@ -106,13 +98,14 @@ export default function ViewPhoto() {
 
       <div className="psa-card p-4 sm:p-6">
         {loading ? (
-          <div className="h-[420px] w-full rounded-2xl bg-slate-100 animate-pulse" />
+          <div className="w-full aspect-[4/3] rounded-2xl bg-slate-100 animate-pulse" />
         ) : err ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {err}
           </div>
         ) : (
-          <WatermarkedImage src={url} alt="Preview" className="h-[420px] w-full" />
+          /* ✅ FIXED: Using aspect-ratio instead of fixed height - shows full image */
+          <WatermarkedImage src={url} alt="Preview" className="w-full aspect-[4/3]" />
         )}
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

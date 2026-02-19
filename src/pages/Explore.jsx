@@ -1,8 +1,8 @@
 // FILE PATH: src/pages/Explore.jsx
-// ✅ FIXED: Queries Firestore items WITHOUT orderBy (no index needed)
+// ✅ PRODUCTION-READY with URL pagination, search, and all features
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { collection, getDocs, query } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
@@ -11,16 +11,21 @@ import WatermarkedImage from "../components/WatermarkedImage";
 export default function Explore() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [page, setPage] = useState(1);
+  // ✅ Read page from URL
+  const urlPage = parseInt(searchParams.get("page")) || 1;
+  const urlSearch = searchParams.get("search") || "";
+
+  const [searchQuery, setSearchQuery] = useState(urlSearch);
+  const [page, setPage] = useState(urlPage);
   const pageSize = 12;
 
-  // ✅ Fetch items from Firestore
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // ✅ Fetch items from Firestore
   useEffect(() => {
     let cancelled = false;
 
@@ -30,12 +35,8 @@ export default function Explore() {
         setError("");
         
         const itemsRef = collection(db, "items");
-        
-        // ✅ FIXED: Removed orderBy to avoid needing index
         const q = query(itemsRef);
         const snapshot = await getDocs(q);
-
-        console.log("Fetched items count:", snapshot.size); // Debug log
 
         const fetchedItems = snapshot.docs.map((doc) => {
           const data = doc.data();
@@ -49,6 +50,8 @@ export default function Explore() {
             uploadedBy: data.uploadedBy || "platform",
             type: data.type || "sample",
             createdAt: data.createdAt || null,
+            // ✅ Tags support for search
+            tags: data.tags || [],
           };
         });
 
@@ -79,34 +82,59 @@ export default function Explore() {
     };
   }, []);
 
-  // ✅ Search filtering
+  // ✅ Search filtering (title, fileName, tags)
   const filtered = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return items;
-    return items.filter(
-      (x) =>
-        x.title.toLowerCase().includes(q) ||
-        x.fileName.toLowerCase().includes(q)
-    );
+    
+    return items.filter((x) => {
+      const titleMatch = x.title.toLowerCase().includes(q);
+      const fileMatch = x.fileName.toLowerCase().includes(q);
+      const tagsMatch = x.tags.some(tag => 
+        tag.toLowerCase().includes(q)
+      );
+      return titleMatch || fileMatch || tagsMatch;
+    });
   }, [items, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
 
+  // ✅ Sync page number with URL
   useEffect(() => {
-    if (page > totalPages && totalPages > 0) setPage(1);
-  }, [page, totalPages]);
+    if (page > totalPages && totalPages > 0) {
+      setPage(1);
+      setSearchParams({ page: "1", search: searchQuery });
+    }
+  }, [page, totalPages, searchQuery, setSearchParams]);
 
   const pageItems = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
+  // ✅ Update URL when page changes
+  const changePage = (newPage) => {
+    setPage(newPage);
+    const params = { page: String(newPage) };
+    if (searchQuery) params.search = searchQuery;
+    setSearchParams(params);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ✅ Update URL when search changes
+  const handleSearch = (value) => {
+    setSearchQuery(value);
+    setPage(1);
+    const params = { page: "1" };
+    if (value.trim()) params.search = value.trim();
+    setSearchParams(params);
+  };
+
   const onView = (it) => {
     navigate(`/photo/${encodeURIComponent(it.id)}`);
   };
 
   const onBuy = (it) => {
-    // ✅ Pass complete info to checkout
     const checkoutUrl =
       `/checkout?type=${it.type}` +
       `&id=${encodeURIComponent(it.id)}` +
@@ -131,11 +159,8 @@ export default function Explore() {
           <input
             className="psa-input"
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setPage(1);
-            }}
-            placeholder="Search photos..."
+            onChange={(e) => handleSearch(e.target.value)}
+            placeholder="Search by title, filename, or tags..."
           />
         </div>
       </div>
@@ -167,10 +192,21 @@ export default function Explore() {
         <div className="rounded-2xl border border-slate-200 p-8 text-center">
           <p className="text-slate-600">No items found. Upload some photos to get started!</p>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-2xl border border-slate-200 p-8 text-center">
+          <p className="text-slate-600">No results found for "{searchQuery}"</p>
+          <button 
+            onClick={() => handleSearch("")} 
+            className="mt-4 psa-btn-primary"
+          >
+            Clear search
+          </button>
+        </div>
       ) : (
         <>
           <div className="text-sm text-slate-600 mb-4">
-            Showing {filtered.length} items
+            Showing {filtered.length} item{filtered.length !== 1 ? 's' : ''}
+            {searchQuery && ` for "${searchQuery}"`}
           </div>
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -196,7 +232,6 @@ export default function Explore() {
                     ₹{it.price}
                   </div>
                   
-                  {/* ✅ Show badge for seller uploads */}
                   {it.type === "seller" && (
                     <div className="mt-2 text-xs text-slate-500">
                       Seller Upload
@@ -226,7 +261,7 @@ export default function Explore() {
             <div className="mt-8 flex items-center justify-center gap-2">
               <button
                 className="psa-btn-soft"
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => changePage(Math.max(1, page - 1))}
                 disabled={page === 1}
               >
                 Prev
@@ -239,7 +274,7 @@ export default function Explore() {
 
               <button
                 className="psa-btn-soft"
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() => changePage(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
               >
                 Next
