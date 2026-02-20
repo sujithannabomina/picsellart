@@ -1,25 +1,21 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: functions/index.js
 // ═══════════════════════════════════════════════════════════════════════════
-// INSTRUCTION: Replace the ENTIRE verifyPayment function with this code
-// Find: export const verifyPayment = onRequest(
-// Replace: Everything until the closing );
+// ES6 MODULE VERSION (for "type": "module" in package.json)
 // ═══════════════════════════════════════════════════════════════════════════
 
-const { onRequest } = require("firebase-functions/v2/https");
-const { defineSecret } = require("firebase-functions/params");
-const { getFirestore, FieldValue } = require("firebase-admin/firestore");
-const admin = require("firebase-admin");
-const crypto = require("crypto");
-const Razorpay = require("razorpay");
+import { onRequest } from "firebase-functions/v2/https";
+import { defineSecret } from "firebase-functions/params";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import admin from "firebase-admin";
+import crypto from "crypto";
+import Razorpay from "razorpay";
 
 admin.initializeApp();
 
 const REGION = "asia-south1";
 const RAZORPAY_KEY_ID = defineSecret("RAZORPAY_KEY_ID");
 const RAZORPAY_KEY_SECRET = defineSecret("RAZORPAY_KEY_SECRET");
-
-// ✅ Commission rate (20% platform fee, 80% to seller)
 const COMMISSION_RATE = 0.2;
 
 function setCorsHeaders(req, res) {
@@ -45,7 +41,6 @@ function getRazorpayClient() {
   });
 }
 
-// ✅ CREATE ORDER
 export const createOrder = onRequest(
   {
     region: REGION,
@@ -55,7 +50,6 @@ export const createOrder = onRequest(
   (req, res) => {
     setCorsHeaders(req, res);
     if (req.method === "OPTIONS") return res.status(204).send("");
-
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
     (async () => {
@@ -92,7 +86,6 @@ export const createOrder = onRequest(
   }
 );
 
-// ✅ VERIFY PAYMENT (PRODUCTION-READY - AUTO-CREATES SELLER DOCUMENTS)
 export const verifyPayment = onRequest(
   {
     region: REGION,
@@ -102,7 +95,6 @@ export const verifyPayment = onRequest(
   (req, res) => {
     setCorsHeaders(req, res);
     if (req.method === "OPTIONS") return res.status(204).send("");
-
     if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
     (async () => {
@@ -125,7 +117,6 @@ export const verifyPayment = onRequest(
           return res.status(400).json({ error: "Missing buyerUid" });
         }
 
-        // ✅ Verify signature
         const key_secret = RAZORPAY_KEY_SECRET.value();
         const body = `${razorpay_order_id}|${razorpay_payment_id}`;
         const expectedSignature = crypto
@@ -140,15 +131,11 @@ export const verifyPayment = onRequest(
         const db = getFirestore();
         const paymentType = type || "photo";
 
-        // ========================================
-        // ✅ SELLER PLAN PAYMENT
-        // ========================================
         if (paymentType === "seller_plan") {
           console.log("🎯 Seller plan payment detected for:", buyerUid);
 
           const planId = itemId?.replace("seller-plan-", "") || "starter";
 
-          // Get user info
           let userEmail = "";
           let userName = "";
           let userPhoto = "";
@@ -165,7 +152,6 @@ export const verifyPayment = onRequest(
             console.log("⚠️ Could not fetch buyer data:", err);
           }
 
-          // ✅ Create seller document (IDEMPOTENT)
           const sellerRef = db.collection("sellers").doc(buyerUid);
           await sellerRef.set(
             {
@@ -195,9 +181,6 @@ export const verifyPayment = onRequest(
           });
         }
 
-        // ========================================
-        // ✅ PHOTO PURCHASE
-        // ========================================
         console.log("🖼️ Photo purchase detected for:", buyerUid);
 
         let itemData = null;
@@ -221,7 +204,6 @@ export const verifyPayment = onRequest(
         const platformFee = Math.round(salePrice * COMMISSION_RATE);
         const sellerEarning = salePrice - platformFee;
 
-        // Create purchase record
         const purchaseRef = db.collection("purchases").doc();
         await purchaseRef.set({
           buyerUid,
@@ -239,7 +221,6 @@ export const verifyPayment = onRequest(
           createdAt: FieldValue.serverTimestamp(),
         });
 
-        // Create sale record (only for seller uploads)
         if (sellerId && itemType === "seller") {
           await db.collection("sales").add({
             saleId: purchaseRef.id,
@@ -288,7 +269,6 @@ export const verifyPayment = onRequest(
   }
 );
 
-// ✅ WEBHOOK
 export const webhook = onRequest(
   {
     region: REGION,
