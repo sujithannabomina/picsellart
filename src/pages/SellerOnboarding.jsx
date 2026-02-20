@@ -1,9 +1,12 @@
+// ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/pages/SellerOnboarding.jsx
-// ✅ FIXED: Properly handles payment → profile transition
+// ═══════════════════════════════════════════════════════════════════════════
+// INSTRUCTION: Replace the ENTIRE file with this code
+// ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import loadRazorpay from "../utils/loadRazorpay";
@@ -13,10 +16,10 @@ export default function SellerOnboarding() {
   const { user, booting, googleLogin } = useAuth();
   const nav = useNavigate();
 
-  const [step, setStep] = useState("plan"); // plan | profile
+  const [step, setStep] = useState("plan");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [checkingStatus, setCheckingStatus] = useState(true); // ✅ NEW: Loading state
+  const [checkingStatus, setCheckingStatus] = useState(true);
 
   const [selectedPlanId, setSelectedPlanId] = useState("pro");
   const selectedPlan = useMemo(() => getPlan(selectedPlanId), [selectedPlanId]);
@@ -27,7 +30,6 @@ export default function SellerOnboarding() {
     upiId: "",
   });
 
-  // ✅ FIXED: Check status only once on mount, then stop checking
   useEffect(() => {
     if (booting) return;
     if (!user) {
@@ -47,13 +49,13 @@ export default function SellerOnboarding() {
         if (snap.exists()) {
           const d = snap.data();
           
-          // If already active, redirect to dashboard
+          console.log("📋 Seller status:", d.status);
+          
           if (d.status === "active") {
             nav("/seller-dashboard", { replace: true });
             return;
           }
           
-          // If pending profile, show profile form
           if (d.status === "pending_profile") {
             setStep("profile");
             setProfile((p) => ({
@@ -65,7 +67,6 @@ export default function SellerOnboarding() {
           }
         }
 
-        // Set initial display name from user
         setProfile((p) => ({
           ...p,
           displayName: p.displayName || user.displayName || "",
@@ -80,7 +81,7 @@ export default function SellerOnboarding() {
     return () => {
       cancelled = true;
     };
-  }, [user, booting, nav]); // ✅ Only run once when user changes
+  }, [user, booting, nav]);
 
   const ensureLoggedIn = async () => {
     if (user) return user;
@@ -95,8 +96,9 @@ export default function SellerOnboarding() {
     try {
       const u = await ensureLoggedIn();
 
-      if (!selectedPlanId || !selectedPlan)
+      if (!selectedPlanId || !selectedPlan) {
         throw new Error("Please select a plan.");
+      }
 
       const ok = await loadRazorpay();
       if (!ok) throw new Error("Razorpay SDK failed to load.");
@@ -119,7 +121,7 @@ export default function SellerOnboarding() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok || !data.orderId) {
-        throw new Error(data?.error || "Failed to create seller activation order.");
+        throw new Error(data?.error || "Failed to create order.");
       }
 
       const { orderId } = data;
@@ -136,7 +138,8 @@ export default function SellerOnboarding() {
         description: `Seller Plan: ${selectedPlan.title}`,
         handler: async function (response) {
           try {
-            // Verify payment
+            console.log("💳 Payment successful, verifying...");
+
             const verifyUrl = import.meta.env.VITE_VERIFY_PAYMENT_URL;
             const vr = await fetch(verifyUrl, {
               method: "POST",
@@ -146,38 +149,39 @@ export default function SellerOnboarding() {
                 itemId: `seller-plan-${selectedPlanId}`,
                 buyerUid: u.uid,
                 amount: selectedPlan.priceINR,
+                type: "seller_plan",
               }),
             });
 
             const vd = await vr.json().catch(() => ({}));
-            if (!vr.ok || !vd.ok)
+            
+            if (!vr.ok || !vd.ok) {
               throw new Error(vd?.error || "Payment verification failed");
+            }
 
-            // ✅ Create seller document
+            console.log("✅ Payment verified, seller document created by backend");
+
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
             const sellerRef = doc(db, "sellers", u.uid);
+            const sellerSnap = await getDoc(sellerRef);
 
-            await setDoc(
-              sellerRef,
-              {
-                uid: u.uid,
-                email: u.email || "",
-                name: u.displayName || "",
-                photoURL: u.photoURL || "",
-                planId: selectedPlanId,
-                orderId: response.razorpay_order_id,
-                paymentId: response.razorpay_payment_id,
-                status: "pending_profile",
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true }
-            );
+            if (!sellerSnap.exists()) {
+              throw new Error("Seller document not created. Please contact support with payment ID: " + response.razorpay_payment_id);
+            }
 
-            // ✅ CRITICAL: Move to profile step immediately
-            setStep("profile");
-            setBusy(false); // ✅ Stop loading state
+            const sellerData = sellerSnap.data();
+            console.log("✅ Seller document confirmed:", sellerData.status);
+
+            if (sellerData.status === "pending_profile") {
+              setStep("profile");
+              setBusy(false);
+            } else if (sellerData.status === "active") {
+              nav("/seller-dashboard", { replace: true });
+            }
           } catch (e) {
-            setErr(e?.message || "Verification failed");
+            console.error("❌ Verification error:", e);
+            setErr(e?.message || "Verification failed. Please contact support.");
             setBusy(false);
           }
         },
@@ -193,13 +197,14 @@ export default function SellerOnboarding() {
         theme: { color: "#000000" },
         modal: {
           ondismiss: () => {
-            setBusy(false); // ✅ Reset loading on dismiss
+            setBusy(false);
           },
         },
       });
 
       rz.open();
     } catch (e) {
+      console.error("❌ Activation error:", e);
       setErr(e?.message || "Activation failed");
       setBusy(false);
     }
@@ -212,13 +217,16 @@ export default function SellerOnboarding() {
       if (!user) throw new Error("Please login first.");
 
       const upiClean = (profile.upiId || "").trim();
-      if (!upiClean)
+      if (!upiClean) {
         throw new Error("UPI ID is required for withdrawals/earnings.");
+      }
 
       const sellerRef = doc(db, "sellers", user.uid);
       const snap = await getDoc(sellerRef);
-      if (!snap.exists())
-        throw new Error("Please complete account activation first.");
+      
+      if (!snap.exists()) {
+        throw new Error("Seller account not found. Please try activating again or contact support.");
+      }
 
       await updateDoc(sellerRef, {
         name: profile.displayName || user.displayName || "",
@@ -228,15 +236,16 @@ export default function SellerOnboarding() {
         updatedAt: serverTimestamp(),
       });
 
+      console.log("✅ Profile completed, redirecting to dashboard");
       nav("/seller-dashboard", { replace: true });
     } catch (e) {
+      console.error("❌ Profile save error:", e);
       setErr(e?.message || "Profile save failed");
     } finally {
       setBusy(false);
     }
   };
 
-  // ✅ Show loading while checking status
   if (checkingStatus) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -248,9 +257,7 @@ export default function SellerOnboarding() {
   return (
     <div className="min-h-screen bg-white">
       <div className="mx-auto max-w-3xl px-4 py-12">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          Seller Setup
-        </h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Seller Setup</h1>
         <p className="mt-2 text-slate-600">
           {step === "plan" 
             ? "Select a plan to activate your seller account."
@@ -284,26 +291,16 @@ export default function SellerOnboarding() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="text-lg font-semibold">{p.title}</div>
-                        <div className="mt-1 text-sm text-slate-600">
-                          {p.badge}
-                        </div>
+                        <div className="mt-1 text-sm text-slate-600">{p.badge}</div>
                       </div>
                       <div className="text-lg font-semibold">₹{p.priceINR}</div>
                     </div>
 
-                    <div className="mt-4 text-sm text-slate-700">
-                      {p.description}
-                    </div>
+                    <div className="mt-4 text-sm text-slate-700">{p.description}</div>
 
                     <div className="mt-4 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                      <div>
-                        Upload limit:{" "}
-                        <span className="font-medium">{p.maxUploads}</span>
-                      </div>
-                      <div>
-                        Max price per image:{" "}
-                        <span className="font-medium">₹{maxPrice}</span>
-                      </div>
+                      <div>Upload limit: <span className="font-medium">{p.maxUploads}</span></div>
+                      <div>Max price per image: <span className="font-medium">₹{maxPrice}</span></div>
                       <div className="mt-2 text-xs text-slate-500">
                         One-time payment for 6 months access
                       </div>
@@ -330,36 +327,25 @@ export default function SellerOnboarding() {
             <div className="mt-8 rounded-2xl border border-slate-200 p-6">
               <h2 className="text-xl font-semibold">Seller Profile</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Enter your details.{" "}
-                <span className="font-medium">
-                  UPI details are for withdrawals/earnings.
-                </span>
+                Enter your details. <span className="font-medium">UPI ID is required for payouts.</span>
               </p>
 
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <div>
-                  <label className="text-sm font-medium text-slate-700">
-                    Display Name
-                  </label>
+                  <label className="text-sm font-medium text-slate-700">Display Name</label>
                   <input
                     value={profile.displayName}
-                    onChange={(e) =>
-                      setProfile((p) => ({ ...p, displayName: e.target.value }))
-                    }
+                    onChange={(e) => setProfile((p) => ({ ...p, displayName: e.target.value }))}
                     className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     placeholder="Your name"
                   />
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-slate-700">
-                    Phone (optional)
-                  </label>
+                  <label className="text-sm font-medium text-slate-700">Phone (optional)</label>
                   <input
                     value={profile.phone}
-                    onChange={(e) =>
-                      setProfile((p) => ({ ...p, phone: e.target.value }))
-                    }
+                    onChange={(e) => setProfile((p) => ({ ...p, phone: e.target.value }))}
                     className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     placeholder="10-digit number"
                   />
@@ -371,9 +357,7 @@ export default function SellerOnboarding() {
                   </label>
                   <input
                     value={profile.upiId}
-                    onChange={(e) =>
-                      setProfile((p) => ({ ...p, upiId: e.target.value }))
-                    }
+                    onChange={(e) => setProfile((p) => ({ ...p, upiId: e.target.value }))}
                     className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
                     placeholder="example@upi"
                   />
