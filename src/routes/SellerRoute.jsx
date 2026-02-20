@@ -1,4 +1,9 @@
-// src/routes/SellerRoute.jsx
+// ═══════════════════════════════════════════════════════════════════════════
+// FILE PATH: src/routes/SellerRoute.jsx
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ CORRECTED: Checks if user is an ACTIVE seller before allowing access
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
@@ -7,25 +12,70 @@ import { db } from "../firebase";
 
 export default function SellerRoute({ children }) {
   const { user, booting } = useAuth();
-  const [allowed, setAllowed] = useState(null);
+  const [checking, setChecking] = useState(true);
+  const [isActiveSeller, setIsActiveSeller] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    async function run() {
-      if (!user) return;
-      const snap = await getDoc(doc(db, "sellers", user.uid));
-      if (!cancelled) setAllowed(snap.exists());
+
+    async function checkSellerStatus() {
+      if (!user) {
+        setChecking(false);
+        return;
+      }
+
+      try {
+        const sellerRef = doc(db, "sellers", user.uid);
+        const sellerSnap = await getDoc(sellerRef);
+
+        if (cancelled) return;
+
+        if (sellerSnap.exists()) {
+          const sellerData = sellerSnap.data();
+          
+          // Only allow access if seller is ACTIVE
+          if (sellerData.status === "active") {
+            setIsActiveSeller(true);
+          } else {
+            setIsActiveSeller(false);
+          }
+        } else {
+          setIsActiveSeller(false);
+        }
+      } catch (error) {
+        console.error("Error checking seller status:", error);
+        setIsActiveSeller(false);
+      } finally {
+        if (!cancelled) setChecking(false);
+      }
     }
-    run();
-    return () => (cancelled = true);
+
+    checkSellerStatus();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  if (booting) return null;
-  if (!user) return <Navigate to="/seller/login" replace />;
-  if (allowed === null) return null;
+  // Show nothing while checking
+  if (booting || checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    );
+  }
 
-  // Seller doc must exist to access seller-only pages
-  if (!allowed) return <Navigate to="/seller/onboarding" replace />;
+  // Not logged in → Redirect to seller login
+  if (!user) {
+    return <Navigate to="/seller-login" replace />;
+  }
 
+  // Logged in but not an active seller → Redirect to onboarding
+  if (!isActiveSeller) {
+    return <Navigate to="/seller-onboarding" replace />;
+  }
+
+  // Active seller → Allow access
   return children;
 }
