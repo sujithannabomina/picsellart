@@ -1,10 +1,15 @@
+// ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/App.jsx
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ FIXED: Seller routes now protected by <SellerRoute>
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./components/Layout";
 
-import LandingPage from "./pages/LandingPage"; // ✅ untouched
+import LandingPage from "./pages/LandingPage";
 import Explore from "./pages/Explore";
 import BuyerLogin from "./pages/BuyerLogin";
 import SellerLogin from "./pages/SellerLogin";
@@ -24,6 +29,9 @@ import ViewImage from "./pages/ViewImage";
 
 import NotFound from "./pages/NotFound";
 
+// ✅ CRITICAL: Import SellerRoute
+import SellerRoute from "./routes/SellerRoute";
+
 export default function App() {
   return (
     <Routes>
@@ -38,7 +46,7 @@ export default function App() {
         <Route path="/contact" element={<Contact />} />
         <Route path="/refunds" element={<Refunds />} />
 
-        {/* ✅ Logins (both spellings supported to stop 404) */}
+        {/* Logins */}
         <Route path="/buyer-login" element={<BuyerLogin />} />
         <Route path="/buyer/login" element={<Navigate to="/buyer-login" replace />} />
 
@@ -48,18 +56,37 @@ export default function App() {
         {/* Checkout */}
         <Route path="/checkout" element={<Checkout />} />
 
-        {/* Seller onboarding + upload */}
+        {/* Seller onboarding (NOT protected - allows new sellers) */}
         <Route path="/seller-onboarding" element={<SellerOnboarding />} />
-        <Route path="/seller/upload" element={<SellerUpload />} />
 
-        {/* Dashboards (aliases supported) */}
+        {/* ✅ PROTECTED SELLER ROUTES - Wrapped in <SellerRoute> */}
+        <Route
+          path="/seller-dashboard"
+          element={
+            <SellerRoute>
+              <SellerDashboard />
+            </SellerRoute>
+          }
+        />
+        <Route
+          path="/seller/dashboard"
+          element={<Navigate to="/seller-dashboard" replace />}
+        />
+
+        <Route
+          path="/seller/upload"
+          element={
+            <SellerRoute>
+              <SellerUpload />
+            </SellerRoute>
+          }
+        />
+
+        {/* Buyer Dashboards (aliases supported) */}
         <Route path="/buyer-dashboard" element={<BuyerDashboard />} />
         <Route path="/buyer/dashboard" element={<Navigate to="/buyer-dashboard" replace />} />
 
-        <Route path="/seller-dashboard" element={<SellerDashboard />} />
-        <Route path="/seller/dashboard" element={<Navigate to="/seller-dashboard" replace />} />
-
-        {/* ✅ Photo view routes */}
+        {/* Photo view routes */}
         <Route path="/photo/:id" element={<ViewPhoto />} />
         <Route path="/view/:id" element={<ViewImage />} />
 
