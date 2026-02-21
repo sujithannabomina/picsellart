@@ -1,12 +1,13 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: functions/index.js
 // ═══════════════════════════════════════════════════════════════════════════
-// ES6 MODULE VERSION (for "type": "module" in package.json)
+// ✅ FIXED: Properly handles sample photos by fetching from Storage
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { onRequest } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 import admin from "firebase-admin";
 import crypto from "crypto";
 import Razorpay from "razorpay";
@@ -129,6 +130,7 @@ export const verifyPayment = onRequest(
         }
 
         const db = getFirestore();
+        const storage = getStorage();
         const paymentType = type || "photo";
 
         if (paymentType === "seller_plan") {
@@ -187,6 +189,7 @@ export const verifyPayment = onRequest(
         let sellerId = null;
         let itemType = "sample";
 
+        // ✅ CRITICAL FIX: Try to get item from items collection first
         if (itemId) {
           try {
             const itemDoc = await db.collection("items").doc(itemId).get();
@@ -194,6 +197,46 @@ export const verifyPayment = onRequest(
               itemData = itemDoc.data();
               sellerId = itemData.uploadedBy || null;
               itemType = itemData.type || "sample";
+              console.log("✅ Found item in database:", itemId);
+            } else {
+              console.log("⚠️ Item not in database, fetching from storage:", itemId);
+              
+              // ✅ NEW: If item doesn't exist in database, fetch from Firebase Storage
+              // This handles sample photos that aren't in the items collection
+              try {
+                const bucket = storage.bucket();
+                const storagePath = itemId.includes("/") ? itemId : `public/images/${itemId}`;
+                const file = bucket.file(storagePath);
+                
+                const [exists] = await file.exists();
+                if (exists) {
+                  // Get signed download URL (valid for 7 days)
+                  const [url] = await file.getSignedUrl({
+                    action: 'read',
+                    expires: Date.now() + 7 * 24 * 60 * 60 * 1000, // 7 days
+                  });
+                  
+                  const fileName = itemId.split('/').pop();
+                  
+                  itemData = {
+                    storagePath: storagePath,
+                    downloadUrl: url,
+                    fileName: fileName,
+                    displayName: fileName.replace(/\.[^/.]+$/, ""), // Remove extension
+                    type: "sample",
+                    uploadedBy: null,
+                  };
+                  
+                  itemType = "sample";
+                  sellerId = null;
+                  
+                  console.log("✅ Fetched item from storage:", storagePath);
+                } else {
+                  console.error("❌ File doesn't exist in storage:", storagePath);
+                }
+              } catch (storageErr) {
+                console.error("❌ Error fetching from storage:", storageErr);
+              }
             }
           } catch (err) {
             console.error("❌ Error fetching item:", err);
@@ -204,6 +247,14 @@ export const verifyPayment = onRequest(
         const platformFee = Math.round(salePrice * COMMISSION_RATE);
         const sellerEarning = salePrice - platformFee;
 
+        // ✅ CRITICAL: Only create purchase if we have download URL
+        if (!itemData?.downloadUrl) {
+          console.error("❌ Cannot create purchase: No download URL available");
+          return res.status(400).json({ 
+            error: "Item not found or download URL unavailable" 
+          });
+        }
+
         const purchaseRef = db.collection("purchases").doc();
         await purchaseRef.set({
           buyerUid,
@@ -212,10 +263,10 @@ export const verifyPayment = onRequest(
           price: salePrice,
           orderId: razorpay_order_id,
           paymentId: razorpay_payment_id,
-          fileName: itemData?.fileName || "",
-          displayName: itemData?.displayName || "Photo",
-          storagePath: itemData?.storagePath || "",
-          downloadUrl: itemData?.downloadUrl || "",
+          fileName: itemData.fileName || "",
+          displayName: itemData.displayName || "Photo",
+          storagePath: itemData.storagePath || "",
+          downloadUrl: itemData.downloadUrl || "",
           sellerId: sellerId,
           itemType: itemType,
           createdAt: FieldValue.serverTimestamp(),
