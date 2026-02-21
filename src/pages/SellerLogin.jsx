@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/pages/SellerLogin.jsx
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ CORRECTED: Proper seller role checking and routing
+// ✅ FIXED: Forces redirect to /seller-dashboard (not /buyer-dashboard)
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -13,9 +13,6 @@ import { db } from "../firebase";
 export default function SellerLogin() {
   const { googleLogin } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const next = location.state?.next || "/seller-dashboard";
 
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(false);
@@ -51,10 +48,9 @@ export default function SellerLogin() {
       }
 
       if (sellerData.status === "active") {
-        // Active seller → Send to dashboard
-        console.log("→ Active seller, redirecting to dashboard");
-        console.log("→ Next URL:", next);
-        navigate(next, { replace: true });
+        // ✅ CRITICAL FIX: Always redirect to /seller-dashboard
+        console.log("→ Active seller, redirecting to /seller-dashboard");
+        navigate("/seller-dashboard", { replace: true });
         return;
       }
 
@@ -111,5 +107,4 @@ export default function SellerLogin() {
       </div>
     </div>
   );
-
 }

@@ -1,19 +1,20 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/components/Navbar.jsx
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ SMART NAVBAR: Shows correct dashboard based on user role
+// ✅ EXACT REQUIREMENTS:
+// Not logged in → [Buyer Login] [Seller Login]
+// Logged in as Seller → [Seller Dashboard] [Buyer Login] [Logout]
+// Logged in as Buyer → [Buyer Dashboard] [Seller Login] [Logout]
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
 
   const [isActiveSeller, setIsActiveSeller] = useState(false);
   const [checkingSeller, setCheckingSeller] = useState(true);
@@ -56,9 +57,6 @@ export default function Navbar() {
     };
   }, [user]);
 
-  const isOnSellerPage = location.pathname.startsWith("/seller");
-  const isOnBuyerPage = location.pathname.startsWith("/buyer");
-
   return (
     <nav className="border-b border-slate-200 bg-white">
       <div className="mx-auto max-w-7xl px-4">
@@ -73,34 +71,19 @@ export default function Navbar() {
 
           {/* Center Links */}
           <div className="hidden md:flex items-center gap-6">
-            <Link
-              to="/"
-              className="text-sm font-medium text-slate-700 hover:text-slate-900"
-            >
+            <Link to="/" className="text-sm font-medium text-slate-700 hover:text-slate-900">
               Home
             </Link>
-            <Link
-              to="/explore"
-              className="text-sm font-medium text-slate-700 hover:text-slate-900"
-            >
+            <Link to="/explore" className="text-sm font-medium text-slate-700 hover:text-slate-900">
               Explore
             </Link>
-            <Link
-              to="/faq"
-              className="text-sm font-medium text-slate-700 hover:text-slate-900"
-            >
+            <Link to="/faq" className="text-sm font-medium text-slate-700 hover:text-slate-900">
               FAQ
             </Link>
-            <Link
-              to="/contact"
-              className="text-sm font-medium text-slate-700 hover:text-slate-900"
-            >
+            <Link to="/contact" className="text-sm font-medium text-slate-700 hover:text-slate-900">
               Contact
             </Link>
-            <Link
-              to="/refunds"
-              className="text-sm font-medium text-slate-700 hover:text-slate-900"
-            >
+            <Link to="/refunds" className="text-sm font-medium text-slate-700 hover:text-slate-900">
               Refunds
             </Link>
           </div>
@@ -108,7 +91,10 @@ export default function Navbar() {
           {/* Right Side - Auth Buttons */}
           <div className="flex items-center gap-3">
             {!user ? (
-              // Not logged in
+              // ========================================
+              // CASE A: NOT LOGGED IN
+              // Shows: [Buyer Login] [Seller Login]
+              // ========================================
               <>
                 <Link
                   to="/buyer-login"
@@ -123,79 +109,62 @@ export default function Navbar() {
                   Seller Login
                 </Link>
               </>
-            ) : (
-              // Logged in
+            ) : !checkingSeller ? (
+              // Logged in and finished checking seller status
               <>
-                {/* Show appropriate dashboard button */}
-                {!checkingSeller && (
+                {isActiveSeller ? (
+                  // ========================================
+                  // CASE B: LOGGED IN AS SELLER
+                  // Shows: [Seller Dashboard] [Buyer Login] [Logout]
+                  // ========================================
                   <>
-                    {/* If user is active seller and on seller pages, show Buyer Dashboard toggle */}
-                    {isActiveSeller && isOnSellerPage && (
-                      <Link
-                        to="/buyer-dashboard"
-                        className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                      >
-                        Buyer Dashboard
-                      </Link>
-                    )}
-
-                    {/* If user is active seller and on buyer pages, show Seller Dashboard toggle */}
-                    {isActiveSeller && isOnBuyerPage && (
-                      <Link
-                        to="/seller-dashboard"
-                        className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                      >
-                        Seller Dashboard
-                      </Link>
-                    )}
-
-                    {/* If user is active seller and NOT on either dashboard, show both */}
-                    {isActiveSeller && !isOnSellerPage && !isOnBuyerPage && (
-                      <>
-                        <Link
-                          to="/buyer-dashboard"
-                          className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                        >
-                          Buyer Dashboard
-                        </Link>
-                        <Link
-                          to="/seller-dashboard"
-                          className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                        >
-                          Seller Dashboard
-                        </Link>
-                      </>
-                    )}
-
-                    {/* If user is NOT a seller, only show buyer options */}
-                    {!isActiveSeller && (
-                      <>
-                        <Link
-                          to="/buyer-dashboard"
-                          className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                        >
-                          Buyer Dashboard
-                        </Link>
-                        <Link
-                          to="/seller-login"
-                          className="rounded-full border border-blue-600 px-5 py-2 text-sm font-semibold text-blue-600 hover:bg-blue-50"
-                        >
-                          Become a Seller
-                        </Link>
-                      </>
-                    )}
+                    <Link
+                      to="/seller-dashboard"
+                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      Seller Dashboard
+                    </Link>
+                    <Link
+                      to="/buyer-login"
+                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      Buyer Login
+                    </Link>
+                    <button
+                      onClick={logout}
+                      className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  // ========================================
+                  // CASE C: LOGGED IN AS BUYER (not a seller)
+                  // Shows: [Buyer Dashboard] [Seller Login] [Logout]
+                  // ========================================
+                  <>
+                    <Link
+                      to="/buyer-dashboard"
+                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      Buyer Dashboard
+                    </Link>
+                    <Link
+                      to="/seller-login"
+                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                    >
+                      Seller Login
+                    </Link>
+                    <button
+                      onClick={logout}
+                      className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Logout
+                    </button>
                   </>
                 )}
-
-                {/* Logout */}
-                <button
-                  onClick={logout}
-                  className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                >
-                  Logout
-                </button>
               </>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
