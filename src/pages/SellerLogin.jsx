@@ -53,6 +53,7 @@ export default function SellerLogin() {
       if (sellerData.status === "active") {
         // Active seller → Send to dashboard
         console.log("→ Active seller, redirecting to dashboard");
+        console.log("→ Next URL:", next);
         navigate(next, { replace: true });
         return;
       }
@@ -110,4 +111,5 @@ export default function SellerLogin() {
       </div>
     </div>
   );
+
 }
