@@ -1,11 +1,17 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// FILE PATH: src/components/Layout.jsx
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ FIXED: Now uses Navbar.jsx instead of SiteHeader.jsx
+// ═══════════════════════════════════════════════════════════════════════════
+
 import React from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import Navbar from "./components/Navbar";
+import Navbar from "./Navbar";  // ✅ CHANGED: Was SiteHeader, now Navbar
 
 /**
  * Layout goal:
  * - Header ALWAYS visible (fix #1/#4)
- * - Do NOT “box” the LandingPage (fix scaled/trimmed look)
+ * - Do NOT "box" the LandingPage (fix scaled/trimmed look)
  * - Keep consistent spacing for other pages
  */
 export default function Layout() {
@@ -14,7 +20,7 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen bg-white">
-      <SiteHeader />
+      <Navbar />  {/* ✅ CHANGED: Was SiteHeader, now Navbar */}
 
       {/* Landing page should control its own layout; others get neat padding */}
       <main className={isLanding ? "w-full" : "w-full py-8"}>
@@ -29,4 +35,3 @@ export default function Layout() {
     </div>
   );
 }
-
