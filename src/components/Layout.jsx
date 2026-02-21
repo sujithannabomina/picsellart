@@ -1,6 +1,6 @@
 import React from "react";
 import { Outlet, useLocation } from "react-router-dom";
-import SiteHeader from "./SiteHeader";
+import Navbar from "./components/Navbar";
 
 /**
  * Layout goal:
@@ -29,3 +29,4 @@ export default function Layout() {
     </div>
   );
 }
+
