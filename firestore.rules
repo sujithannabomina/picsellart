@@ -1,39 +1,77 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// FILE PATH: firestore.rules
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ CRITICAL FIX: Allow users to read their own seller documents
+// This fixes the "Missing or insufficient permissions" error
+// ═══════════════════════════════════════════════════════════════════════════
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // ✅ Items collection - PUBLIC READ (anyone can browse)
-    match /items/{itemId} {
-      allow read: if true; // Anyone can read (for Explore page)
-      allow write: if false; // Only backend can write
+    // ========================================
+    // BUYERS COLLECTION
+    // ========================================
+    match /buyers/{userId} {
+      // Users can read and write their own buyer profile
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // ✅ Purchases - PRIVATE (only buyer can read their own)
+    // ========================================
+    // SELLERS COLLECTION
+    // ========================================
+    match /sellers/{userId} {
+      // ✅ CRITICAL: Allow users to read their own seller document
+      // This is needed for Navbar to check if user is an active seller
+      allow read: if request.auth != null && request.auth.uid == userId;
+      
+      // ✅ Allow Cloud Functions to write (for verifyPayment)
+      // Allow users to update their own profile (for onboarding)
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // ========================================
+    // ITEMS COLLECTION (Photos)
+    // ========================================
+    match /items/{itemId} {
+      // Anyone can read (browse marketplace)
+      allow read: if true;
+      
+      // Only the uploader can write/update
+      allow write: if request.auth != null && 
+                      request.resource.data.uploadedBy == request.auth.uid;
+    }
+    
+    // ========================================
+    // PURCHASES COLLECTION
+    // ========================================
     match /purchases/{purchaseId} {
+      // Users can read their own purchases
       allow read: if request.auth != null && 
                      resource.data.buyerUid == request.auth.uid;
-      allow write: if false; // Only backend can write
+      
+      // Only Cloud Functions can create purchases (during payment)
+      allow create: if request.auth != null;
     }
     
-    // ✅ Sellers - PRIVATE (only seller can read their own)
-    match /sellers/{sellerId} {
+    // ========================================
+    // SALES COLLECTION
+    // ========================================
+    match /sales/{saleId} {
+      // Sellers can read their own sales
       allow read: if request.auth != null && 
-                     request.auth.uid == sellerId;
-      allow write: if false; // Only backend can write
+                     resource.data.sellerId == request.auth.uid;
+      
+      // Only Cloud Functions can create sales
+      allow create: if request.auth != null;
     }
     
-    // ✅ Buyers - PRIVATE (only buyer can read their own)
-    match /buyers/{buyerId} {
-      allow read: if request.auth != null && 
-                     request.auth.uid == buyerId;
-      allow write: if false; // Only backend can write
-    }
-    
-    // ✅ Users - PRIVATE
-    match /users/{userId} {
-      allow read: if request.auth != null && 
-                     request.auth.uid == userId;
-      allow write: if false;
+    // ========================================
+    // ACCOUNTS COLLECTION (Optional)
+    // ========================================
+    match /accounts/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }
 }

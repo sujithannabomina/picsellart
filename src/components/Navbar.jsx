@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/components/Navbar.jsx
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ EXACT REQUIREMENTS:
+// ✅ REQUIREMENTS (FINAL):
 // Not logged in → [Buyer Login] [Seller Login]
-// Logged in as Seller → [Seller Dashboard] [Buyer Login] [Logout]
-// Logged in as Buyer → [Buyer Dashboard] [Seller Login] [Logout]
+// Active Seller → [Seller Dashboard] [Buyer Login] [Logout]
+// Buyer (not seller) → [Buyer Dashboard] [Seller Login] [Logout]
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
@@ -17,19 +17,20 @@ export default function Navbar() {
   const { user, logout } = useAuth();
 
   const [isActiveSeller, setIsActiveSeller] = useState(false);
-  const [checkingSeller, setCheckingSeller] = useState(true);
+  const [checkingSeller, setCheckingSeller] = useState(false);
 
   // Check if current user is an active seller
   useEffect(() => {
+    if (!user) {
+      setIsActiveSeller(false);
+      setCheckingSeller(false);
+      return;
+    }
+
     let cancelled = false;
+    setCheckingSeller(true);
 
     async function checkSellerStatus() {
-      if (!user) {
-        setIsActiveSeller(false);
-        setCheckingSeller(false);
-        return;
-      }
-
       try {
         const sellerRef = doc(db, "sellers", user.uid);
         const sellerSnap = await getDoc(sellerRef);
@@ -38,12 +39,15 @@ export default function Navbar() {
 
         if (sellerSnap.exists()) {
           const sellerData = sellerSnap.data();
-          setIsActiveSeller(sellerData.status === "active");
+          const isActive = sellerData.status === "active";
+          setIsActiveSeller(isActive);
+          console.log("🔍 Navbar: User is active seller:", isActive);
         } else {
           setIsActiveSeller(false);
+          console.log("🔍 Navbar: No seller document found");
         }
       } catch (error) {
-        console.error("Error checking seller status:", error);
+        console.error("❌ Navbar: Error checking seller status:", error);
         setIsActiveSeller(false);
       } finally {
         if (!cancelled) setCheckingSeller(false);
@@ -92,8 +96,8 @@ export default function Navbar() {
           <div className="flex items-center gap-3">
             {!user ? (
               // ========================================
-              // CASE A: NOT LOGGED IN
-              // Shows: [Buyer Login] [Seller Login]
+              // NOT LOGGED IN
+              // [Buyer Login] [Seller Login]
               // ========================================
               <>
                 <Link
@@ -109,62 +113,60 @@ export default function Navbar() {
                   Seller Login
                 </Link>
               </>
-            ) : !checkingSeller ? (
-              // Logged in and finished checking seller status
+            ) : checkingSeller ? (
+              // Still checking seller status - show nothing
+              <div className="text-sm text-slate-500">Loading...</div>
+            ) : isActiveSeller ? (
+              // ========================================
+              // ACTIVE SELLER
+              // [Seller Dashboard] [Buyer Login] [Logout]
+              // ========================================
               <>
-                {isActiveSeller ? (
-                  // ========================================
-                  // CASE B: LOGGED IN AS SELLER
-                  // Shows: [Seller Dashboard] [Buyer Login] [Logout]
-                  // ========================================
-                  <>
-                    <Link
-                      to="/seller-dashboard"
-                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                    >
-                      Seller Dashboard
-                    </Link>
-                    <Link
-                      to="/buyer-login"
-                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                    >
-                      Buyer Login
-                    </Link>
-                    <button
-                      onClick={logout}
-                      className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      Logout
-                    </button>
-                  </>
-                ) : (
-                  // ========================================
-                  // CASE C: LOGGED IN AS BUYER (not a seller)
-                  // Shows: [Buyer Dashboard] [Seller Login] [Logout]
-                  // ========================================
-                  <>
-                    <Link
-                      to="/buyer-dashboard"
-                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                    >
-                      Buyer Dashboard
-                    </Link>
-                    <Link
-                      to="/seller-login"
-                      className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-                    >
-                      Seller Login
-                    </Link>
-                    <button
-                      onClick={logout}
-                      className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      Logout
-                    </button>
-                  </>
-                )}
+                <Link
+                  to="/seller-dashboard"
+                  className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Seller Dashboard
+                </Link>
+                <Link
+                  to="/buyer-login"
+                  className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Buyer Login
+                </Link>
+                <button
+                  onClick={logout}
+                  className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Logout
+                </button>
               </>
-            ) : null}
+            ) : (
+              // ========================================
+              // BUYER (NOT A SELLER)
+              // [Buyer Dashboard] [Seller Login] [Logout]
+              // ========================================
+              <>
+                <Link
+                  to="/buyer-dashboard"
+                  className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Buyer Dashboard
+                </Link>
+                <Link
+                  to="/seller-login"
+                  className="rounded-full bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  Seller Login
+                </Link>
+                <button
+                  onClick={logout}
+                  className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Logout
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
