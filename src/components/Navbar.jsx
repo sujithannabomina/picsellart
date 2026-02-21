@@ -1,20 +1,18 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/components/Navbar.jsx
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ REQUIREMENTS (FINAL):
-// Not logged in → [Buyer Login] [Seller Login]
-// Active Seller → [Seller Dashboard] [Buyer Login] [Logout]
-// Buyer (not seller) → [Buyer Dashboard] [Seller Login] [Logout]
+// ✅ FIXED: Logo restored + Logout redirects to home page
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const [isActiveSeller, setIsActiveSeller] = useState(false);
   const [checkingSeller, setCheckingSeller] = useState(false);
@@ -61,15 +59,24 @@ export default function Navbar() {
     };
   }, [user]);
 
+  // ✅ Logout handler that redirects to home
+  const handleLogout = async () => {
+    await logout();
+    navigate("/");
+  };
+
   return (
     <nav className="border-b border-slate-200 bg-white">
       <div className="mx-auto max-w-7xl px-4">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo */}
+          {/* ✅ Logo - Using actual logo.png */}
           <Link to="/" className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-600">
-              <span className="text-lg font-bold text-white">P</span>
-            </div>
+            <img
+              src="/logo.png"
+              alt="PicSellArt"
+              className="h-9 w-9 rounded-xl object-contain bg-white"
+              loading="eager"
+            />
             <span className="text-xl font-bold text-slate-900">PicSellArt</span>
           </Link>
 
@@ -135,7 +142,7 @@ export default function Navbar() {
                   Buyer Login
                 </Link>
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Logout
@@ -160,7 +167,7 @@ export default function Navbar() {
                   Seller Login
                 </Link>
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="rounded-full border border-slate-200 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   Logout
