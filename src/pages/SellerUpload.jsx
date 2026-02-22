@@ -1,5 +1,5 @@
 // FILE PATH: src/pages/SellerUpload.jsx
-// ✅ COMPETITIVE VERSION - Category selection, multiple tags, quality checks
+// ✅ FIXED: Flexible resolution requirements for phone uploads
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -34,7 +34,6 @@ export default function SellerUpload() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  // ✅ Enhanced form fields
   const [title, setTitle] = useState("");
   const [priceINR, setPriceINR] = useState("");
   const [category, setCategory] = useState("nature");
@@ -67,7 +66,6 @@ export default function SellerUpload() {
 
   const plan = useMemo(() => getPlan(seller?.planId), [seller?.planId]);
 
-  // ✅ File preview
   const handleFileChange = (e) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
@@ -77,7 +75,7 @@ export default function SellerUpload() {
     }
   };
 
-  // ✅ Quality checks
+  // ✅ NEW: Flexible quality checks for phone photos
   const validateImage = async (file) => {
     return new Promise((resolve, reject) => {
       const img = new Image();
@@ -86,16 +84,42 @@ export default function SellerUpload() {
       img.onload = () => {
         URL.revokeObjectURL(url);
         
-        // ✅ Minimum resolution: 1920x1080 (Full HD)
-        if (img.width < 1920 || img.height < 1080) {
-          reject(new Error(`Image resolution too low. Minimum: 1920x1080. Yours: ${img.width}x${img.height}`));
+        const width = img.width;
+        const height = img.height;
+        const totalPixels = width * height;
+        
+        // ✅ FLEXIBLE APPROACH:
+        // 1. Minimum total pixels (2 megapixels = good quality)
+        const MIN_PIXELS = 2000000; // 2MP (e.g., 1600x1250 or 1200x1666)
+        
+        // 2. At least ONE dimension should be reasonable
+        const MIN_DIMENSION = 800; // At least 800px on one side
+        
+        // 3. Maximum file size
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 15MB (increased for high-quality photos)
+        
+        if (totalPixels < MIN_PIXELS) {
+          reject(new Error(
+            `Image quality too low. Minimum: 2MP (e.g., 1600x1250). Yours: ${width}x${height} (${(totalPixels/1000000).toFixed(1)}MP)`
+          ));
+          return;
         }
         
-        // ✅ Maximum file size: 10MB
-        if (file.size > 10 * 1024 * 1024) {
-          reject(new Error("File size too large. Maximum: 10MB"));
+        if (width < MIN_DIMENSION && height < MIN_DIMENSION) {
+          reject(new Error(
+            `Image too small. At least one dimension must be ${MIN_DIMENSION}px. Yours: ${width}x${height}`
+          ));
+          return;
         }
         
+        if (file.size > MAX_FILE_SIZE) {
+          reject(new Error(
+            `File size too large. Maximum: 15MB. Yours: ${(file.size/1024/1024).toFixed(1)}MB`
+          ));
+          return;
+        }
+        
+        console.log(`✅ Image validated: ${width}x${height} (${(totalPixels/1000000).toFixed(1)}MP), ${(file.size/1024/1024).toFixed(1)}MB`);
         resolve(true);
       };
       
@@ -127,7 +151,7 @@ export default function SellerUpload() {
       if (uploadsCount >= plan.maxUploads)
         throw new Error("Upload limit reached for your account.");
 
-      // ✅ Quality validation
+      // ✅ Quality validation (now more flexible)
       await validateImage(file);
 
       const safeName = file.name.replace(/\s+/g, "_");
@@ -154,7 +178,7 @@ export default function SellerUpload() {
         price: price,
         downloadUrl: url,
 
-        // ✅ NEW: Category & tags
+        // ✅ Category & tags
         category: category,
         tags: tagList,
 
@@ -188,7 +212,7 @@ export default function SellerUpload() {
       <div className="mx-auto max-w-3xl px-4 py-12">
         <h1 className="text-3xl font-semibold tracking-tight">Upload Photo</h1>
         <p className="mt-2 text-slate-600">
-          Add a new listing. Quality guidelines: Min 1920x1080, Max 10MB.
+          Add a new listing. Quality guidelines: Min 2MP, Max 15MB.
         </p>
 
         {err ? (
@@ -217,7 +241,7 @@ export default function SellerUpload() {
                 Image File *
               </label>
               <p className="text-xs text-slate-500 mt-1">
-                Requirements: 1920x1080 minimum, under 10MB, JPG/PNG format
+                Requirements: Minimum 2MP (e.g., 1600x1250), under 15MB, JPG/PNG format
               </p>
               <input
                 className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-3"
