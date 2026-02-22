@@ -1,11 +1,12 @@
 // FILE PATH: src/pages/SellerDashboard.jsx
-// ✅ COMPLETE with earnings tracking, sales history, payout management
+// ✅ NEW: Photo Management - View and delete uploaded photos
 
 import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, doc, getDoc, getDocs, query, where, deleteDoc } from "firebase/firestore";
+import { ref, deleteObject } from "firebase/storage";
+import { db, storage } from "../firebase";
 import { COMMISSION_RATE, getPlan } from "../utils/plans";
 
 function StatCard({ label, value, sub, highlight }) {
@@ -25,12 +26,17 @@ export default function SellerDashboard() {
   const [seller, setSeller] = useState(null);
   const [uploadsCount, setUploadsCount] = useState(0);
   
-  // ✅ NEW: Earnings data
+  // ✅ NEW: Store uploaded items
+  const [uploadedItems, setUploadedItems] = useState([]);
+  
   const [sales, setSales] = useState([]);
   const [totalEarnings, setTotalEarnings] = useState(0);
   const [pendingEarnings, setPendingEarnings] = useState(0);
   const [paidEarnings, setPaidEarnings] = useState(0);
   const [loading, setLoading] = useState(true);
+  
+  // ✅ NEW: Delete state
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -41,20 +47,34 @@ export default function SellerDashboard() {
       try {
         setLoading(true);
 
-        // Get seller data
         const sellerSnap = await getDoc(doc(db, "sellers", user.uid));
         if (!sellerSnap.exists()) return;
         const sellerData = sellerSnap.data();
         if (cancelled) return;
         setSeller(sellerData);
 
-        // Get uploads count
+        // ✅ Get uploads with full data
         const itemsSnap = await getDocs(
           query(collection(db, "items"), where("uploadedBy", "==", user.uid))
         );
-        if (!cancelled) setUploadsCount(itemsSnap.size);
+        
+        const items = [];
+        itemsSnap.forEach((doc) => {
+          items.push({ id: doc.id, ...doc.data() });
+        });
+        
+        // Sort by newest first
+        items.sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+        
+        if (!cancelled) {
+          setUploadedItems(items);
+          setUploadsCount(items.length);
+        }
 
-        // ✅ Get sales data
         const salesSnap = await getDocs(
           query(collection(db, "sales"), where("sellerId", "==", user.uid))
         );
@@ -76,7 +96,6 @@ export default function SellerDashboard() {
           }
         });
 
-        // Sort by newest first
         salesData.sort((a, b) => {
           const aTime = a.soldAt?.toMillis?.() || 0;
           const bTime = b.soldAt?.toMillis?.() || 0;
@@ -101,6 +120,43 @@ export default function SellerDashboard() {
   }, [user]);
 
   const plan = useMemo(() => getPlan(seller?.planId), [seller?.planId]);
+
+  // ✅ NEW: Delete photo function
+  const handleDeletePhoto = async (item) => {
+    if (!confirm(`Delete "${item.displayName}"? This cannot be undone.`)) {
+      return;
+    }
+
+    setDeleting(item.id);
+    
+    try {
+      // 1. Delete from Firestore
+      await deleteDoc(doc(db, "items", item.id));
+      
+      // 2. Delete from Storage (if path exists)
+      if (item.storagePath) {
+        try {
+          const fileRef = ref(storage, item.storagePath);
+          await deleteObject(fileRef);
+          console.log("✅ Deleted from storage:", item.storagePath);
+        } catch (storageErr) {
+          console.warn("⚠️ Storage delete failed (file might not exist):", storageErr);
+          // Continue anyway - Firestore deletion is more important
+        }
+      }
+      
+      // 3. Update local state
+      setUploadedItems(prev => prev.filter(i => i.id !== item.id));
+      setUploadsCount(prev => prev - 1);
+      
+      console.log("✅ Photo deleted successfully");
+    } catch (err) {
+      console.error("❌ Delete failed:", err);
+      alert("Failed to delete photo. Please try again.");
+    } finally {
+      setDeleting(null);
+    }
+  };
 
   if (!seller) return null;
 
@@ -132,7 +188,7 @@ export default function SellerDashboard() {
           </div>
         </div>
 
-        {/* ✅ Stats Grid */}
+        {/* Stats Grid */}
         <div className="mt-8 grid gap-4 md:grid-cols-4">
           <StatCard
             label="Upload Limit"
@@ -156,7 +212,89 @@ export default function SellerDashboard() {
           />
         </div>
 
-        {/* ✅ Earnings Overview */}
+        {/* ✅ NEW: My Uploads Section */}
+        <div className="mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold">My Uploads ({uploadsCount}/{plan?.maxUploads})</h2>
+            {uploadsCount < plan?.maxUploads && (
+              <Link to="/seller/upload" className="text-sm text-blue-600 hover:underline">
+                + Upload Photo
+              </Link>
+            )}
+          </div>
+          
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 p-8 text-center">
+              <div className="text-slate-600">Loading uploads...</div>
+            </div>
+          ) : uploadedItems.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 p-8 text-center">
+              <div className="text-slate-600 mb-4">No photos uploaded yet.</div>
+              <Link to="/seller/upload" className="inline-block rounded-xl bg-blue-600 px-5 py-2 text-sm text-white hover:bg-blue-700">
+                Upload Your First Photo
+              </Link>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {uploadedItems.map((item) => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 overflow-hidden">
+                  {/* Image Preview */}
+                  <div className="aspect-video bg-slate-100 relative">
+                    {item.downloadUrl ? (
+                      <img 
+                        src={item.downloadUrl} 
+                        alt={item.displayName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23f1f5f9' width='100' height='100'/%3E%3Ctext x='50%25' y='50%25' text-anchor='middle' dy='.3em' fill='%2394a3b8' font-size='14'%3EImage%3C/text%3E%3C/svg%3E";
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-slate-400">
+                        No preview
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Info */}
+                  <div className="p-4">
+                    <div className="font-medium text-slate-900 truncate">
+                      {item.displayName || item.fileName}
+                    </div>
+                    <div className="mt-1 text-sm text-slate-600">
+                      Price: ₹{item.price}
+                    </div>
+                    {item.category && (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Category: {item.category}
+                      </div>
+                    )}
+                    {item.createdAt && (
+                      <div className="mt-1 text-xs text-slate-500">
+                        Uploaded: {item.createdAt.toDate?.().toLocaleDateString("en-IN", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </div>
+                    )}
+                    
+                    {/* Delete Button */}
+                    <button
+                      onClick={() => handleDeletePhoto(item)}
+                      disabled={deleting === item.id}
+                      className="mt-3 w-full rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                    >
+                      {deleting === item.id ? "Deleting..." : "Delete Photo"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Earnings Overview */}
         <div className="mt-8">
           <h2 className="text-xl font-semibold">Earnings Overview</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-3">
@@ -179,7 +317,7 @@ export default function SellerDashboard() {
           </div>
         </div>
 
-        {/* ✅ Sales History */}
+        {/* Sales History */}
         <div className="mt-8">
           <h2 className="text-xl font-semibold mb-4">Sales History</h2>
           
@@ -190,7 +328,7 @@ export default function SellerDashboard() {
           ) : sales.length === 0 ? (
             <div className="rounded-2xl border border-slate-200 p-8 text-center">
               <div className="text-slate-600">No sales yet. Upload photos to start earning!</div>
-              <Link to="/seller/upload" className="mt-4 inline-block psa-btn-primary">
+              <Link to="/seller/upload" className="mt-4 inline-block rounded-xl bg-blue-600 px-5 py-2 text-sm text-white hover:bg-blue-700">
                 Upload Photo
               </Link>
             </div>
@@ -264,7 +402,7 @@ export default function SellerDashboard() {
           )}
         </div>
 
-        {/* ✅ Payout Information */}
+        {/* Payout Information */}
         <div className="mt-8 rounded-2xl border border-slate-200 p-6">
           <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
             <div>
