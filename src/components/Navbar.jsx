@@ -1,11 +1,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/components/Navbar.jsx
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ FIXED: Logo restored + Logout redirects to home page
+// ✅ FIXED: Properly refreshes seller status when navigating
 // ═══════════════════════════════════════════════════════════════════════════
 
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
@@ -13,11 +13,12 @@ import { db } from "../firebase";
 export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation(); // ✅ NEW: Track location changes
 
   const [isActiveSeller, setIsActiveSeller] = useState(false);
   const [checkingSeller, setCheckingSeller] = useState(false);
 
-  // Check if current user is an active seller
+  // ✅ FIXED: Re-check seller status when user changes OR location changes
   useEffect(() => {
     if (!user) {
       setIsActiveSeller(false);
@@ -57,7 +58,30 @@ export default function Navbar() {
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, location.pathname]); // ✅ NEW: Re-run when pathname changes
+  
+  // ✅ ADDITIONAL: Force refresh when landing on seller dashboard
+  useEffect(() => {
+    if (user && location.pathname === "/seller-dashboard" && !isActiveSeller && !checkingSeller) {
+      // Double-check seller status when landing on seller dashboard
+      const recheckSeller = async () => {
+        try {
+          const sellerRef = doc(db, "sellers", user.uid);
+          const sellerSnap = await getDoc(sellerRef);
+          if (sellerSnap.exists()) {
+            const sellerData = sellerSnap.data();
+            if (sellerData.status === "active" && !isActiveSeller) {
+              console.log("🔄 Navbar: Forcing seller status refresh");
+              setIsActiveSeller(true);
+            }
+          }
+        } catch (err) {
+          console.error("Recheck error:", err);
+        }
+      };
+      recheckSeller();
+    }
+  }, [user, location.pathname, isActiveSeller, checkingSeller]);
 
   // ✅ Logout handler that redirects to home
   const handleLogout = async () => {
