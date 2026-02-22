@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/App.jsx
 // ═══════════════════════════════════════════════════════════════════════════
+// ✅ UPDATED: Added admin dashboard route
 // ✅ FIXED: Seller routes now protected by <SellerRoute>
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -31,6 +32,9 @@ import NotFound from "./pages/NotFound";
 
 // ✅ CRITICAL: Import SellerRoute
 import SellerRoute from "./routes/SellerRoute";
+
+// ✅ NEW: Import AdminDashboard
+import AdminDashboard from "./pages/AdminDashboard";
 
 export default function App() {
   return (
@@ -89,6 +93,9 @@ export default function App() {
         {/* Photo view routes */}
         <Route path="/photo/:id" element={<ViewPhoto />} />
         <Route path="/view/:id" element={<ViewImage />} />
+
+        {/* ✅ NEW: Admin Dashboard - Only accessible by admin emails */}
+        <Route path="/admin" element={<AdminDashboard />} />
 
         {/* Fallback */}
         <Route path="*" element={<NotFound />} />
