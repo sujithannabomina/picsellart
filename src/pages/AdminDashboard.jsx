@@ -1,9 +1,9 @@
 // FILE PATH: src/pages/AdminDashboard.jsx
-// ✅ FIXED: Waits for auth to load before redirecting
+// ✅ FIXED: Fetches UPI ID from sellers collection + shows seller name
 
 import React, { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
-import { collection, getDocs, doc, updateDoc, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, updateDoc, query, where, orderBy } from "firebase/firestore";
 import { db } from "../firebase";
 import { useNavigate } from "react-router-dom";
 
@@ -22,13 +22,11 @@ export default function AdminDashboard() {
 
   const isAdmin = user && ADMIN_EMAILS.includes(user.email);
 
-  // ✅ FIX: Wait for auth to load before checking
   useEffect(() => {
     console.log("🎯 AdminDashboard mounted");
     console.log("User:", user?.email);
     console.log("Is Admin:", isAdmin);
 
-    // Wait a bit for auth to initialize
     const timer = setTimeout(() => {
       setAuthChecked(true);
       console.log("✅ Auth check completed");
@@ -37,9 +35,8 @@ export default function AdminDashboard() {
     return () => clearTimeout(timer);
   }, [user, isAdmin]);
 
-  // ✅ Only redirect after auth is checked
   useEffect(() => {
-    if (!authChecked) return; // Don't do anything until auth is checked
+    if (!authChecked) return;
 
     if (!user) {
       console.log("❌ No user after auth check, redirecting");
@@ -61,30 +58,73 @@ export default function AdminDashboard() {
   const loadSales = async () => {
     setLoading(true);
     try {
+      // Fetch pending sales
       const pendingQuery = query(
         collection(db, "sales"),
         where("payoutStatus", "==", "pending"),
         orderBy("soldAt", "desc")
       );
       const pendingSnap = await getDocs(pendingQuery);
-      const pending = [];
-      pendingSnap.forEach(doc => {
-        pending.push({ id: doc.id, ...doc.data() });
+      const pendingRaw = [];
+      pendingSnap.forEach(d => {
+        pendingRaw.push({ id: d.id, ...d.data() });
       });
 
+      // Fetch paid sales
       const paidQuery = query(
         collection(db, "sales"),
         where("payoutStatus", "==", "paid"),
         orderBy("payoutDate", "desc")
       );
       const paidSnap = await getDocs(paidQuery);
-      const paid = [];
-      paidSnap.forEach(doc => {
-        paid.push({ id: doc.id, ...doc.data() });
+      const paidRaw = [];
+      paidSnap.forEach(d => {
+        paidRaw.push({ id: d.id, ...d.data() });
       });
 
-      setPendingSales(pending);
-      setPaidSales(paid);
+      // ✅ Fetch UPI IDs + names from sellers collection
+      const allSales = [...pendingRaw, ...paidRaw];
+      const uniqueSellerIds = [...new Set(allSales.map(s => s.sellerId).filter(Boolean))];
+
+      const sellerUPIMap = {};
+      const sellerNameMap = {};
+      const sellerEmailMap = {};
+
+      for (const sellerId of uniqueSellerIds) {
+        try {
+          const sellerDoc = await getDoc(doc(db, "sellers", sellerId));
+          if (sellerDoc.exists()) {
+            const data = sellerDoc.data();
+            // Try all possible UPI field names
+            sellerUPIMap[sellerId] =
+              data.upiId || data.upi || data.upiID || data.UpiId || data.upid || "Not set";
+            sellerNameMap[sellerId] = data.name || data.displayName || "Unknown";
+            sellerEmailMap[sellerId] = data.email || "";
+          } else {
+            sellerUPIMap[sellerId] = "Seller not found";
+            sellerNameMap[sellerId] = sellerId;
+            sellerEmailMap[sellerId] = "";
+          }
+        } catch (e) {
+          console.error("Error fetching seller:", sellerId, e);
+          sellerUPIMap[sellerId] = "Error fetching";
+          sellerNameMap[sellerId] = sellerId;
+          sellerEmailMap[sellerId] = "";
+        }
+      }
+
+      // ✅ Attach UPI + name + email to each sale
+      const enrichSales = (sales) =>
+        sales.map(sale => ({
+          ...sale,
+          sellerUPI: sellerUPIMap[sale.sellerId] || "Not set",
+          sellerName: sellerNameMap[sale.sellerId] || sale.sellerId,
+          sellerEmail: sellerEmailMap[sale.sellerId] || "",
+        }));
+
+      setPendingSales(enrichSales(pendingRaw));
+      setPaidSales(enrichSales(paidRaw));
+
     } catch (err) {
       console.error("Error loading sales:", err);
       alert("Error loading data. Check console.");
@@ -94,32 +134,40 @@ export default function AdminDashboard() {
   };
 
   const markAsPaid = async (sale) => {
-    const upiId = prompt(`Confirm UPI ID for seller:\n\nExpected: ${sale.sellerUPI || "Not set"}\n\nEnter UPI ID where you sent payment:`);
-    
-    if (!upiId) return;
+    // ✅ Show UPI ID clearly in the prompt
+    const upiDisplay = sale.sellerUPI && sale.sellerUPI !== "Not set"
+      ? sale.sellerUPI
+      : "⚠️ UPI NOT SET - contact seller before paying";
 
-    const transactionId = prompt("Enter UPI Transaction ID (from your payment app):");
-    if (!transactionId) return;
+    const confirmed = window.confirm(
+      `PAY SELLER BEFORE CLICKING OK!\n\n` +
+      `Seller: ${sale.sellerName}\n` +
+      `Email: ${sale.sellerEmail}\n` +
+      `UPI ID: ${upiDisplay}\n` +
+      `Amount: ₹${sale.sellerEarning}\n\n` +
+      `Have you already sent ₹${sale.sellerEarning} to ${upiDisplay}?`
+    );
 
-    if (!confirm(`Mark ₹${sale.sellerEarning} as PAID to seller?\n\nUPI: ${upiId}\nTransaction: ${transactionId}`)) {
+    if (!confirmed) return;
+
+    const transactionId = prompt(
+      `Enter UPI Transaction ID from your payment app:\n(This is your proof of payment)`
+    );
+    if (!transactionId || !transactionId.trim()) {
+      alert("Transaction ID is required to mark as paid.");
       return;
     }
 
     setProcessing(sale.id);
-    
+
     try {
       const saleRef = doc(db, "sales", sale.id);
-      const sellerRef = doc(db, "sellers", sale.sellerId);
 
       await updateDoc(saleRef, {
         payoutStatus: "paid",
         payoutDate: new Date(),
-        payoutTransactionId: transactionId,
-        payoutUPI: upiId,
-      });
-
-      await updateDoc(sellerRef, {
-        pendingEarnings: sale.sellerEarning * -1,
+        payoutTransactionId: transactionId.trim(),
+        payoutUPI: sale.sellerUPI,
       });
 
       alert("✅ Payout marked as paid!");
@@ -132,7 +180,6 @@ export default function AdminDashboard() {
     }
   };
 
-  // ✅ Show loading while auth is being checked
   if (!authChecked) {
     return (
       <div style={{ padding: "40px", textAlign: "center" }}>
@@ -143,8 +190,11 @@ export default function AdminDashboard() {
     );
   }
 
-  // ✅ Only return null AFTER auth is checked
   if (!isAdmin) return null;
+
+  const totalPendingAmount = pendingSales.reduce((sum, s) => sum + (s.sellerEarning || 0), 0);
+  const totalPaidAmount = paidSales.reduce((sum, s) => sum + (s.sellerEarning || 0), 0);
+  const totalPlatformRevenue = [...pendingSales, ...paidSales].reduce((sum, s) => sum + (s.platformFee || 0), 0);
 
   return (
     <div className="min-h-screen bg-white">
@@ -154,43 +204,46 @@ export default function AdminDashboard() {
             <h1 className="text-3xl font-semibold">Admin Dashboard</h1>
             <p className="text-sm text-slate-600 mt-1">Manage seller payouts</p>
           </div>
-          <button onClick={logout} className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">
+          <button
+            onClick={logout}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50"
+          >
             Logout
           </button>
         </div>
 
+        {/* Stats Cards */}
         <div className="grid gap-4 md:grid-cols-3 mb-8">
           <div className="rounded-2xl border border-slate-200 p-5">
             <div className="text-sm text-slate-600">Pending Payouts</div>
             <div className="mt-2 text-2xl font-semibold text-yellow-600">
-              ₹{pendingSales.reduce((sum, s) => sum + (s.sellerEarning || 0), 0)}
+              ₹{totalPendingAmount}
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              {pendingSales.length} transaction{pendingSales.length !== 1 ? 's' : ''}
+              {pendingSales.length} transaction{pendingSales.length !== 1 ? "s" : ""}
             </div>
           </div>
-          
+
           <div className="rounded-2xl border border-slate-200 p-5">
             <div className="text-sm text-slate-600">Paid Out (Total)</div>
             <div className="mt-2 text-2xl font-semibold text-green-600">
-              ₹{paidSales.reduce((sum, s) => sum + (s.sellerEarning || 0), 0)}
+              ₹{totalPaidAmount}
             </div>
             <div className="text-xs text-slate-500 mt-1">
-              {paidSales.length} transaction{paidSales.length !== 1 ? 's' : ''}
+              {paidSales.length} transaction{paidSales.length !== 1 ? "s" : ""}
             </div>
           </div>
-          
+
           <div className="rounded-2xl border border-slate-200 p-5">
             <div className="text-sm text-slate-600">Platform Revenue</div>
             <div className="mt-2 text-2xl font-semibold text-blue-600">
-              ₹{[...pendingSales, ...paidSales].reduce((sum, s) => sum + (s.platformFee || 0), 0)}
+              ₹{totalPlatformRevenue}
             </div>
-            <div className="text-xs text-slate-500 mt-1">
-              20% commission
-            </div>
+            <div className="text-xs text-slate-500 mt-1">20% commission</div>
           </div>
         </div>
 
+        {/* Tabs */}
         <div className="flex gap-2 border-b border-slate-200 mb-6">
           <button
             onClick={() => setActiveTab("pending")}
@@ -235,16 +288,22 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-slate-200">
                   {pendingSales.map(sale => {
                     const soldDate = sale.soldAt?.toDate?.();
-                    const dateStr = soldDate?.toLocaleDateString('en-IN', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    }) || 'Unknown';
+                    const dateStr = soldDate
+                      ? soldDate.toLocaleDateString("en-IN", {
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                        })
+                      : "Unknown";
+
+                    const upiMissing = !sale.sellerUPI || sale.sellerUPI === "Not set";
 
                     return (
                       <tr key={sale.id} className="hover:bg-slate-50">
                         <td className="px-4 py-3 text-sm">
-                          <div className="font-medium">{sale.sellerId}</div>
+                          {/* ✅ Shows name + email instead of raw UID */}
+                          <div className="font-medium">{sale.sellerName}</div>
+                          <div className="text-xs text-slate-400">{sale.sellerEmail}</div>
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <div>{sale.itemName}</div>
@@ -254,17 +313,25 @@ export default function AdminDashboard() {
                         <td className="px-4 py-3 text-sm font-semibold text-green-600">
                           ₹{sale.sellerEarning}
                         </td>
-                        <td className="px-4 py-3 text-sm font-mono text-blue-600">
-                          {sale.sellerUPI || "Not set"}
+                        <td className="px-4 py-3 text-sm">
+                          {upiMissing ? (
+                            <span className="text-red-500 font-medium">⚠️ Not set</span>
+                          ) : (
+                            <span className="font-mono text-blue-600">{sale.sellerUPI}</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => markAsPaid(sale)}
-                            disabled={processing === sale.id}
-                            className="rounded-xl bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
-                          >
-                            {processing === sale.id ? "Processing..." : "Mark as Paid"}
-                          </button>
+                          {upiMissing ? (
+                            <span className="text-xs text-red-400">Contact seller first</span>
+                          ) : (
+                            <button
+                              onClick={() => markAsPaid(sale)}
+                              disabled={processing === sale.id}
+                              className="rounded-xl bg-green-600 px-4 py-2 text-sm text-white hover:bg-green-700 disabled:opacity-50"
+                            >
+                              {processing === sale.id ? "Processing..." : "Mark as Paid"}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     );
@@ -273,53 +340,58 @@ export default function AdminDashboard() {
               </table>
             </div>
           )
+        ) : paidSales.length === 0 ? (
+          <div className="text-center py-10 text-slate-600">No paid payouts yet</div>
         ) : (
-          paidSales.length === 0 ? (
-            <div className="text-center py-10 text-slate-600">No paid payouts yet</div>
-          ) : (
-            <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Seller</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Photo</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Paid Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Amount Paid</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Transaction ID</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {paidSales.map(sale => {
-                    const paidDate = sale.payoutDate?.toDate?.();
-                    const dateStr = paidDate?.toLocaleDateString('en-IN', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    }) || 'Unknown';
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Seller</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Photo</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Paid Date</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Amount Paid</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">UPI Paid To</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-600">Transaction ID</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {paidSales.map(sale => {
+                  const paidDate = sale.payoutDate?.toDate?.();
+                  const dateStr = paidDate
+                    ? paidDate.toLocaleDateString("en-IN", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })
+                    : "Unknown";
 
-                    return (
-                      <tr key={sale.id} className="hover:bg-slate-50">
-                        <td className="px-4 py-3 text-sm">
-                          <div className="font-medium">{sale.sellerId}</div>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          <div>{sale.itemName}</div>
-                          <div className="text-xs text-slate-500">{sale.itemFileName}</div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-slate-600">{dateStr}</td>
-                        <td className="px-4 py-3 text-sm font-semibold text-green-600">
-                          ₹{sale.sellerEarning}
-                        </td>
-                        <td className="px-4 py-3 text-sm font-mono text-slate-600">
-                          {sale.payoutTransactionId || "N/A"}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )
+                  return (
+                    <tr key={sale.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3 text-sm">
+                        <div className="font-medium">{sale.sellerName}</div>
+                        <div className="text-xs text-slate-400">{sale.sellerEmail}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        <div>{sale.itemName}</div>
+                        <div className="text-xs text-slate-500">{sale.itemFileName}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-600">{dateStr}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-green-600">
+                        ₹{sale.sellerEarning}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono text-blue-600">
+                        {sale.payoutUPI || sale.sellerUPI || "N/A"}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-mono text-slate-600">
+                        {sale.payoutTransactionId || "N/A"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
