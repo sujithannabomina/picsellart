@@ -13,21 +13,31 @@
   --psa-bg: #ffffff;
 
   font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  color-scheme: light;
+  color-scheme: light only;
 }
 
 html,
 body,
 #root {
   height: 100%;
+  background-color: #ffffff !important;
+  color-scheme: light only;
 }
 
 body {
   margin: 0;
-  background: var(--psa-bg);
+  background: #ffffff !important;
   color: var(--psa-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Force light mode - prevent Android WebView dark mode override */
+@media (prefers-color-scheme: dark) {
+  html, body, #root {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+  }
 }
 
 /* Reusable UI helpers (keeps pages neat + consistent) */
@@ -58,7 +68,6 @@ body {
            transition active:scale-[0.99];
   }
 
-  /* ✅ All buttons same blue (your request) */
   .psa-btn-primary {
     @apply psa-btn bg-blue-600 text-white hover:bg-blue-700;
   }
