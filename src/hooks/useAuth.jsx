@@ -1,10 +1,16 @@
 // FILE PATH: src/hooks/useAuth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 const AuthCtx = createContext(null);
+
+// ✅ Detect if running inside Android WebView (Capacitor app)
+function isAndroidWebView() {
+  const ua = navigator.userAgent || "";
+  return ua.includes("wv") || ua.includes("WebView") || window.Capacitor !== undefined;
+}
 
 function normalizeUser(u) {
   if (!u) return null;
@@ -22,6 +28,17 @@ export function AuthProvider({ children }) {
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
+    // ✅ Handle redirect result when app resumes after Google login
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          setUser(normalizeUser(result.user));
+        }
+      })
+      .catch((err) => {
+        console.error("Redirect result error:", err);
+      });
+
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(normalizeUser(u));
       setBooting(false);
@@ -32,35 +49,37 @@ export function AuthProvider({ children }) {
   const googleLogin = async () => {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    const res = await signInWithPopup(auth, provider);
-    return normalizeUser(res.user);
+
+    if (isAndroidWebView()) {
+      // ✅ Use redirect for Android WebView
+      await signInWithRedirect(auth, provider);
+      // After redirect, getRedirectResult above will handle the result
+      return null;
+    } else {
+      // ✅ Use popup for regular browser
+      const res = await signInWithPopup(auth, provider);
+      return normalizeUser(res.user);
+    }
   };
 
   const logout = async () => {
     await signOut(auth);
   };
 
-  // -------- Buyer helpers --------
   const ensureBuyerProfile = async (u) => {
     if (!u?.uid) throw new Error("Login failed. Please try again.");
-
     const ref = doc(db, "buyers", u.uid);
     const snap = await getDoc(ref);
-
     if (!snap.exists()) {
-      await setDoc(
-        ref,
-        {
-          uid: u.uid,
-          email: u.email || "",
-          name: u.displayName || "",
-          photoURL: u.photoURL || "",
-          role: "buyer",
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+      await setDoc(ref, {
+        uid: u.uid,
+        email: u.email || "",
+        name: u.displayName || "",
+        photoURL: u.photoURL || "",
+        role: "buyer",
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
     } else {
       await setDoc(ref, { updatedAt: serverTimestamp() }, { merge: true });
     }
@@ -73,14 +92,7 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({
-      user,
-      booting,
-      googleLogin,
-      logout,
-      ensureBuyerProfile,
-      getSellerDoc,
-    }),
+    () => ({ user, booting, googleLogin, logout, ensureBuyerProfile, getSellerDoc }),
     [user, booting]
   );
 
