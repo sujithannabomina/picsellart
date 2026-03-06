@@ -6,7 +6,7 @@ import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: "picsellart.com",,
+  authDomain: "picsellart.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
@@ -22,4 +22,5 @@ googleProvider.setCustomParameters({ prompt: "select_account" });
 
 export const db = getFirestore(app);
 export const storage = getStorage(app);
+
 
