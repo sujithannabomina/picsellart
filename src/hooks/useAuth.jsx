@@ -1,10 +1,15 @@
 // FILE PATH: src/hooks/useAuth.jsx
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 const AuthCtx = createContext(null);
+
+// ✅ Detect if running inside Capacitor Android app
+function isCapacitorApp() {
+  return window.Capacitor !== undefined && window.Capacitor.isNative === true;
+}
 
 function normalizeUser(u) {
   if (!u) return null;
@@ -22,6 +27,17 @@ export function AuthProvider({ children }) {
   const [booting, setBooting] = useState(true);
 
   useEffect(() => {
+    // ✅ Check for redirect result when app loads
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          console.log("✅ Redirect login success:", result.user.email);
+        }
+      })
+      .catch((err) => {
+        console.error("Redirect result error:", err);
+      });
+
     const unsub = onAuthStateChanged(auth, (u) => {
       setUser(normalizeUser(u));
       setBooting(false);
@@ -32,8 +48,16 @@ export function AuthProvider({ children }) {
   const googleLogin = async () => {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: "select_account" });
-    const res = await signInWithPopup(auth, provider);
-    return normalizeUser(res.user);
+
+    if (isCapacitorApp()) {
+      // ✅ Use redirect for Capacitor Android app
+      await signInWithRedirect(auth, provider);
+      return null; // onAuthStateChanged will handle the result
+    } else {
+      // ✅ Use popup for regular browser
+      const res = await signInWithPopup(auth, provider);
+      return normalizeUser(res.user);
+    }
   };
 
   const logout = async () => {
