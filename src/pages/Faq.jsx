@@ -1,11 +1,11 @@
-// src/pages/Faq.jsx
-
+// FILE PATH: src/pages/Faq.jsx
 import React from "react";
 import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 
 const FAQ = [
   {
-    q: "How does PicSellart work?",
+    q: "How does PicSellArt work?",
     a: "Explore photos, view watermarked previews, and purchase as a buyer. After payment verification, you can download the watermark-free file from your Buyer Dashboard.",
   },
   {
@@ -24,11 +24,29 @@ const FAQ = [
     q: "Do you support refunds?",
     a: "Refunds depend on verification and policy terms. See the Refunds page for details.",
   },
+  {
+    q: "How do sellers get paid?",
+    a: "Sellers earn 80% of every sale. Payouts are made manually via UPI to the UPI ID you provide during onboarding. Weekly payouts for pending earnings.",
+  },
+  {
+    q: "How do I contact support?",
+    a: "Email us at admin@picsellart.com or use the Contact page. We typically respond within 24–48 hours.",
+  },
 ];
 
 export default function Faq() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
+      {/* ✅ SEO Helmet */}
+      <Helmet>
+        <title>FAQ — PicSellArt</title>
+        <meta name="description" content="Frequently asked questions about buying and selling photos on PicSellArt. Learn about plans, pricing, UPI payouts, licensing, and how the marketplace works." />
+        <link rel="canonical" href="https://www.picsellart.com/faq" />
+        <meta property="og:title" content="FAQ — PicSellArt" />
+        <meta property="og:description" content="Answers to common questions about buying and selling Indian stock photos on PicSellArt." />
+        <meta property="og:url" content="https://www.picsellart.com/faq" />
+      </Helmet>
+
       <div className="rounded-3xl border bg-white p-8">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
@@ -57,8 +75,11 @@ export default function Faq() {
         <div className="mt-10 rounded-2xl bg-gray-50 border p-6">
           <div className="font-semibold text-gray-900">Need help quickly?</div>
           <div className="mt-1 text-gray-600">
-            If you have a payment issue or download problem, message support with your
-            email and purchase reference.
+            If you have a payment issue or download problem, email us at{" "}
+            <a href="mailto:admin@picsellart.com" className="text-purple-600 hover:underline font-medium">
+              admin@picsellart.com
+            </a>{" "}
+            with your email and purchase reference.
           </div>
         </div>
       </div>

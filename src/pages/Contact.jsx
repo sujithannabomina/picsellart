@@ -1,4 +1,6 @@
+// FILE PATH: src/pages/Contact.jsx
 import React, { useMemo, useState } from "react";
+import { Helmet } from "react-helmet-async";
 
 const styles = {
   page: { maxWidth: 1120, margin: "0 auto", padding: "28px 16px 64px" },
@@ -18,7 +20,6 @@ const styles = {
   h1: { fontSize: "2rem", fontWeight: 800, margin: 0 },
   sub: { marginTop: 8, color: "#4b5563", lineHeight: 1.65, maxWidth: 820 },
   small: { color: "#64748b", fontSize: "0.92rem", lineHeight: 1.6 },
-
   label: { display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#0f172a" },
   input: {
     width: "100%",
@@ -40,7 +41,6 @@ const styles = {
   },
   row2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
   field: { display: "grid", gap: 6, marginTop: 12 },
-
   btnRow: { display: "flex", gap: 10, flexWrap: "wrap", marginTop: 14 },
   btnPrimary: {
     border: "none",
@@ -70,7 +70,6 @@ const styles = {
     color: "#0f172a",
     lineHeight: 1.6
   },
-
   sideTitle: { fontSize: "1.05rem", fontWeight: 800, margin: "0 0 6px", color: "#0f172a" },
   ul: { margin: 0, paddingLeft: "1.2rem", color: "#334155", lineHeight: 1.7 },
   pill: {
@@ -93,11 +92,11 @@ export default function Contact() {
   const [email, setEmail] = useState("");
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
-  const [status, setStatus] = useState(null); // 'ok' | 'error'
+  const [status, setStatus] = useState(null);
 
   const isEmailValid = useMemo(() => {
     const v = email.trim();
-    if (!v) return true; // only validate if typed
+    if (!v) return true;
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
   }, [email]);
 
@@ -105,16 +104,11 @@ export default function Contact() {
 
   function onSubmit(e) {
     e.preventDefault();
-
-    // This is UI-only. Hook this to your backend/email service later.
     if (!canSubmit) {
       setStatus("error");
       return;
     }
-
     setStatus("ok");
-
-    // optional: clear after success
     setName("");
     setEmail("");
     setSubject("");
@@ -123,10 +117,24 @@ export default function Contact() {
 
   return (
     <main className="page page-contact">
+      {/* ✅ SEO Helmet */}
+      <Helmet>
+        <title>Contact Us — PicSellArt</title>
+        <meta name="description" content="Get in touch with the PicSellArt team at admin@picsellart.com. We're here to help with buying, selling, payments, and any questions about your account." />
+        <link rel="canonical" href="https://www.picsellart.com/contact" />
+        <meta property="og:title" content="Contact Us — PicSellArt" />
+        <meta property="og:description" content="Contact the PicSellArt support team. We reply within 24–48 hours." />
+        <meta property="og:url" content="https://www.picsellart.com/contact" />
+      </Helmet>
+
       <section style={styles.page}>
         <h1 style={styles.h1}>Contact Us</h1>
         <p style={styles.sub}>
-          Send us a message — we typically reply within <b>24–48 hours</b>. We can help with account
+          Send us a message or email us directly at{" "}
+          <a href="mailto:admin@picsellart.com" style={styles.link}>
+            admin@picsellart.com
+          </a>
+          . We typically reply within <b>24–48 hours</b>. We can help with account
           questions, file issues, licensing doubts, and seller onboarding.
         </p>
 
@@ -203,8 +211,11 @@ export default function Contact() {
 
                 {status === "ok" && (
                   <div style={styles.alert}>
-                    ✅ Message saved (UI). Connect this form to your email/back-end later. For payment issues,
-                    include the details from the right panel for faster support.
+                    ✅ Thanks for reaching out! For faster support, you can also email us directly at{" "}
+                    <a href="mailto:admin@picsellart.com" style={styles.link}>
+                      admin@picsellart.com
+                    </a>
+                    .
                   </div>
                 )}
                 {status === "error" && (
@@ -223,6 +234,19 @@ export default function Contact() {
 
           {/* RIGHT: INFO */}
           <div style={{ display: "grid", gap: 14 }}>
+            {/* ✅ Direct email added */}
+            <div style={styles.card}>
+              <div style={styles.cardPad}>
+                <p style={styles.sideTitle}>Direct email support</p>
+                <p style={styles.small}>
+                  You can also reach us directly at:{" "}
+                  <a href="mailto:admin@picsellart.com" style={styles.link}>
+                    admin@picsellart.com
+                  </a>
+                </p>
+              </div>
+            </div>
+
             <div style={styles.card}>
               <div style={styles.cardPad}>
                 <p style={styles.sideTitle}>For urgent payment / purchase issues</p>
@@ -239,8 +263,7 @@ export default function Contact() {
                   Razorpay/bank processing. See{" "}
                   <a href="/refunds" style={styles.link}>
                     Refunds & Cancellations
-                  </a>
-                  .
+                  </a>.
                 </div>
               </div>
             </div>
@@ -249,18 +272,17 @@ export default function Contact() {
               <div style={styles.cardPad}>
                 <p style={styles.sideTitle}>Security & account safety</p>
                 <p style={styles.small}>
-                  Picsellart will never ask for your password or OTP over email or chat. If you receive suspicious
-                  messages claiming to be from Picsellart, do not share credentials.
+                  PicSellArt will never ask for your password or OTP over email or chat. If you receive suspicious
+                  messages claiming to be from PicSellArt, do not share credentials.
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Responsive fallback */}
         <style>{`
           @media (max-width: 980px) {
-            .page-contact section > div[style*="grid-template-columns"] { 
+            .page-contact section > div[style*="grid-template-columns"] {
               grid-template-columns: 1fr !important;
             }
           }

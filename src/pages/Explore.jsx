@@ -1,14 +1,12 @@
 // FILE PATH: src/pages/Explore.jsx
-// ✅ COMPETITIVE VERSION - Recent seller uploads first, categories, advanced search
-
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { collection, getDocs, query } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import WatermarkedImage from "../components/WatermarkedImage";
+import { Helmet } from "react-helmet-async";
 
-// ✅ Predefined categories (Shutterstock-style)
 const CATEGORIES = [
   { id: "all", label: "All Photos", icon: "🖼️" },
   { id: "nature", label: "Nature", icon: "🌿" },
@@ -44,7 +42,6 @@ export default function Explore() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // ✅ Fetch items from Firestore
   useEffect(() => {
     let cancelled = false;
 
@@ -52,7 +49,7 @@ export default function Explore() {
       try {
         setLoading(true);
         setError("");
-        
+
         const itemsRef = collection(db, "items");
         const q = query(itemsRef);
         const snapshot = await getDocs(q);
@@ -75,13 +72,9 @@ export default function Explore() {
           };
         });
 
-        // ✅ COMPETITIVE SORTING: Recent seller uploads first!
         fetchedItems.sort((a, b) => {
-          // Priority 1: Seller uploads over samples
           if (a.type === "seller" && b.type === "sample") return -1;
           if (a.type === "sample" && b.type === "seller") return 1;
-          
-          // Priority 2: Within same type, sort by date (newest first)
           const aTime = a.createdAt?.toMillis?.() || 0;
           const bTime = b.createdAt?.toMillis?.() || 0;
           return bTime - aTime;
@@ -102,16 +95,12 @@ export default function Explore() {
     }
 
     fetchItems();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-  // ✅ Advanced filtering (search, category)
   const filtered = useMemo(() => {
     let result = [...items];
 
-    // Filter by search query
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
       result = result.filter((x) => {
@@ -122,16 +111,11 @@ export default function Explore() {
       });
     }
 
-    // Filter by category
     if (selectedCategory !== "all") {
       result = result.filter(x => x.category === selectedCategory);
     }
 
-    // Apply sorting
     switch (sortBy) {
-      case "newest":
-        // Already sorted by newest (seller uploads first)
-        break;
       case "popular":
         result.sort((a, b) => (b.views || 0) - (a.views || 0));
         break;
@@ -162,7 +146,6 @@ export default function Explore() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
-  // ✅ Update URL with all filters
   const updateURL = (newPage, search, category, sort) => {
     const params = { page: String(newPage) };
     if (search.trim()) params.search = search.trim();
@@ -212,8 +195,31 @@ export default function Explore() {
     }
   };
 
+  // ✅ Dynamic SEO title based on active filters
+  const seoTitle = selectedCategory !== "all"
+    ? `${CATEGORIES.find(c => c.id === selectedCategory)?.label} Stock Photos — PicSellArt`
+    : searchQuery
+    ? `"${searchQuery}" — Indian Stock Photos — PicSellArt`
+    : "Explore Indian Stock Photos — PicSellArt";
+
+  const seoDescription = selectedCategory !== "all"
+    ? `Browse high-quality ${CATEGORIES.find(c => c.id === selectedCategory)?.label.toLowerCase()} stock photos from Indian creators. Starting from ₹120 per image.`
+    : "Browse thousands of high-quality Indian stock photos. Nature, festivals, business, people, travel and more. Starting from ₹120 per image.";
+
   return (
     <div className="psa-container">
+      {/* ✅ SEO Helmet */}
+      <Helmet>
+        <title>{seoTitle}</title>
+        <meta name="description" content={seoDescription} />
+        <meta name="keywords" content="Indian stock photos, buy Indian images, Indian photography, Diwali stock photos, Indian nature photos, stock images India" />
+        <link rel="canonical" href="https://www.picsellart.com/explore" />
+        <meta property="og:title" content={seoTitle} />
+        <meta property="og:description" content={seoDescription} />
+        <meta property="og:url" content="https://www.picsellart.com/explore" />
+        <meta property="og:type" content="website" />
+      </Helmet>
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="psa-title">Explore Marketplace</h1>
@@ -221,7 +227,6 @@ export default function Explore() {
           Browse thousands of photos from Indian creators. Recent uploads shown first.
         </p>
 
-        {/* Search Bar */}
         <div className="mt-4">
           <input
             className="psa-input"
@@ -232,7 +237,7 @@ export default function Explore() {
         </div>
       </div>
 
-      {/* ✅ Category Filters (Shutterstock-style) */}
+      {/* Category Filters */}
       <div className="mb-6 overflow-x-auto pb-2">
         <div className="flex gap-2">
           {CATEGORIES.map((cat) => (
@@ -256,7 +261,7 @@ export default function Explore() {
         </div>
       </div>
 
-      {/* ✅ Sort & Filter Bar */}
+      {/* Sort & Filter Bar */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-slate-600">
           {filtered.length} photo{filtered.length !== 1 ? "s" : ""}
@@ -284,10 +289,7 @@ export default function Explore() {
         <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center">
           <p className="text-red-700 font-medium">Error loading photos</p>
           <p className="text-sm text-red-600 mt-2">{error}</p>
-          <button 
-            onClick={() => window.location.reload()} 
-            className="mt-4 psa-btn-primary"
-          >
+          <button onClick={() => window.location.reload()} className="mt-4 psa-btn-primary">
             Retry
           </button>
         </div>
@@ -311,11 +313,8 @@ export default function Explore() {
               : "No photos yet. Be the first to upload!"}
           </p>
           {(searchQuery || selectedCategory !== "all") && (
-            <button 
-              onClick={() => {
-                handleSearch("");
-                handleCategoryChange("all");
-              }} 
+            <button
+              onClick={() => { handleSearch(""); handleCategoryChange("all"); }}
               className="mt-4 psa-btn-primary"
             >
               Clear all filters
@@ -324,7 +323,6 @@ export default function Explore() {
         </div>
       ) : (
         <>
-          {/* Photo Grid */}
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {pageItems.map((it) => (
               <div key={it.id} className="psa-card overflow-hidden hover:shadow-lg transition-shadow">
@@ -332,7 +330,7 @@ export default function Explore() {
                   {it.downloadUrl ? (
                     <WatermarkedImage
                       src={it.downloadUrl}
-                      alt={it.title}
+                      alt={`${it.title} — Indian stock photo`}
                       className="h-48 w-full"
                     />
                   ) : (
@@ -347,8 +345,7 @@ export default function Explore() {
                   <div className="mt-1 text-sm font-medium text-slate-900">
                     ₹{it.price}
                   </div>
-                  
-                  {/* ✅ Badges */}
+
                   <div className="mt-2 flex items-center gap-2">
                     {it.type === "seller" && (
                       <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
@@ -363,10 +360,7 @@ export default function Explore() {
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                      className="psa-btn-primary text-sm"
-                      onClick={() => onView(it)}
-                    >
+                    <button className="psa-btn-primary text-sm" onClick={() => onView(it)}>
                       View
                     </button>
                     <button
@@ -381,7 +375,6 @@ export default function Explore() {
             ))}
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-8 flex items-center justify-center gap-2">
               <button
@@ -391,12 +384,10 @@ export default function Explore() {
               >
                 ← Prev
               </button>
-
               <div className="text-sm text-slate-600">
                 Page <span className="font-semibold text-slate-900">{page}</span> of{" "}
                 <span className="font-semibold text-slate-900">{totalPages}</span>
               </div>
-
               <button
                 className="psa-btn-soft"
                 onClick={() => changePage(Math.min(totalPages, page + 1))}

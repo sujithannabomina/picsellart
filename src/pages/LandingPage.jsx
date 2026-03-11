@@ -1,16 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 
-/**
- * IMPORTANT:
- * Put your 6 local homepage images inside:
- *   /public/images/
- *
- * And name them exactly:
- *   sample1.jpg ... sample6.jpg
- *
- * If your names are different, just edit the array below to match.
- */
 const HOME_IMAGES = [
   "/images/sample1.jpg",
   "/images/sample2.jpg",
@@ -35,10 +26,6 @@ export default function LandingPage() {
   const [heroImage, setHeroImage] = useState(HOME_IMAGES[0]);
   const [gridImages, setGridImages] = useState(HOME_IMAGES);
 
-  // Change hero + grid arrangement on:
-  // - page refresh
-  // - every new visit to "/"
-  // (location.key changes on navigation)
   useEffect(() => {
     const shuffled = shuffleArray(HOME_IMAGES);
     setHeroImage(shuffled[0]);
@@ -64,12 +51,26 @@ export default function LandingPage() {
 
   return (
     <div className="w-full">
+      {/* ✅ SEO Helmet */}
+      <Helmet>
+        <title>PicSellArt — Buy & Sell Indian Stock Photos</title>
+        <meta name="description" content="India's stock photo marketplace. Buy high-quality Indian images from ₹120. Photographers earn 80% per sale. Instant UPI payouts. No approval wait." />
+        <meta name="keywords" content="Indian stock photos, buy stock photos India, sell photos online India, Indian photography marketplace, stock images India" />
+        <link rel="canonical" href="https://www.picsellart.com/" />
+        <meta property="og:title" content="PicSellArt — Buy & Sell Indian Stock Photos" />
+        <meta property="og:description" content="India's stock photo marketplace. Buy Indian images from ₹120. Sellers earn 80% per sale. Instant UPI payouts." />
+        <meta property="og:url" content="https://www.picsellart.com/" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.picsellart.com/images/sample1.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="PicSellArt — Buy & Sell Indian Stock Photos" />
+        <meta name="twitter:description" content="India's stock photo marketplace. Buy Indian images from ₹120. Sellers earn 80% per sale." />
+      </Helmet>
+
       {/* HERO */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0" style={heroStyle} />
-        {/* overlay */}
         <div className="absolute inset-0 bg-white/55 backdrop-blur-[1px]" />
-        {/* subtle gradient tint */}
         <div className="absolute inset-0" style={fallbackHeroStyle} />
 
         <div className="relative mx-auto max-w-6xl px-4 py-14 sm:py-16">
@@ -112,7 +113,6 @@ export default function LandingPage() {
                 </Link>
               </div>
 
-              {/* quick trust row */}
               <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl border border-black/10 bg-white/75 p-4">
                   <div className="text-sm font-semibold text-black">Watermarked previews</div>
@@ -135,7 +135,6 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Right side card */}
             <div className="lg:col-span-5">
               <div className="rounded-3xl border border-black/10 bg-white/75 p-5 shadow-sm">
                 <div className="flex items-center gap-3">
@@ -199,9 +198,9 @@ export default function LandingPage() {
       <section className="mx-auto max-w-6xl px-4 py-12">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-black">Featured </h2>
+            <h2 className="text-2xl font-bold text-black">Featured</h2>
             <p className="mt-1 text-sm text-black/60">
-              These come from our best <span className="font-semibold">Sellers</span> .
+              These come from our best <span className="font-semibold">Sellers</span>.
             </p>
           </div>
           <Link
@@ -221,11 +220,10 @@ export default function LandingPage() {
               <div className="relative aspect-[16/10] w-full overflow-hidden bg-black/[0.03]">
                 <img
                   src={src}
-                  alt="Sample preview"
+                  alt="Indian stock photo preview — PicSellArt"
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
                   loading="lazy"
                   onError={(e) => {
-                    // hide broken image box if name mismatch
                     e.currentTarget.style.display = "none";
                     e.currentTarget.parentElement.classList.add("flex", "items-center", "justify-center");
                     e.currentTarget.parentElement.innerHTML =
@@ -244,7 +242,6 @@ export default function LandingPage() {
           ))}
         </div>
 
-        {/* Bottom CTA */}
         <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -273,5 +270,3 @@ export default function LandingPage() {
     </div>
   );
 }
-
-

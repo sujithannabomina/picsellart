@@ -1,14 +1,10 @@
-// ═══════════════════════════════════════════════════════════════════════════
 // FILE PATH: src/pages/SellerLogin.jsx
-// ═══════════════════════════════════════════════════════════════════════════
-// ✅ FIXED: Forces redirect to /seller-dashboard (not /buyer-dashboard)
-// ═══════════════════════════════════════════════════════════════════════════
-
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { Helmet } from "react-helmet-async";
 
 export default function SellerLogin() {
   const { googleLogin } = useAuth();
@@ -20,18 +16,15 @@ export default function SellerLogin() {
   const signInWithGoogle = async () => {
     setErr("");
     setLoading(true);
-    
+
     try {
-      // Login with Google
       const u = await googleLogin();
       console.log("✅ Logged in as:", u.email, "UID:", u.uid);
 
-      // Check if user has a seller account
       const sellerRef = doc(db, "sellers", u.uid);
       const sellerSnap = await getDoc(sellerRef);
 
       if (!sellerSnap.exists()) {
-        // New seller → Send to onboarding
         console.log("→ New seller, redirecting to onboarding");
         navigate("/seller-onboarding", { replace: true });
         return;
@@ -41,20 +34,17 @@ export default function SellerLogin() {
       console.log("→ Seller status:", sellerData.status);
 
       if (sellerData.status === "pending_profile") {
-        // Paid but incomplete profile → Send to onboarding (profile step)
         console.log("→ Profile incomplete, redirecting to onboarding");
         navigate("/seller-onboarding", { replace: true });
         return;
       }
 
       if (sellerData.status === "active") {
-        // ✅ CRITICAL FIX: Always redirect to /seller-dashboard
         console.log("→ Active seller, redirecting to /seller-dashboard");
         navigate("/seller-dashboard", { replace: true });
         return;
       }
 
-      // Unknown status → Send to onboarding
       console.log("→ Unknown status, redirecting to onboarding");
       navigate("/seller-onboarding", { replace: true });
 
@@ -68,6 +58,17 @@ export default function SellerLogin() {
 
   return (
     <div className="psa-container py-10">
+      {/* ✅ SEO Helmet */}
+      <Helmet>
+        <title>Sell Your Photos Online — Earn 80% — PicSellArt</title>
+        <meta name="description" content="Join India's stock photo marketplace. Upload your photos and earn 80% of every sale. Plans from ₹100. Instant UPI payouts. No approval wait." />
+        <meta name="keywords" content="sell photos online India, earn money photography India, stock photo seller India, upload photos earn money UPI" />
+        <link rel="canonical" href="https://www.picsellart.com/seller-login" />
+        <meta property="og:title" content="Sell Your Photos Online — Earn 80% — PicSellArt" />
+        <meta property="og:description" content="Upload your photos and earn 80% of every sale. Plans from ₹100. Instant UPI payouts." />
+        <meta property="og:url" content="https://www.picsellart.com/seller-login" />
+      </Helmet>
+
       <div className="mx-auto w-full max-w-2xl rounded-2xl border border-slate-100 bg-white p-8 shadow-sm">
         <h1 className="text-3xl font-bold text-slate-900">Seller Login</h1>
         <p className="mt-2 text-slate-600">
@@ -99,6 +100,13 @@ export default function SellerLogin() {
           <Link className="text-blue-700 hover:underline" to="/explore">
             Back to Explore
           </Link>
+        </div>
+
+        <div className="mt-6 border-t border-slate-100 pt-4 text-xs text-slate-500">
+          Have questions? Email us at{" "}
+          <a href="mailto:admin@picsellart.com" className="text-blue-600 hover:underline">
+            admin@picsellart.com
+          </a>
         </div>
       </div>
 

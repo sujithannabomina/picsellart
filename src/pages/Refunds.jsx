@@ -1,11 +1,12 @@
+// FILE PATH: src/pages/Refunds.jsx
 import React from "react";
+import { Helmet } from "react-helmet-async";
 
 const styles = {
   page: { maxWidth: 980, margin: "0 auto", padding: "28px 16px 64px" },
   h1: { fontSize: "2rem", fontWeight: 800, margin: 0 },
   sub: { marginTop: 10, color: "#4b5563", lineHeight: 1.65, maxWidth: 860 },
   meta: { marginTop: 10, color: "#64748b", fontSize: "0.92rem" },
-
   card: {
     marginTop: 18,
     borderRadius: 22,
@@ -14,11 +15,9 @@ const styles = {
     boxShadow: "0 18px 50px rgba(15,23,42,0.10)"
   },
   pad: { padding: 18 },
-
   sectionTitle: { fontSize: "1.1rem", fontWeight: 800, margin: "0 0 8px", color: "#0f172a" },
   p: { margin: 0, color: "#334155", lineHeight: 1.7 },
   ul: { margin: "10px 0 0", paddingLeft: "1.2rem", color: "#334155", lineHeight: 1.75 },
-
   timelineWrap: {
     marginTop: 12,
     display: "grid",
@@ -34,7 +33,6 @@ const styles = {
   tileTitle: { margin: 0, fontWeight: 800, color: "#0f172a" },
   tileSub: { margin: "6px 0 0", color: "#334155", lineHeight: 1.7 },
   note: { marginTop: 10, color: "#64748b", lineHeight: 1.6, fontSize: "0.92rem" },
-
   callout: {
     marginTop: 14,
     borderRadius: 18,
@@ -52,10 +50,20 @@ export default function Refunds() {
 
   return (
     <main className="page page-refunds">
+      {/* ✅ SEO Helmet */}
+      <Helmet>
+        <title>Refund Policy — PicSellArt</title>
+        <meta name="description" content="Read PicSellArt's refund and cancellation policy for photo purchases and seller plans. Digital downloads are non-refundable except for verified file issues." />
+        <link rel="canonical" href="https://www.picsellart.com/refund" />
+        <meta property="og:title" content="Refund Policy — PicSellArt" />
+        <meta property="og:description" content="PicSellArt refund and cancellation policy for photo purchases and seller plans." />
+        <meta property="og:url" content="https://www.picsellart.com/refund" />
+      </Helmet>
+
       <section style={styles.page}>
         <h1 style={styles.h1}>Refunds & Cancellations</h1>
         <p style={styles.sub}>
-          Picsellart provides instant digital downloads. Because digital files can’t be “returned” once accessed,
+          PicSellArt provides instant digital downloads. Because digital files can't be "returned" once accessed,
           refund eligibility is limited. Please review this policy carefully before purchasing.
         </p>
         <div style={styles.meta}>Last updated: {updated}</div>
@@ -64,7 +72,7 @@ export default function Refunds() {
           <div style={styles.pad}>
             <p style={styles.sectionTitle}>At a glance</p>
             <ul style={styles.ul}>
-              <li><b>No refunds</b> for change-of-mind (“I don’t need this anymore”).</li>
+              <li><b>No refunds</b> for change-of-mind ("I don't need this anymore").</li>
               <li>
                 Refunds considered only for <b>file issues</b>: corrupt, incomplete, inaccessible, or clearly does not
                 match the listing description.
@@ -106,7 +114,7 @@ export default function Refunds() {
 
             <div style={styles.timelineWrap}>
               <div style={styles.tile}>
-                <p style={styles.tileTitle}>Picsellart review</p>
+                <p style={styles.tileTitle}>PicSellArt review</p>
                 <p style={styles.tileSub}>
                   <b>1–2 business days</b> to verify the issue and approve the refund or replacement.
                 </p>
@@ -131,19 +139,22 @@ export default function Refunds() {
             <p style={styles.sectionTitle}>How to request support</p>
             <ul style={styles.ul}>
               <li>Provide your order ID / Razorpay payment ID and the file name.</li>
-              <li>Describe the problem clearly (e.g., “file not downloading”, “file corrupted”, “wrong file”).</li>
+              <li>Describe the problem clearly (e.g., "file not downloading", "file corrupted", "wrong file").</li>
               <li>Attach screenshots or error messages if possible.</li>
               <li>
-                Submit your request using the form on the{" "}
+                Email us at{" "}
+                <a href="mailto:admin@picsellart.com" style={styles.link}>
+                  admin@picsellart.com
+                </a>{" "}
+                or use the{" "}
                 <a href="/contact" style={styles.link}>
                   Contact page
-                </a>
-                .
+                </a>.
               </li>
             </ul>
 
             <div style={styles.callout}>
-              <b>Important:</b> By making a purchase on Picsellart, you agree to this Refunds & Cancellations policy in
+              <b>Important:</b> By making a purchase on PicSellArt, you agree to this Refunds & Cancellations policy in
               addition to our general Terms and any license-specific conditions mentioned on individual listings.
             </div>
           </div>

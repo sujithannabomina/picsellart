@@ -1,15 +1,22 @@
-// src/pages/NotFound.jsx
+// FILE PATH: src/pages/NotFound.jsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 
 const NotFound = () => {
   const navigate = useNavigate();
 
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center">
+      {/* ✅ noindex — Google should never index 404 pages */}
+      <Helmet>
+        <title>Page Not Found — PicSellArt</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+
       <h1 className="text-4xl font-extrabold text-slate-900 mb-3">Not Found</h1>
       <p className="text-slate-600 mb-6 max-w-md">
-        The page you’re looking for doesn’t exist, or may have moved. Use the
+        The page you're looking for doesn't exist, or may have moved. Use the
         navigation above or return to the homepage.
       </p>
       <button
